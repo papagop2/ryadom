@@ -1,0 +1,9 @@
+node_modules/
+dist/
+web/public/icon-*.png
+.env
+.env.*
+!.env.example
+*.log
+*.pfx
+*.key
