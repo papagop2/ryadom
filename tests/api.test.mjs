@@ -449,3 +449,84 @@ test('такси: оператор назначает водителя и не �
     headers: operator.headers, payload: { driverUserId: driver.userId } });
   assert.equal(nowFree.statusCode, 200, nowFree.body);
 });
+
+test('выезд: заявка, предложения партнёров, выбор цены и выполнение', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partnerA = await login();
+  const partnerB = await login();
+  const partnerAId = await addPartnerRole(partnerA.userId, 'Студия «Форма»');
+  const partnerBId = await addPartnerRole(partnerB.userId, 'Мастерская «Линия»');
+  const preferredFrom = new Date(Date.now() + 86400000);
+  const preferredTo = new Date(Date.now() + 90000000);
+  const payload = {
+    category: 'repair', title: 'Починить смеситель', description: 'Течёт кран на кухне',
+    address: 'ул. Тестовая, 7', budgetMinCents: 150000, budgetMaxCents: 400000,
+    preferredFrom: preferredFrom.toISOString(), preferredTo: preferredTo.toISOString(),
+    idempotencyKey: `service-${Date.now()}`,
+  };
+
+  const created = await app.inject({ method: 'POST', url: '/api/v1/me/service-requests', headers: client.headers, payload });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().status, 'open');
+  assert.equal(created.json().price, null);
+  const requestId = created.json().id;
+
+  const again = await app.inject({ method: 'POST', url: '/api/v1/me/service-requests', headers: client.headers, payload });
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.json().id, requestId);
+
+  const badBudget = await app.inject({ method: 'POST', url: '/api/v1/me/service-requests', headers: client.headers,
+    payload: { ...payload, idempotencyKey: `bad-${Date.now()}`, budgetMinCents: 500000 } });
+  assert.equal(badBudget.statusCode, 400);
+
+  const seenByA = await app.inject({ url: '/api/v1/partner/service-requests', headers: partnerA.headers });
+  assert.equal(seenByA.statusCode, 200, seenByA.body);
+  assert.ok(seenByA.json().open.some(item => item.id === requestId));
+  assert.equal(seenByA.json().open.find(item => item.id === requestId).client.phone, undefined);
+
+  const offerA = await app.inject({ method: 'POST', url: `/api/v1/partner/service-requests/${requestId}/offers`,
+    headers: partnerA.headers, payload: { priceCents: 300000, message: 'Приеду завтра', etaMin: 60 } });
+  assert.equal(offerA.statusCode, 201, offerA.body);
+  assert.equal(offerA.json().status, 'pending');
+  assert.equal(offerA.json().partner.id, partnerAId);
+
+  const duplicate = await app.inject({ method: 'POST', url: `/api/v1/partner/service-requests/${requestId}/offers`,
+    headers: partnerA.headers, payload: { priceCents: 290000 } });
+  assert.equal(duplicate.statusCode, 409);
+
+  const offerB = await app.inject({ method: 'POST', url: `/api/v1/partner/service-requests/${requestId}/offers`,
+    headers: partnerB.headers, payload: { priceCents: 250000 } });
+  assert.equal(offerB.statusCode, 201, offerB.body);
+  assert.equal(offerB.json().partner.id, partnerBId);
+
+  const mine = await app.inject({ url: '/api/v1/me/service-requests', headers: client.headers });
+  const withOffers = mine.json().items.find(item => item.id === requestId);
+  assert.equal(withOffers.offers.length, 2);
+
+  const accepted = await app.inject({ method: 'POST',
+    url: `/api/v1/me/service-requests/${requestId}/offers/${offerB.json().id}/accept`, headers: client.headers });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  assert.equal(accepted.json().status, 'assigned');
+  assert.equal(accepted.json().price.cents, 250000);
+  assert.equal(accepted.json().partner.name, 'Мастерская «Линия»');
+  assert.equal(accepted.json().offers.find(offer => offer.id === offerA.json().id).status, 'declined');
+
+  assert.equal((await app.inject({ method: 'POST',
+    url: `/api/v1/me/service-requests/${requestId}/offers/${offerA.json().id}/accept`, headers: client.headers })).statusCode, 409);
+  assert.equal((await app.inject({ method: 'POST',
+    url: `/api/v1/partner/service-requests/${requestId}/start`, headers: partnerA.headers })).statusCode, 403);
+
+  const started = await app.inject({ method: 'POST',
+    url: `/api/v1/partner/service-requests/${requestId}/start`, headers: partnerB.headers });
+  assert.equal(started.statusCode, 200, started.body);
+  assert.equal(started.json().status, 'in_progress');
+  const completed = await app.inject({ method: 'POST',
+    url: `/api/v1/partner/service-requests/${requestId}/complete`, headers: partnerB.headers });
+  assert.equal(completed.statusCode, 200, completed.body);
+  assert.equal(completed.json().status, 'completed');
+  assert.equal(completed.json().price.cents, 250000);
+
+  const jobs = await app.inject({ url: '/api/v1/partner/service-requests', headers: partnerB.headers });
+  assert.equal(jobs.json().jobs.find(item => item.id === requestId), undefined);
+});

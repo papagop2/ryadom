@@ -1194,3 +1194,130 @@ h1, h2, h3, p { margin-top: 0; }
 .trip-step-label { font-size: 8.5px; color: #6f7680; }
 .trip-step.current .trip-step-label { color: #fff; }
 .trip-step.done .trip-step-label { color: #aeb4bd; }
+
+/* выезд на дом */
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  margin: 0 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.segmented button {
+  height: 29px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #8e959f;
+  font-size: 11px;
+  font-weight: 650;
+  transition: background 0.2s, color 0.2s;
+}
+.segmented button.active { background: rgba(255, 214, 10, 0.12); color: var(--yellow); }
+
+.service-panel { display: grid; gap: 7px; }
+.service-intro { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 1px 0; }
+.service-intro > div { display: grid; gap: 1px; }
+.service-intro strong { font-size: 13px; }
+.service-intro .meta { font-size: 9.5px; }
+
+.service-form {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(255, 214, 10, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 214, 10, 0.07), rgba(255, 255, 255, 0.015)), rgba(12, 13, 17, 0.55);
+  animation: rise 0.3s ease both;
+}
+.service-cats { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.service-cats::-webkit-scrollbar { display: none; }
+.service-cats button {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex: none; height: 29px; padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #b9bfc8;
+  font-size: 10px; font-weight: 600;
+}
+.service-cats button.active { border-color: rgba(255, 214, 10, 0.42); background: rgba(255, 214, 10, 0.11); color: var(--yellow); }
+.service-cats button .icon { color: currentColor; }
+
+.field { display: grid; gap: 3px; min-width: 0; }
+.field > span { font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase; color: #7f8690; }
+.field input, .field textarea {
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 7px 8px;
+  color: #eef0f3;
+  font-size: 11.5px;
+  outline: none;
+  resize: none;
+}
+.field input::placeholder, .field textarea::placeholder { color: #6f7680; }
+.field input:focus, .field textarea:focus { border-color: rgba(255, 214, 10, 0.38); }
+.field input[type="datetime-local"] { color-scheme: dark; font-size: 10.5px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.service-form .primary.wide { height: 36px; justify-content: center; margin-top: 1px; }
+
+.service-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012)), rgba(12, 13, 17, 0.45);
+  display: grid;
+  gap: 5px;
+  animation: rise 0.3s ease both;
+}
+.service-card h3 { margin: 0; font-size: 13.5px; font-weight: 700; letter-spacing: -0.015em; }
+.service-card .meta { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 9.8px; }
+.service-card .meta .icon { color: var(--yellow); flex: none; }
+.service-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.service-card-head > strong { font-size: 16px; font-weight: 750; letter-spacing: -0.02em; }
+.service-desc { margin: 0; font-size: 10.5px; line-height: 1.35; color: #b8bec6; }
+.service-budget { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 7px; border-radius: 9px; background: rgba(255, 214, 10, 0.055); border: 1px solid rgba(255, 214, 10, 0.14); }
+.service-budget span { font-size: 9px; color: #9aa1ab; }
+.service-budget strong { font-size: 11px; color: var(--yellow-soft); }
+.service-empty { padding: 2px 1px 1px; color: #7f8690; }
+.service-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 1px; }
+.offers-list { display: grid; gap: 5px; margin-top: 2px; }
+.offers-title { font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase; color: #7f8690; }
+.offer-row {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 7px;
+  border-radius: 11px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+.offer-row > div { flex: 1; min-width: 120px; display: grid; gap: 1px; }
+.offer-row strong { font-size: 12px; }
+.offer-row .meta { font-size: 9px; }
+.offer-row > strong { font-size: 13px; color: #fff; }
+.assigned-line { display: flex; align-items: center; gap: 6px; padding: 6px 7px; border-radius: 11px; background: rgba(126, 226, 168, 0.05); border: 1px solid rgba(126, 226, 168, 0.16); }
+.assigned-line > div { display: grid; gap: 1px; }
+.assigned-line strong { font-size: 10.5px; }
+.assigned-line .meta { font-size: 9px; }
+
+.status.open { color: var(--yellow); border-color: rgba(255, 214, 10, 0.3); background: rgba(255, 214, 10, 0.06); }
+.status.assigned { color: var(--green); border-color: rgba(126, 226, 168, 0.28); background: rgba(126, 226, 168, 0.06); }
+.status.in_progress { color: #9ad0ff; border-color: rgba(154, 208, 255, 0.26); background: rgba(154, 208, 255, 0.06); }
+.status.pending { color: var(--yellow); border-color: rgba(255, 214, 10, 0.3); background: rgba(255, 214, 10, 0.06); }
+.status.accepted { color: var(--green); border-color: rgba(126, 226, 168, 0.28); background: rgba(126, 226, 168, 0.06); }
+.status.declined, .status.withdrawn { color: #8e959f; }
+
+.offer-form { display: flex; align-items: end; gap: 6px; }
+.offer-form .field { flex: 1; }
+.offer-form .primary { height: 34px; flex: none; }
+.my-offer { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 6px 7px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--line-soft); }
+.my-offer > div { display: flex; align-items: center; gap: 6px; }
+.my-offer strong { font-size: 12px; }
+.partner-service { display: grid; gap: 7px; margin-top: 10px; }
+.partner-service .panel-title { margin-bottom: 0; }
+.partner-open { border-color: rgba(255, 214, 10, 0.13); }
+.empty-state.small { min-height: 126px; }

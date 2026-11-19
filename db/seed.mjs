@@ -43,6 +43,8 @@ export async function seed(pool, { reset = false } = {}) {
   try {
     await client.query('begin');
     if (reset) {
+      await client.query('delete from service_request_events');
+      await client.query('delete from service_requests');
       await client.query('delete from reviews');
       await client.query('delete from booking_events');
       await client.query('delete from bookings');

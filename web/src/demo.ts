@@ -8,6 +8,7 @@ const ME_KEY = 'rjadom.demo.me';
 const BOOKINGS_KEY = 'rjadom.demo.bookings';
 const CODE_KEY = 'rjadom.demo.code';
 const TRIPS_KEY = 'rjadom.demo.trips';
+const SERVICE_KEY = 'rjadom.demo.services';
 const DAY = 86400000;
 
 const places = [
@@ -62,6 +63,20 @@ type DemoTrip = {
   price: Money; createdAt: string; client: { id: string; name: string };
   driver: { id: string; name: string; car: string; plate: string } | null;
 };
+type DemoServiceOffer = {
+  id: string; price: Money; message: string; etaMin: number | null;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  createdAt: string; partner: { id: string; name: string };
+};
+type DemoServiceRequest = {
+  id: string; status: 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
+  category: 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
+  title: string; description: string; address: string;
+  budget: { min: Money; max: Money }; preferred: { from: string; to: string };
+  price: Money | null; createdAt: string; key?: string | null;
+  client: { id: string; name: string }; partner: { id: string; name: string } | null;
+  offers: DemoServiceOffer[];
+};
 type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
@@ -88,6 +103,10 @@ const saveBookings = (items: DemoBooking[]) => write(BOOKINGS_KEY, items);
 const getTrips = () => read<DemoTrip[]>(TRIPS_KEY, []);
 const saveTrips = (items: DemoTrip[]) => write(TRIPS_KEY, items);
 const TRIP_ACTIVE: DemoTripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
+const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress'];
+const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p2: 'Мастерская «Линия»' };
+const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
+const saveServices = (items: DemoServiceRequest[]) => write(SERVICE_KEY, items);
 
 function tripQuote(from: DemoTripPoint, to: DemoTripPoint) {
   const rad = (value: number) => value * Math.PI / 180;
@@ -569,6 +588,145 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (trip.client.id !== me.user.id && trip.driver?.id !== me.user.id
       && !me.roles.some(role => role.role === 'operator')) return fail('Нет доступа к поездке', 'forbidden');
     return trip as T;
+  }
+
+  if (url.pathname === '/api/v1/me/service-requests') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (method === 'POST') {
+      const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : null;
+      const services = getServices();
+      if (key) {
+        const existing = services.find(item => item.client.id === me.user.id && item.key === key);
+        if (existing) return existing as T;
+      }
+      const request: DemoServiceRequest = {
+        id: `sr-${Date.now()}`, status: 'open',
+        category: String(body.category ?? 'other') as DemoServiceRequest['category'],
+        title: String(body.title ?? '').slice(0, 120), description: String(body.description ?? '').slice(0, 1500),
+        address: String(body.address ?? '').slice(0, 240),
+        budget: { min: money(Number(body.budgetMinCents) || 0), max: money(Number(body.budgetMaxCents) || 0) },
+        preferred: { from: String(body.preferredFrom), to: String(body.preferredTo) },
+        price: null, createdAt: new Date().toISOString(), key,
+        client: { id: me.user.id, name: me.user.displayName }, partner: null, offers: [],
+      };
+      saveServices([request, ...services]);
+      return request as T;
+    }
+    return { items: getServices().filter(item => item.client.id === me.user.id) } as T;
+  }
+
+  const serviceAcceptMatch = url.pathname.match(/^\/api\/v1\/me\/service-requests\/([^/]+)\/offers\/([^/]+)\/accept$/);
+  if (serviceAcceptMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const services = getServices();
+    const request = services.find(item => item.id === serviceAcceptMatch[1]);
+    if (!request) return fail('Заявка не найдена', 'not_found');
+    if (request.client.id !== me.user.id) return fail('Это не ваша заявка', 'forbidden');
+    if (request.status !== 'open') return fail('Заявка уже не открыта', 'request_closed');
+    const offer = request.offers.find(item => item.id === serviceAcceptMatch[2] && item.status === 'pending');
+    if (!offer) return fail('Предложение недоступно', 'offer_not_found');
+    request.status = 'assigned';
+    request.partner = offer.partner;
+    request.price = offer.price;
+    request.offers = request.offers.map(item => item.id === offer.id
+      ? { ...item, status: 'accepted' as const }
+      : item.status === 'pending' ? { ...item, status: 'declined' as const } : item);
+    saveServices(services);
+    return request as T;
+  }
+
+  const serviceCancelMatch = url.pathname.match(/^\/api\/v1\/me\/service-requests\/([^/]+)\/cancel$/);
+  if (serviceCancelMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const services = getServices();
+    const request = services.find(item => item.id === serviceCancelMatch[1]);
+    if (!request) return fail('Заявка не найдена', 'not_found');
+    if (request.client.id !== me.user.id) return fail('Это не ваша заявка', 'forbidden');
+    if (!['open', 'assigned'].includes(request.status)) return fail('Заявку уже нельзя отменить', 'invalid_transition');
+    request.status = 'cancelled';
+    saveServices(services);
+    return request as T;
+  }
+
+  if (url.pathname === '/api/v1/partner/service-requests') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
+    const partnerIds = me.partnerIds;
+    const services = getServices();
+    return {
+      open: services.filter(item => item.status === 'open').map(item => ({
+        ...item,
+        offers: item.offers.filter(offer => partnerIds.includes(offer.partner.id)),
+      })),
+      jobs: services.filter(item => item.partner && partnerIds.includes(item.partner.id)
+        && SERVICE_ACTIVE.includes(item.status) && item.status !== 'open'),
+    } as T;
+  }
+
+  const servicePartnerOfferMatch = url.pathname.match(/^\/api\/v1\/partner\/service-requests\/([^/]+)\/offers$/);
+  if (servicePartnerOfferMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
+    const partnerId = me.partnerIds[0];
+    if (!partnerId) return fail('Нет кабинета партнёра', 'forbidden');
+    const services = getServices();
+    const request = services.find(item => item.id === servicePartnerOfferMatch[1]);
+    if (!request) return fail('Заявка не найдена', 'not_found');
+    if (request.client.id === me.user.id) return fail('Нельзя предлагать услугу самому себе', 'own_request');
+    if (request.status !== 'open') return fail('Заявка уже не открыта', 'request_closed');
+    const existing = request.offers.find(item => item.partner.id === partnerId);
+    if (existing && ['pending', 'accepted'].includes(existing.status)) return fail('Вы уже предложили цену', 'already_offered');
+    const priceCents = Math.max(1, Number(body.priceCents) || 0);
+    const offer: DemoServiceOffer = existing
+      ? { ...existing, price: money(priceCents), message: String(body.message ?? ''), etaMin: body.etaMin ? Number(body.etaMin) : null, status: 'pending' }
+      : { id: `so-${Date.now()}`, price: money(priceCents), message: String(body.message ?? ''), etaMin: body.etaMin ? Number(body.etaMin) : null,
+        status: 'pending', createdAt: new Date().toISOString(),
+        partner: { id: partnerId, name: demoNames[partnerId] ?? 'Партнёр' } };
+    request.offers = existing
+      ? request.offers.map(item => item.id === existing.id ? offer : item)
+      : [...request.offers, offer];
+    saveServices(services);
+    return offer as T;
+  }
+
+  const partnerWithdrawMatch = url.pathname.match(/^\/api\/v1\/partner\/service-offers\/([^/]+)\/withdraw$/);
+  if (partnerWithdrawMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
+    const services = getServices();
+    const request = services.find(item => item.offers.some(offer => offer.id === partnerWithdrawMatch[1]));
+    const offer = request?.offers.find(item => item.id === partnerWithdrawMatch[1]);
+    if (!request || !offer) return fail('Предложение не найдено', 'not_found');
+    if (!me.partnerIds.includes(offer.partner.id)) return fail('Это не ваше предложение', 'forbidden');
+    if (offer.status !== 'pending') return fail('Предложение уже нельзя отозвать', 'offer_closed');
+    offer.status = 'withdrawn';
+    saveServices(services);
+    return { ok: true } as T;
+  }
+
+  const partnerServiceAction = url.pathname.match(/^\/api\/v1\/partner\/service-requests\/([^/]+)\/(start|complete)$/);
+  if (partnerServiceAction && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const services = getServices();
+    const request = services.find(item => item.id === partnerServiceAction[1]);
+    if (!request) return fail('Заявка не найдена', 'not_found');
+    if (request.partner && !me.partnerIds.includes(request.partner.id) && !me.roles.some(role => role.role === 'operator')) {
+      return fail('Это не ваша заявка', 'forbidden');
+    }
+    const action = partnerServiceAction[2];
+    if (action === 'start') {
+      if (request.status !== 'assigned') return fail('Заявка уже в другом состоянии', 'invalid_transition');
+      request.status = 'in_progress';
+    } else {
+      if (request.status !== 'in_progress') return fail('Заявка уже в другом состоянии', 'invalid_transition');
+      request.status = 'completed';
+    }
+    saveServices(services);
+    return request as T;
   }
 
   if (url.pathname === '/api/v1/partner/bookings') {

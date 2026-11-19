@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { demoRequest } from './demo';
 import './style.css';
@@ -30,6 +30,19 @@ type Trip = {
   driver: { id: string; name: string; car: string; plate: string } | null;
 };
 type Estimate = { distanceKm: number; durationMin: number; price: Money };
+type ServiceCategory = 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
+type ServiceStatus = 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
+type ServiceOffer = {
+  id: string; price: Money; message: string; etaMin: number | null;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  createdAt: string; partner: { id: string; name: string };
+};
+type ServiceRequest = {
+  id: string; status: ServiceStatus; category: ServiceCategory; title: string; description: string;
+  address: string; budget: { min: Money; max: Money }; preferred: { from: string; to: string };
+  price: Money | null; createdAt: string; client: { id: string; name: string };
+  partner: { id: string; name: string } | null; offers: ServiceOffer[];
+};
 type PartnerOffer = { id: string; title: string; description: string; durationMin: number; price: Money; isActive: boolean; slotCount: number; nextSlot: string | null };
 type PartnerPlace = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
@@ -54,6 +67,25 @@ const plural = (n: number, one: string, few: string, many: string) =>
 const statusLabel: Record<Booking['status'], string> = {
   requested: 'Ждёт подтверждения', confirmed: 'Подтверждено', completed: 'Завершено',
   cancelled: 'Отменено', expired: 'Истекло',
+};
+const serviceCategories: Record<ServiceCategory, string> = {
+  repair: 'Ремонт', cleaning: 'Уборка', beauty: 'Красота', tutoring: 'Занятия', moving: 'Переезд', other: 'Другое',
+};
+const serviceCategoryIcon: Record<ServiceCategory, IconName> = {
+  repair: 'wrench', cleaning: 'sparkles', beauty: 'scissors', tutoring: 'edit', moving: 'car', other: 'dots',
+};
+const serviceStatusLabel: Record<ServiceStatus, string> = {
+  open: 'Ищем мастера', assigned: 'Мастер выбран', in_progress: 'В работе', completed: 'Завершена',
+  cancelled: 'Отменена', expired: 'Истекла',
+};
+const serviceOfferStatusLabel: Record<ServiceOffer['status'], string> = {
+  pending: 'Ждёт ответа', accepted: 'Выбрано', declined: 'Отклонено', withdrawn: 'Отозвано',
+};
+const serviceWindow = (item: ServiceRequest) => {
+  const from = new Date(item.preferred.from);
+  const to = new Date(item.preferred.to);
+  const sameDay = from.toDateString() === to.toDateString();
+  return `${dayTime.format(from)} — ${sameDay ? timeOnly.format(to) : dayTime.format(to)}`;
 };
 
 const csrf = () => document.cookie.split('; ').find(row => row.startsWith('rjadom_csrf='))?.split('=')[1] ?? '';
@@ -823,7 +855,267 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
   </section>;
 }
 
+function toLocalInput(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function ServiceRequestForm({ onDone, notify }: { onDone: () => void; notify: (text: string) => void }) {
+  const start = new Date(Date.now() + 86400000);
+  start.setHours(10, 0, 0, 0);
+  const end = new Date(start.getTime() + 4 * 3600000);
+  const [category, setCategory] = useState<ServiceCategory>('repair');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [address, setAddress] = useState('');
+  const [min, setMin] = useState('1500');
+  const [max, setMax] = useState('4000');
+  const [from, setFrom] = useState(toLocalInput(start));
+  const [to, setTo] = useState(toLocalInput(end));
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const budgetMinCents = Math.max(0, Math.round(Number(min) * 100));
+    const budgetMaxCents = Math.max(0, Math.round(Number(max) * 100));
+    if (title.trim().length < 3) return notify('Опишите задачу');
+    if (address.trim().length < 3) return notify('Укажите адрес');
+    if (budgetMaxCents < budgetMinCents) return notify('Максимум меньше минимума');
+    setBusy(true);
+    try {
+      await api<ServiceRequest>('/api/v1/me/service-requests', { method: 'POST', body: {
+        category, title: title.trim(), description: description.trim(), address: address.trim(),
+        budgetMinCents, budgetMaxCents,
+        preferredFrom: new Date(from).toISOString(), preferredTo: new Date(to).toISOString(),
+        idempotencyKey: `service-${Date.now()}`,
+      } });
+      notify('Заявка опубликована');
+      onDone();
+    } catch (error) {
+      notify((error as Error).message || 'Не удалось создать заявку');
+    } finally { setBusy(false); }
+  }
+
+  return <form className="service-form" onSubmit={event => void submit(event)}>
+    <div className="service-cats">
+      {(Object.keys(serviceCategories) as ServiceCategory[]).map(key =>
+        <button key={key} type="button" className={category === key ? 'active' : ''} onClick={() => setCategory(key)}>
+          <Icon name={serviceCategoryIcon[key]} size={15} />{serviceCategories[key]}
+        </button>)}
+    </div>
+    <label className="field"><span>Что нужно</span>
+      <input value={title} onChange={event => setTitle(event.target.value)} maxLength={120} placeholder="Например, починить смеситель" />
+    </label>
+    <label className="field"><span>Подробности</span>
+      <textarea value={description} onChange={event => setDescription(event.target.value)} maxLength={1500} rows={2}
+        placeholder="Что случилось и что важно учесть" />
+    </label>
+    <label className="field"><span>Адрес</span>
+      <input value={address} onChange={event => setAddress(event.target.value)} maxLength={240} placeholder="Улица, дом, квартира" />
+    </label>
+    <div className="field-row">
+      <label className="field"><span>Бюджет от, ₽</span>
+        <input inputMode="numeric" value={min} onChange={event => setMin(event.target.value)} />
+      </label>
+      <label className="field"><span>до, ₽</span>
+        <input inputMode="numeric" value={max} onChange={event => setMax(event.target.value)} />
+      </label>
+    </div>
+    <div className="field-row">
+      <label className="field"><span>Когда</span>
+        <input type="datetime-local" value={from} onChange={event => setFrom(event.target.value)} />
+      </label>
+      <label className="field"><span>До</span>
+        <input type="datetime-local" value={to} onChange={event => setTo(event.target.value)} />
+      </label>
+    </div>
+    <button type="submit" className="primary wide" disabled={busy}>
+      {busy ? 'Публикуем…' : 'Опубликовать заявку'}<Icon name="send" size={15} />
+    </button>
+  </form>;
+}
+
+function ServiceRequestCard({ item, me, notify, onChanged }: {
+  item: ServiceRequest; me: Me | null; notify: (text: string) => void; onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const pending = item.offers.filter(offer => offer.status === 'pending');
+
+  async function accept(offerId: string) {
+    setBusy(offerId);
+    try {
+      await api(`/api/v1/me/service-requests/${item.id}/offers/${offerId}/accept`, { method: 'POST' });
+      notify('Мастер выбран');
+      onChanged();
+    } catch (error) { notify((error as Error).message || 'Не удалось выбрать мастера'); }
+    finally { setBusy(null); }
+  }
+
+  async function cancel() {
+    setBusy('cancel');
+    try {
+      await api(`/api/v1/me/service-requests/${item.id}/cancel`, { method: 'POST' });
+      notify('Заявка отменена');
+      onChanged();
+    } catch (error) { notify((error as Error).message || 'Не удалось отменить'); }
+    finally { setBusy(null); }
+  }
+
+  return <div className={`service-card ${item.status}`}>
+    <div className="service-card-head">
+      <span className={`status ${item.status}`}><span className="dot" />{serviceStatusLabel[item.status]}</span>
+      <strong>{item.status === 'open' ? `до ${price(item.budget.max)}` : item.price ? price(item.price) : '—'}</strong>
+    </div>
+    <h3>{item.title}</h3>
+    <p className="meta"><Icon name={serviceCategoryIcon[item.category]} size={13} />{serviceCategories[item.category]} · {serviceWindow(item)}</p>
+    <p className="meta"><Icon name="pin" size={13} />{item.address}</p>
+    {item.description && <p className="service-desc">{item.description}</p>}
+
+    {item.status === 'open' && <>
+      <div className="service-budget"><span>Бюджет</span><strong>{price(item.budget.min)} — {price(item.budget.max)}</strong></div>
+      {pending.length > 0 ? <div className="offers-list">
+        <span className="offers-title">Предложения мастеров</span>
+        {pending.map(offer => <div className="offer-row" key={offer.id}>
+          <div><strong>{offer.partner.name}</strong>
+            <span className="meta">{offer.etaMin ? `приедет через ${offer.etaMin} мин` : 'готов приехать'}{offer.message ? ` · ${offer.message}` : ''}</span>
+          </div>
+          <strong>{price(offer.price)}</strong>
+          <button type="button" className="primary mini" disabled={busy === offer.id}
+            onClick={() => void accept(offer.id)}>{busy === offer.id ? '…' : 'Выбрать'}</button>
+        </div>)}
+      </div> : <p className="meta service-empty">Предложений пока нет — мастера увидят заявку</p>}
+    </>}
+
+    {item.partner && item.status !== 'open' && <div className="assigned-line">
+      <span className="mini-avatar">{item.partner.name.slice(0, 1)}</span>
+      <div><strong>{item.partner.name}</strong><span className="meta">мастер назначен · {price(item.price)}</span></div>
+    </div>}
+
+    {(item.status === 'open' || item.status === 'assigned') && (me?.user.id === item.client.id) &&
+      <div className="service-actions">
+        <button type="button" className="ghost-mini" disabled={busy === 'cancel'} onClick={() => void cancel()}>Отменить заявку</button>
+      </div>}
+  </div>;
+}
+
+function ServiceRequestsPanel({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [items, setItems] = useState<ServiceRequest[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const load = useCallback(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: ServiceRequest[] }>('/api/v1/me/service-requests')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  useEffect(load, [load]);
+
+  if (!me) return <div className="empty-state"><Icon name="user" size={30} /><p>Войдите, чтобы заказать мастера</p></div>;
+
+  return <div className="service-panel">
+    <div className="service-intro">
+      <div><strong>Мастер на дом</strong><span className="meta">Опишите задачу — партнёры предложат цену</span></div>
+      <button type="button" className="primary mini" onClick={() => setCreating(value => !value)}>
+        <Icon name={creating ? 'close' : 'plus'} size={14} />{creating ? 'Закрыть' : 'Заявка'}
+      </button>
+    </div>
+    {creating && <ServiceRequestForm onDone={() => { setCreating(false); load(); }} notify={notify} />}
+    {!items && <div className="skeleton-card tall" />}
+    {items && !items.length && !creating && <div className="empty-state small">
+      <Icon name="wrench" size={28} /><p>Заявок пока нет</p><span className="meta">Создайте первую — это займёт минуту</span>
+    </div>}
+    {items?.map(item => <ServiceRequestCard key={item.id} item={item} me={me} notify={notify} onChanged={load} />)}
+  </div>;
+}
+
+function ServiceOfferForm({ item, notify, onDone }: { item: ServiceRequest; notify: (text: string) => void; onDone: () => void }) {
+  const [value, setValue] = useState(String(Math.round(item.budget.max.cents / 100)));
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const priceCents = Math.round(Number(value) * 100);
+    if (!Number.isFinite(priceCents) || priceCents <= 0) return notify('Укажите цену');
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/service-requests/${item.id}/offers`, {
+        method: 'POST', body: { priceCents, etaMin: 60 },
+      });
+      notify('Предложение отправлено');
+      onDone();
+    } catch (error) { notify((error as Error).message || 'Не удалось отправить'); }
+    finally { setBusy(false); }
+  }
+  return <form className="offer-form" onSubmit={event => void submit(event)}>
+    <label className="field"><span>Ваша цена, ₽</span>
+      <input inputMode="numeric" value={value} onChange={event => setValue(event.target.value)} />
+    </label>
+    <button type="submit" className="primary mini" disabled={busy}>{busy ? '…' : 'Предложить'}</button>
+  </form>;
+}
+
+function PartnerServiceRequests({ notify }: { notify: (text: string) => void }) {
+  const [data, setData] = useState<{ open: ServiceRequest[]; jobs: ServiceRequest[] } | null>(null);
+  const load = useCallback(() => {
+    void api<{ open: ServiceRequest[]; jobs: ServiceRequest[] }>('/api/v1/partner/service-requests')
+      .then(setData).catch(() => setData({ open: [], jobs: [] }));
+  }, []);
+  useEffect(load, [load]);
+
+  async function act(id: string, action: 'withdraw' | 'start' | 'complete', offerId?: string) {
+    try {
+      const path = action === 'withdraw'
+        ? `/api/v1/partner/service-offers/${offerId}/withdraw`
+        : `/api/v1/partner/service-requests/${id}/${action}`;
+      await api(path, { method: 'POST' });
+      notify({ withdraw: 'Предложение отозвано', start: 'Работа начата', complete: 'Заявка завершена' }[action]);
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось обновить'); }
+  }
+
+  return <div className="partner-service">
+    <div className="panel-title"><h2>Выезд</h2><span className="count-chip">{data ? data.open.length : '—'}</span></div>
+    {!data && <div className="skeleton-card" />}
+    {data && !data.open.length && <p className="notice">Открытых заявок нет</p>}
+    {data?.open.map(item => {
+      const myOffer = item.offers[0];
+      return <div className="service-card partner-open" key={item.id}>
+        <div className="service-card-head">
+          <span className="status open"><span className="dot" />{serviceCategories[item.category]}</span>
+          <strong>до {price(item.budget.max)}</strong>
+        </div>
+        <h3>{item.title}</h3>
+        <p className="meta"><Icon name="pin" size={13} />{item.address}</p>
+        <p className="meta"><Icon name="clock" size={13} />{serviceWindow(item)} · бюджет от {price(item.budget.min)}</p>
+        {item.description && <p className="service-desc">{item.description}</p>}
+        {myOffer && <div className="my-offer">
+          <div><span className={`status ${myOffer.status}`}><span className="dot" />{serviceOfferStatusLabel[myOffer.status]}</span>
+            <strong>{price(myOffer.price)}</strong></div>
+          {myOffer.status === 'pending' && <button type="button" className="ghost-mini"
+            onClick={() => void act(item.id, 'withdraw', myOffer.id)}>Отозвать</button>}
+        </div>}
+        {(!myOffer || !['pending', 'accepted'].includes(myOffer.status)) &&
+          <ServiceOfferForm item={item} notify={notify} onDone={load} />}
+      </div>;
+    })}
+    {data && data.jobs.length > 0 && <>
+      <h3 className="sub-title">Назначенные</h3>
+      {data.jobs.map(item => <div className="service-card" key={item.id}>
+        <div className="service-card-head">
+          <span className={`status ${item.status}`}><span className="dot" />{serviceStatusLabel[item.status]}</span>
+          <strong>{price(item.price)}</strong>
+        </div>
+        <h3>{item.title}</h3>
+        <p className="meta"><Icon name="user" size={13} />{item.client.name} · <Icon name="pin" size={13} />{item.address}</p>
+        <p className="meta"><Icon name="clock" size={13} />{serviceWindow(item)}</p>
+        <div className="service-actions">
+          {item.status === 'assigned' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'start')}>Начать работу</button>}
+          {item.status === 'in_progress' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Завершить</button>}
+        </div>
+      </div>)}
+    </>}
+  </div>;
+}
+
 function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [view, setView] = useState<'bookings' | 'requests'>('bookings');
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const load = useCallback(() => {
@@ -843,29 +1135,35 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
   }
 
   return <section>
-    <div className="section-title"><h2>Заказы</h2><span className="count-chip">{items ? items.length : '—'}</span></div>
-    {!items && <div className="skeleton-card tall" />}
-    {items && !items.length && <div className="empty-state">
-      <Icon name="receipt" size={30} /><p>Пока пусто</p>
-      <span className="meta">Выберите услугу на главной</span>
-    </div>}
-    <ul className="orders">{items?.map(item => <li key={item.id}>
-      <div className="order-head">
-        <strong>{item.place.name}</strong>
-        <span className={`status ${item.status}`}><span className="dot" />{statusLabel[item.status]}</span>
-      </div>
-      <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))}</p>
-      <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
-      <div className="order-actions">
-        {(item.status === 'requested' || item.status === 'confirmed') &&
-          <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
-        {item.status === 'completed' && !item.review && (reviewing === item.id
-          ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
-          : <button type="button" className="ghost-mini accent" onClick={() => setReviewing(item.id)}><Icon name="star" size={14} />Оценить</button>)}
-        {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
-          {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
-      </div>
-    </li>)}</ul>
+    <div className="section-title"><h2>Заказы</h2>{view === 'bookings' && <span className="count-chip">{items ? items.length : '—'}</span>}</div>
+    <div className="segmented">
+      <button type="button" className={view === 'bookings' ? 'active' : ''} onClick={() => setView('bookings')}>Записи</button>
+      <button type="button" className={view === 'requests' ? 'active' : ''} onClick={() => setView('requests')}>Выезд</button>
+    </div>
+    {view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : <>
+      {!items && <div className="skeleton-card tall" />}
+      {items && !items.length && <div className="empty-state">
+        <Icon name="receipt" size={30} /><p>Пока пусто</p>
+        <span className="meta">Выберите услугу на главной</span>
+      </div>}
+      <ul className="orders">{items?.map(item => <li key={item.id}>
+        <div className="order-head">
+          <strong>{item.place.name}</strong>
+          <span className={`status ${item.status}`}><span className="dot" />{statusLabel[item.status]}</span>
+        </div>
+        <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))}</p>
+        <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
+        <div className="order-actions">
+          {(item.status === 'requested' || item.status === 'confirmed') &&
+            <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
+          {item.status === 'completed' && !item.review && (reviewing === item.id
+            ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
+            : <button type="button" className="ghost-mini accent" onClick={() => setReviewing(item.id)}><Icon name="star" size={14} />Оценить</button>)}
+          {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
+            {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
+        </div>
+      </li>)}</ul>
+    </>}
   </section>;
 }
 
@@ -964,6 +1262,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
           </li>)}</ul>}
     </div>}
 
+    {Boolean(me.partnerIds.length) && <PartnerServiceRequests notify={notify} />}
     {isPartner && <PartnerPlaces notify={notify} />}
     {isDriver && <DriverPanel notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
@@ -1160,6 +1459,9 @@ const noticeLabel: Record<string, string> = {
   booking_requested: 'Запись создана', booking_new: 'Новая заявка', booking_confirmed: 'Запись подтверждена',
   booking_completed: 'Запись завершена', booking_cancelled: 'Запись отменена',
   review_moderated: 'Отзыв проверен', login_code: 'Код входа',
+  service_offer: 'Новое предложение мастера', service_offer_accepted: 'Предложение выбрано',
+  service_offer_declined: 'Предложение отклонено', service_cancelled: 'Заявка отменена',
+  service_assigned: 'Мастер назначен', service_in_progress: 'Работа началась', service_completed: 'Заявка завершена',
 };
 
 function Notifications() {

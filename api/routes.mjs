@@ -136,6 +136,86 @@ function quoteTrip(from, to) {
   return { distanceKm: km, durationMin: minutes, price: money(cents), currency: 'RUB' };
 }
 
+const SERVICE_CATEGORIES = ['repair', 'cleaning', 'beauty', 'tutoring', 'moving', 'other'];
+const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress'];
+const SERVICE_SELECT = `
+  select r.*, c.display_name as client_name, p.name as partner_name
+  from service_requests r
+  join users c on c.id = r.client_user_id
+  left join partners p on p.id = r.partner_id`;
+
+function uuidValue(value, label = 'Объект') {
+  if (typeof value !== 'string' || !UUID_RE.test(value)) fail(404, 'not_found', `${label} не найден`);
+  return value;
+}
+
+function serviceOfferView(row) {
+  return {
+    id: row.id,
+    price: money(row.price_cents, row.currency ?? 'RUB'),
+    message: row.message,
+    etaMin: row.eta_min,
+    status: row.status,
+    createdAt: row.created_at,
+    partner: { id: row.partner_id, name: row.partner_name },
+  };
+}
+
+function serviceRequestView(row, offers = []) {
+  return {
+    id: row.id,
+    status: row.status,
+    category: row.category,
+    title: row.title,
+    description: row.description,
+    address: row.address,
+    budget: { min: money(row.budget_min_cents), max: money(row.budget_max_cents) },
+    preferred: { from: row.preferred_from, to: row.preferred_to },
+    price: row.price_cents === null ? null : money(row.price_cents, row.currency),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    assignedAt: row.assigned_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    client: { id: row.client_user_id, name: row.client_name },
+    partner: row.partner_id ? { id: row.partner_id, name: row.partner_name } : null,
+    offers: offers.map(serviceOfferView),
+  };
+}
+
+async function offersForRequests(db, requestIds, partnerIds = null) {
+  const byRequest = new Map();
+  if (!requestIds.length) return byRequest;
+  const params = [requestIds];
+  let sql = `select o.*, p.name as partner_name from service_offers o
+             join partners p on p.id = o.partner_id
+             where o.request_id = any($1::uuid[])`;
+  if (partnerIds?.length) { sql += ' and o.partner_id = any($2::uuid[])'; params.push(partnerIds); }
+  sql += ' order by o.created_at';
+  const { rows } = await db.query(sql, params);
+  for (const row of rows) {
+    if (!byRequest.has(row.request_id)) byRequest.set(row.request_id, []);
+    byRequest.get(row.request_id).push(row);
+  }
+  return byRequest;
+}
+
+async function loadServiceRequest(db, id, partnerIds = null) {
+  const { rows } = await db.query(`${SERVICE_SELECT} where r.id = $1`, [id]);
+  if (!rows[0]) return null;
+  const offers = await offersForRequests(db, [id], partnerIds);
+  return serviceRequestView(rows[0], offers.get(id) ?? []);
+}
+
+async function notifyPartner(db, partnerId, kind, payload) {
+  const { rows } = await db.query(
+    "select user_id from memberships where partner_id = $1 and role = 'partner'", [partnerId]);
+  for (const row of rows) {
+    await db.query('insert into notifications (user_id, kind, payload) values ($1, $2, $3)',
+      [row.user_id, kind, JSON.stringify(payload)]);
+  }
+}
+
 export function routes(app, { pool, demoLogin = false }) {
   // ---- сессия и CSRF ----
   app.decorateRequest('auth', null);
@@ -1133,6 +1213,275 @@ export function routes(app, { pool, demoLogin = false }) {
       }
       throw error;
     }
+  });
+
+
+  // ---- частные услуги с выездом ----
+  function parseServiceWindow(preferredFrom, preferredTo) {
+    const from = new Date(preferredFrom);
+    const to = new Date(preferredTo);
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
+      fail(400, 'invalid_window', 'Укажите время заявки');
+    }
+    if (to <= from) fail(400, 'invalid_window', 'Конец окна должен быть позже начала');
+    if (to.getTime() < Date.now() - 60_000) fail(400, 'window_in_past', 'Это время уже прошло');
+    return { from, to };
+  }
+
+  app.get('/api/v1/me/service-requests', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `${SERVICE_SELECT} where r.client_user_id = $1 order by r.created_at desc limit 50`, [auth.userId]);
+    const offers = await offersForRequests(pool, rows.map(row => row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => serviceRequestView(row, offers.get(row.id) ?? [])) };
+  });
+
+  app.post('/api/v1/me/service-requests', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      required: ['category', 'title', 'address', 'budgetMinCents', 'budgetMaxCents', 'preferredFrom', 'preferredTo'],
+      properties: {
+        category: { type: 'string', enum: SERVICE_CATEGORIES },
+        title: { type: 'string', minLength: 3, maxLength: 120 },
+        description: { type: 'string', maxLength: 1500 },
+        address: { type: 'string', minLength: 3, maxLength: 240 },
+        budgetMinCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+        budgetMaxCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+        preferredFrom: { type: 'string', format: 'date-time' },
+        preferredTo: { type: 'string', format: 'date-time' },
+        idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const body = request.body;
+    if (body.budgetMaxCents < body.budgetMinCents) fail(400, 'invalid_budget', 'Максимум меньше минимума');
+    const { from, to } = parseServiceWindow(body.preferredFrom, body.preferredTo);
+    const idempotencyKey = body.idempotencyKey ?? null;
+    const attempt = async () => withTransaction(pool, async (client) => {
+      if (idempotencyKey) {
+        const existing = await client.query(
+          `${SERVICE_SELECT} where r.client_user_id = $1 and r.idempotency_key = $2`, [auth.userId, idempotencyKey]);
+        if (existing.rows[0]) {
+          const item = await loadServiceRequest(client, existing.rows[0].id);
+          return { item, created: false };
+        }
+      }
+      const inserted = await client.query(
+        `insert into service_requests
+           (client_user_id, category, title, description, address, budget_min_cents, budget_max_cents,
+            preferred_from, preferred_to, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+        [auth.userId, body.category, body.title, body.description ?? '', body.address,
+          body.budgetMinCents, body.budgetMaxCents, from, to, idempotencyKey]);
+      const id = inserted.rows[0].id;
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id) values ($1, 'open', $2)`,
+        [id, auth.userId]);
+      return { item: await loadServiceRequest(client, id), created: true };
+    });
+    try {
+      const result = await attempt();
+      reply.code(result.created ? 201 : 200);
+      return result.item;
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'service_requests_client_idem_uq') {
+        fail(409, 'duplicate_request', 'Повтор заявки');
+      }
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/me/service-requests/:id/offers/:offerId/accept', async (request) => {
+    const auth = requireUser(request);
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    const offerId = uuidValue(request.params.offerId, 'Предложение');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (item.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша заявка');
+      if (item.status !== 'open') fail(409, 'request_closed', 'Заявка уже не открыта');
+      const offerResult = await client.query(
+        'select * from service_offers where id = $1 and request_id = $2 for update', [offerId, requestId]);
+      const offer = offerResult.rows[0];
+      if (!offer) fail(404, 'offer_not_found', 'Предложение не найдено');
+      if (offer.status !== 'pending') fail(409, 'offer_closed', 'Предложение уже недоступно');
+      await client.query(
+        `update service_requests set status = 'assigned', partner_id = $2, accepted_offer_id = $3,
+                price_cents = $4, assigned_at = now(), updated_at = now()
+         where id = $1`, [requestId, offer.partner_id, offer.id, offer.price_cents]);
+      await client.query(
+        `update service_offers set status = 'accepted', updated_at = now() where id = $1`, [offer.id]);
+      const declined = await client.query(
+        `update service_offers set status = 'declined', updated_at = now()
+         where request_id = $1 and id <> $2 and status = 'pending' returning created_by`, [requestId, offer.id]);
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id, note)
+         values ($1, 'assigned', $2, 'accepted_offer')`, [requestId, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'service_offer_accepted', $2)`,
+        [offer.created_by, JSON.stringify({ requestId, price: offer.price_cents })]);
+      for (const row of declined.rows) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'service_offer_declined', $2)`,
+          [row.created_by, JSON.stringify({ requestId })]);
+      }
+      return loadServiceRequest(client, requestId);
+    });
+  });
+
+  app.post('/api/v1/me/service-requests/:id/cancel', async (request) => {
+    const auth = requireUser(request);
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (item.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша заявка');
+      if (!['open', 'assigned'].includes(item.status)) fail(409, 'invalid_transition', 'Заявку уже нельзя отменить');
+      await client.query(
+        `update service_requests set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
+        [requestId]);
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id) values ($1, 'cancelled', $2)`,
+        [requestId, auth.userId]);
+      if (item.partner_id) await notifyPartner(client, item.partner_id, 'service_cancelled', { requestId });
+      return loadServiceRequest(client, requestId);
+    });
+  });
+
+  app.get('/api/v1/partner/service-requests', async (request, reply) => {
+    const auth = requireRole(request, 'partner');
+    const partnerIds = partnerIdsOf(auth);
+    if (!partnerIds.length) fail(403, 'forbidden', 'Нет кабинета партнёра');
+    const open = await pool.query(
+      `${SERVICE_SELECT} where r.status = 'open' and r.preferred_to > now()
+       order by r.created_at limit 100`);
+    const jobs = await pool.query(
+      `${SERVICE_SELECT} where r.partner_id = any($1::uuid[]) and r.status in ('assigned', 'in_progress')
+       order by r.created_at desc limit 100`, [partnerIds]);
+    const visibleOffers = await offersForRequests(pool, open.rows.map(row => row.id), partnerIds);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      open: open.rows.map(row => serviceRequestView(row, visibleOffers.get(row.id) ?? [])),
+      jobs: jobs.rows.map(row => serviceRequestView(row, [])),
+    };
+  });
+
+  app.post('/api/v1/partner/service-requests/:id/offers', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['priceCents'],
+      properties: {
+        priceCents: { type: 'integer', minimum: 1, maximum: 100000000 },
+        message: { type: 'string', maxLength: 1000 },
+        etaMin: { type: 'integer', minimum: 0, maximum: 1440 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner');
+    const partnerIds = partnerIdsOf(auth);
+    if (!partnerIds.length) fail(403, 'forbidden', 'Нет кабинета партнёра');
+    const partnerId = partnerIds[0];
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    const result = await withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (item.client_user_id === auth.userId) fail(403, 'own_request', 'Нельзя предлагать услугу самому себе');
+      if (item.status !== 'open') fail(409, 'request_closed', 'Заявка уже не открыта');
+      if (new Date(item.preferred_to).getTime() < Date.now()) fail(409, 'request_expired', 'Время заявки прошло');
+      const approved = await client.query(
+        "select id from partners where id = $1 and status = 'approved'", [partnerId]);
+      if (!approved.rows[0]) fail(403, 'partner_not_approved', 'Партнёр не подтверждён');
+      const existing = await client.query(
+        'select * from service_offers where request_id = $1 and partner_id = $2 for update', [requestId, partnerId]);
+      let offerId;
+      if (existing.rows[0]) {
+        if (['pending', 'accepted'].includes(existing.rows[0].status)) {
+          fail(409, 'already_offered', 'Вы уже предложили цену');
+        }
+        const updated = await client.query(
+          `update service_offers set price_cents = $2, message = $3, eta_min = $4, status = 'pending',
+                  updated_at = now() where id = $1 returning id`,
+          [existing.rows[0].id, request.body.priceCents, request.body.message ?? '', request.body.etaMin ?? null]);
+        offerId = updated.rows[0].id;
+      } else {
+        const inserted = await client.query(
+          `insert into service_offers (request_id, partner_id, created_by, price_cents, message, eta_min)
+           values ($1, $2, $3, $4, $5, $6) returning id`,
+          [requestId, partnerId, auth.userId, request.body.priceCents,
+            request.body.message ?? '', request.body.etaMin ?? null]);
+        offerId = inserted.rows[0].id;
+      }
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'service_offer', $2)`,
+        [item.client_user_id, JSON.stringify({ requestId, price: request.body.priceCents, partnerId })]);
+      const offer = await client.query(
+        `select o.*, p.name as partner_name from service_offers o
+         join partners p on p.id = o.partner_id where o.id = $1`, [offerId]);
+      return serviceOfferView(offer.rows[0]);
+    });
+    reply.code(201);
+    return result;
+  });
+
+  app.post('/api/v1/partner/service-offers/:id/withdraw', async (request) => {
+    const auth = requireRole(request, 'partner');
+    const partnerIds = partnerIdsOf(auth);
+    const offerId = uuidValue(request.params.id, 'Предложение');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        'select * from service_offers where id = $1 for update', [offerId]);
+      const offer = rows[0];
+      if (!offer) fail(404, 'offer_not_found', 'Предложение не найдено');
+      if (!partnerIds.includes(offer.partner_id)) fail(403, 'forbidden', 'Это не ваше предложение');
+      if (offer.status !== 'pending') fail(409, 'offer_closed', 'Предложение уже нельзя отозвать');
+      await client.query(
+        `update service_offers set status = 'withdrawn', updated_at = now() where id = $1`, [offer.id]);
+      return { ok: true };
+    });
+  });
+
+  async function serviceTransition(request, fromStatus, toStatus, stampColumn) {
+    const auth = requireRole(request, 'partner', 'operator');
+    const partnerIds = partnerIdsOf(auth);
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (!isOperator(auth) && !partnerIds.includes(item.partner_id)) {
+        fail(403, 'forbidden', 'Это не ваша заявка');
+      }
+      if (item.status !== fromStatus) fail(409, 'invalid_transition', 'Заявка уже в другом состоянии');
+      await client.query(
+        `update service_requests set status = $2, ${stampColumn} = now(), updated_at = now() where id = $1`,
+        [requestId, toStatus]);
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id) values ($1, $2, $3)`,
+        [requestId, toStatus, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, $2, $3)`,
+        [item.client_user_id, `service_${toStatus}`, JSON.stringify({ requestId, status: toStatus })]);
+      return loadServiceRequest(client, requestId);
+    });
+  }
+
+  app.post('/api/v1/partner/service-requests/:id/start', async (request) =>
+    serviceTransition(request, 'assigned', 'in_progress', 'started_at'));
+  app.post('/api/v1/partner/service-requests/:id/complete', async (request) =>
+    serviceTransition(request, 'in_progress', 'completed', 'completed_at'));
+
+  app.get('/api/v1/operator/service-requests', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `${SERVICE_SELECT} where r.status in ('open', 'assigned', 'in_progress')
+       order by r.created_at limit 100`);
+    const offers = await offersForRequests(pool, rows.map(row => row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => serviceRequestView(row, offers.get(row.id) ?? [])) };
   });
 
 
