@@ -80,6 +80,7 @@ function App() {
   }, [toast]);
 
   return <main className="page">
+    <div className="ambient" aria-hidden="true"><span /><span /><span /></div>
     <header className="mast">
       <a href="/" className="wordmark">рядом<span>.</span></a>
       <span className="badge">Демо-стенд</span>
@@ -379,7 +380,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     }}>Войти</button>
   </section>;
 
-  return <section>
+  return <section className="profile">
     <div className="section-title"><h2>{me.user.displayName}</h2><span>{me.user.phone}</span></div>
     <p className="meta">Роли: {me.roles.map(role => role.role).join(', ')}</p>
     <button type="button" onClick={() => {
