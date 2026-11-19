@@ -542,7 +542,7 @@ function TaxiScreen({ me, notify, onLogin }: { me: Me | null; notify: (text: str
   return <section className="taxi">
     <div className="taxi-head">
       <span className="taxi-badge"><Icon name="car" size={24} /></span>
-      <div><h1>Такси</h1><span className="meta">по городу · оплата на месте</span></div>
+      <div><h1>Такси</h1><span className="meta">по городу · наличными водителю</span></div>
     </div>
 
     {active ? <>
@@ -624,7 +624,7 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
   function actions(trip: Trip) {
     if (trip.status === 'assigned') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'arrive')}>Я на месте</button>;
     if (trip.status === 'arrived') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'start')}>В путь</button>;
-    if (trip.status === 'in_progress') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'complete')}>Завершить</button>;
+    if (trip.status === 'in_progress') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'complete')}>Завершить · наличные</button>;
     return null;
   }
 
@@ -690,7 +690,7 @@ function CourierPanel({ notify }: { notify: (text: string) => void }) {
       : !data.mine.length ? <p className="notice">Нет активных доставок</p>
         : data.mine.map(job => <DeliveryCard key={job.id} job={job}>
           {job.status === 'assigned' && <button type="button" className="primary mini" onClick={() => void act(job.id, 'pickup')}>Забрал заказ</button>}
-          {job.status === 'picked_up' && <button type="button" className="primary mini" onClick={() => void act(job.id, 'deliver')}>Доставил</button>}
+          {job.status === 'picked_up' && <button type="button" className="primary mini" onClick={() => void act(job.id, 'deliver')}>Доставил · наличные</button>}
         </DeliveryCard>)}
     {data && data.available.length > 0 && <>
       <h3 className="sub-title">Готовые заказы</h3>
@@ -1044,6 +1044,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
             ? `${price(zone.fee)} · ${zone.etaMin} мин · от ${price(zone.minOrder)}`
             : 'Выберите район'}</p>
         </>}
+        <p className="hint">Оплата наличными при получении</p>
       </div> : (cartCount > 0 && <p className="hint">Доставка для этой точки пока недоступна</p>))}
     </>}
 
@@ -1079,7 +1080,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           <label className="note-field"><Icon name="edit" size={14} />
             <input value={note} onChange={event => setNote(event.target.value)} maxLength={200} placeholder="Комментарий мастеру" />
           </label>
-          <p className="hint">Оплата на месте · отмена в «Заказах»</p>
+          <p className="hint">Оплата наличными на месте · отмена в «Заказах»</p>
         </>}
       </div>}
     </>}
@@ -1185,6 +1186,7 @@ function ServiceRequestForm({ onDone, notify }: { onDone: () => void; notify: (t
         <input type="datetime-local" value={to} onChange={event => setTo(event.target.value)} />
       </label>
     </div>
+    <p className="hint">Оплата наличными мастеру после работы. Сервис не принимает деньги за мастера.</p>
     <button type="submit" className="primary wide" disabled={busy}>
       {busy ? 'Публикуем…' : 'Опубликовать заявку'}<Icon name="send" size={15} />
     </button>
@@ -1363,7 +1365,7 @@ function PartnerServiceRequests({ notify }: { notify: (text: string) => void }) 
         <p className="meta"><Icon name="clock" size={13} />{serviceWindow(item)}</p>
         <div className="service-actions">
           {item.status === 'assigned' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'start')}>Начать работу</button>}
-          {item.status === 'in_progress' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Завершить</button>}
+          {item.status === 'in_progress' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Завершить · оплата</button>}
         </div>
       </div>)}
     </>}
@@ -1565,7 +1567,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
             {item.note && <p className="order-offer">{item.note}</p>}
             <div className="order-actions">
               {item.status === 'requested' && <button type="button" className="primary mini" onClick={() => void api(`/api/v1/bookings/${item.id}/confirm`, { method: 'POST' }).then(() => { notify('Подтверждено'); loadPartner(); })}>Подтвердить</button>}
-              {item.status === 'confirmed' && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта'); loadPartner(); })}>Завершить</button>}
+              {item.status === 'confirmed' && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта, оплата получена'); loadPartner(); })}>Завершить · оплата</button>}
             </div>
           </li>)}</ul>}
     </div>}
@@ -1649,7 +1651,7 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
         {item.status === 'placed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'confirm')}>Подтвердить</button>}
         {item.status === 'confirmed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'ready')}>
           {item.fulfillment === 'delivery' ? 'Готов к доставке' : 'Готов к выдаче'}</button>}
-        {item.status === 'ready' && item.fulfillment === 'pickup' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан</button>}
+        {item.status === 'ready' && item.fulfillment === 'pickup' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан · наличные</button>}
         {item.status === 'out_for_delivery' && <span className="meta">Курьер везёт заказ</span>}
         {['placed', 'confirmed'].includes(item.status) && <button type="button" className="ghost-mini" onClick={() => void act(item.id, 'cancel')}>Отменить</button>}
       </div>
