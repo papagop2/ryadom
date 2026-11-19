@@ -217,6 +217,12 @@ test('изменение без сессии и без CSRF отклоняетс
   const user = await login();
   const noToken = await app.inject({ method: 'POST', url: '/api/v1/bookings', headers: { cookie: user.headers.cookie }, payload: { slotId: '00000000-0000-4000-8000-000000000000' } });
   assert.equal(noToken.statusCode, 403);
+  // Клиент не должен отправлять content-type JSON без тела: это не 500.
+  const emptyBody = await app.inject({
+    method: 'POST', url: '/api/v1/bookings',
+    headers: { ...user.headers, 'content-type': 'application/json' }, payload: '',
+  });
+  assert.equal(emptyBody.statusCode, 400);
 });
 
 test('сессия хранится только хешем', async (t) => {

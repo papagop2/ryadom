@@ -112,6 +112,9 @@ export function routes(app, { pool, demoLogin = false }) {
     if (error.validation) {
       return reply.code(400).send({ error: 'invalid_request', message: 'Проверьте поля запроса' });
     }
+    if (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500) {
+      return reply.code(error.statusCode).send({ error: 'invalid_request', message: 'Проверьте запрос' });
+    }
     request.log.error({ err: error }, 'unhandled');
     return reply.code(500).send({ error: 'server_error', message: 'Внутренняя ошибка' });
   });

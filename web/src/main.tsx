@@ -36,11 +36,13 @@ const statusLabel: Record<Booking['status'], string> = {
 const csrf = () => document.cookie.split('; ').find(row => row.startsWith('rjadom_csrf='))?.split('=')[1] ?? '';
 
 async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const headers: Record<string, string> = { 'x-csrf-token': decodeURIComponent(csrf()) };
+  if (init.body !== undefined) headers['content-type'] = 'application/json';
   const response = await fetch(path, {
     method: init.method ?? 'GET',
     credentials: 'same-origin',
     cache: 'no-store',
-    headers: { 'content-type': 'application/json', 'x-csrf-token': decodeURIComponent(csrf()) },
+    headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
   const data = await response.json().catch(() => ({}));
@@ -128,8 +130,6 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
     return () => { clearTimeout(timer); controller.abort(); };
   }, [category, district, query]);
 
-  if (open) return <PlaceScreen place={open} onBack={() => setOpen(null)} notify={notify} />;
-
   const points = useMemo(() => {
     if (!items?.length) return [];
     const lats = items.map(item => item.location.lat);
@@ -142,6 +142,8 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
       y: maxLat === minLat ? 50 : 92 - ((item.location.lat - minLat) / (maxLat - minLat)) * 84,
     }));
   }, [items]);
+
+  if (open) return <PlaceScreen place={open} onBack={() => setOpen(null)} notify={notify} />;
 
   return <>
     <section className="hero" aria-labelledby="title">
