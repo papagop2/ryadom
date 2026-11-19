@@ -35,6 +35,17 @@ const products = [
   { place: 'ugol', title: 'Крем для обуви', description: 'Нейтральный, 50 мл', price: 35000, stock: 6, unit: 'шт' },
 ];
 
+const deliveryDistricts = ['Центр', 'Северный', 'Заречный', 'Южный'];
+const deliveryPlaces = {
+  kuhnya: { fee: 9900, min: 30000, eta: 40 },
+  ugol: { fee: 14900, min: 50000, eta: 50 },
+  forma: { fee: 19900, min: 100000, eta: 60 },
+};
+
+const demoCouriers = [
+  { phone: '+79000000005', name: 'Курьер Демо', transport: 'Велосипед' },
+];
+
 const demoDrivers = [
   { phone: '+79000000004', name: 'Водитель Демо', car: 'Kia Rio', plate: 'А123ВС77' },
 ];
@@ -50,6 +61,10 @@ export async function seed(pool, { reset = false } = {}) {
   try {
     await client.query('begin');
     if (reset) {
+      await client.query('delete from delivery_job_events');
+      await client.query('delete from delivery_jobs');
+      await client.query('delete from delivery_zones');
+      await client.query('delete from courier_profiles');
       await client.query('delete from shop_order_events');
       await client.query('delete from shop_order_items');
       await client.query('delete from shop_orders');
@@ -132,8 +147,8 @@ export async function seed(pool, { reset = false } = {}) {
         [placeId, product.title]);
       if (found.rows[0]) {
         await client.query(
-          'update products set description = $2, price_cents = $3, unit = $4, is_active = true where id = $1',
-          [found.rows[0].id, product.description, product.price, product.unit]);
+          'update products set description = $2, price_cents = $3, unit = $4, stock_qty = $5, is_active = true where id = $1',
+          [found.rows[0].id, product.description, product.price, product.unit, product.stock]);
       } else {
         await client.query(
           `insert into products (place_id, title, description, price_cents, stock_qty, unit)
@@ -141,6 +156,20 @@ export async function seed(pool, { reset = false } = {}) {
           [placeId, product.title, product.description, product.price, product.stock, product.unit]);
       }
       productCount += 1;
+    }
+
+    let zoneCount = 0;
+    for (const [key, config] of Object.entries(deliveryPlaces)) {
+      const placeId = placeIds.get(key);
+      for (const district of deliveryDistricts) {
+        await client.query(
+          `insert into delivery_zones (place_id, district, fee_cents, min_order_cents, eta_min)
+           values ($1, $2, $3, $4, $5)
+           on conflict (place_id, district) do update set fee_cents = excluded.fee_cents,
+             min_order_cents = excluded.min_order_cents, eta_min = excluded.eta_min, is_active = true`,
+          [placeId, district, config.fee, config.min, config.eta]);
+        zoneCount += 1;
+      }
     }
 
     // Окна на 10 дней вперёд: 10:00, 12:00, 14:00, 16:00, 18:00 по Москве.
@@ -188,8 +217,23 @@ export async function seed(pool, { reset = false } = {}) {
         [rows[0].id, driver.car, driver.plate]);
     }
 
+    for (const courier of demoCouriers) {
+      const { rows } = await client.query(
+        `insert into users (phone, display_name) values ($1, $2)
+         on conflict (phone) do update set display_name = excluded.display_name returning id`,
+        [courier.phone, courier.name]);
+      await client.query(
+        `insert into memberships (user_id, role) values ($1, 'courier') on conflict (user_id, role) do nothing`,
+        [rows[0].id]);
+      await client.query(
+        `insert into courier_profiles (user_id, transport) values ($1, $2)
+         on conflict (user_id) do update set transport = excluded.transport`,
+        [rows[0].id, courier.transport]);
+    }
+
     await client.query('commit');
-    return { partners: partnerIds.size, places: placeIds.size, offers: offerIds.length, products: productCount, slots };
+    return { partners: partnerIds.size, places: placeIds.size, offers: offerIds.length,
+      products: productCount, zones: zoneCount, slots };
   } catch (error) {
     await client.query('rollback');
     throw error;

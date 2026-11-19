@@ -11,6 +11,8 @@ const TRIPS_KEY = 'rjadom.demo.trips';
 const SERVICE_KEY = 'rjadom.demo.services';
 const PRODUCTS_KEY = 'rjadom.demo.products';
 const SHOP_ORDERS_KEY = 'rjadom.demo.shop-orders';
+const DELIVERY_ZONES_KEY = 'rjadom.demo.delivery-zones';
+const DELIVERY_JOBS_KEY = 'rjadom.demo.delivery-jobs';
 const DAY = 86400000;
 
 const places = [
@@ -85,11 +87,20 @@ type DemoShopProduct = {
 };
 type DemoShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
 type DemoShopOrder = {
-  id: string; status: 'placed' | 'confirmed' | 'ready' | 'completed' | 'cancelled';
-  total: Money; pickupCode: string; note: string; createdAt: string; key?: string | null;
+  id: string; status: 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'completed' | 'cancelled';
+  total: Money; goods?: Money; deliveryFee?: Money; fulfillment?: 'pickup' | 'delivery';
+  pickupCode: string; note: string; createdAt: string; key?: string | null;
   client: { id: string; name: string };
   place: { id: string; name: string; address: string; district: string };
+  deliveryJobId?: string | null;
   items: DemoShopOrderItem[];
+};
+type DemoDeliveryStatus = 'pending' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
+type DemoDeliveryZone = { id: string; placeId: string; district: string; feeCents: number; minOrderCents: number; etaMin: number; isActive: boolean };
+type DemoDeliveryJob = {
+  id: string; orderId: string; status: DemoDeliveryStatus; address: string; district: string;
+  feeCents: number; etaMin: number; createdAt: string;
+  courier: { id: string; name: string } | null;
 };
 type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
 type DemoBooking = {
@@ -134,6 +145,43 @@ const getProducts = (): DemoShopProduct[] => {
 const saveProducts = (items: DemoShopProduct[]) => write(PRODUCTS_KEY, items);
 const getShopOrders = () => read<DemoShopOrder[]>(SHOP_ORDERS_KEY, []);
 const saveShopOrders = (items: DemoShopOrder[]) => write(SHOP_ORDERS_KEY, items);
+const defaultZones: DemoDeliveryZone[] = ['kuhnya', 'ugol', 'forma'].flatMap((placeId, placeIndex) => [
+  { id: `dz-${placeId}-1`, placeId, district: 'Центр', feeCents: 9900 + placeIndex * 5000, minOrderCents: 30000, etaMin: 40, isActive: true },
+  { id: `dz-${placeId}-2`, placeId, district: 'Северный', feeCents: 12900 + placeIndex * 5000, minOrderCents: 30000, etaMin: 45, isActive: true },
+  { id: `dz-${placeId}-3`, placeId, district: 'Заречный', feeCents: 14900 + placeIndex * 5000, minOrderCents: 40000, etaMin: 50, isActive: true },
+  { id: `dz-${placeId}-4`, placeId, district: 'Южный', feeCents: 14900 + placeIndex * 5000, minOrderCents: 40000, etaMin: 50, isActive: true },
+]);
+const getZones = (): DemoDeliveryZone[] => read<DemoDeliveryZone[] | null>(DELIVERY_ZONES_KEY, null) ?? defaultZones;
+const saveZones = (items: DemoDeliveryZone[]) => write(DELIVERY_ZONES_KEY, items);
+const getJobs = () => read<DemoDeliveryJob[]>(DELIVERY_JOBS_KEY, []);
+const saveJobs = (items: DemoDeliveryJob[]) => write(DELIVERY_JOBS_KEY, items);
+
+function orderView(order: DemoShopOrder) {
+  const job = getJobs().find(item => item.orderId === order.id);
+  const goods = order.goods ?? money(order.total.cents - (order.deliveryFee?.cents ?? 0));
+  const fee = order.deliveryFee ?? money(0);
+  return {
+    ...order, goods, deliveryFee: fee, fulfillment: order.fulfillment ?? 'pickup',
+    delivery: job ? {
+      id: job.id, status: job.status, address: job.address, district: job.district,
+      fee: money(job.feeCents), etaMin: job.etaMin, courier: job.courier,
+    } : null,
+  };
+}
+
+function jobView(job: DemoDeliveryJob) {
+  const order = getShopOrders().find(item => item.id === job.orderId);
+  const place = order ? placeById(order.place.id) : null;
+  return {
+    id: job.id, orderId: job.orderId, status: job.status, address: job.address, district: job.district,
+    fee: money(job.feeCents), etaMin: job.etaMin, createdAt: job.createdAt, courier: job.courier,
+    order: {
+      id: job.orderId, status: order?.status ?? 'cancelled', pickupCode: order?.pickupCode ?? '',
+      total: order?.total ?? money(0), client: order?.client ?? { id: '', name: '' },
+      place: { id: place?.id ?? '', name: place?.name ?? 'Точка', address: place?.address ?? '' },
+    },
+  };
+}
 const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress'];
 const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p2: 'Мастерская «Линия»' };
 const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
@@ -220,6 +268,10 @@ function partnerPlaceView(place: typeof places[number]) {
     isPublished: (place as { isPublished?: boolean }).isPublished !== false,
     updatedAt: new Date().toISOString(),
     products: getProducts().filter(item => item.placeId === place.id),
+    zones: getZones().filter(item => item.placeId === place.id).map(item => ({
+      id: item.id, district: item.district, fee: money(item.feeCents), minOrder: money(item.minOrderCents),
+      etaMin: item.etaMin, isActive: item.isActive,
+    })),
     offers: offers.filter(item => item.placeId === place.id).map(item => ({
       id: item.id, title: item.title, description: '', durationMin: item.durationMin,
       price: money(item.price), isActive: (item as { isActive?: boolean }).isActive !== false,
@@ -310,6 +362,11 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const base = card(place, bookings);
     return { place: { ...base, phone: place.phone }, offers: list,
       products: getProducts().filter(item => item.placeId === place.id && item.isActive),
+      delivery: { available: getZones().some(item => item.placeId === place.id && item.isActive),
+        zones: getZones().filter(item => item.placeId === place.id && item.isActive).map(item => ({
+          id: item.id, district: item.district, fee: money(item.feeCents), minOrder: money(item.minOrderCents),
+          etaMin: item.etaMin, isActive: item.isActive,
+        })) },
       reviews: reviewsFor(place.id, bookings) } as T;
   }
 
@@ -345,13 +402,15 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       const partner = digits.endsWith('79000000002');
       const operator = digits.endsWith('79000000003');
       const driver = digits.endsWith('79000000004');
+      const courier = digits.endsWith('79000000005');
       const roles: DemoRole[] = [];
       if (partner) roles.push({ role: 'partner', partner_id: 'p1' });
       if (operator) roles.push({ role: 'operator', partner_id: null });
       if (driver) roles.push({ role: 'driver', partner_id: null });
+      if (courier) roles.push({ role: 'courier', partner_id: null });
       roles.push({ role: 'client', partner_id: null });
       me = {
-        user: { id: `u-${digits.slice(-6)}`, phone: `+${digits}`, displayName: String(body.displayName || '').trim() || (partner ? 'Партнёр Демо' : operator ? 'Оператор Демо' : driver ? 'Водитель Демо' : 'Клиент Демо') },
+        user: { id: `u-${digits.slice(-6)}`, phone: `+${digits}`, displayName: String(body.displayName || '').trim() || (partner ? 'Партнёр Демо' : operator ? 'Оператор Демо' : driver ? 'Водитель Демо' : courier ? 'Курьер Демо' : 'Клиент Демо') },
         roles, partnerIds: partner ? ['p1'] : [],
       };
       write(ME_KEY, me);
@@ -784,11 +843,25 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       const orders = getShopOrders();
       if (key) {
         const existing = orders.find(item => item.client.id === me.user.id && item.key === key);
-        if (existing) return existing as T;
+        if (existing) return orderView(existing) as T;
       }
-      const total = lines.reduce((sum, line) => sum + line!.product.price.cents * line!.qty, 0);
+      const goodsCents = lines.reduce((sum, line) => sum + line!.product.price.cents * line!.qty, 0);
+      const fulfillment = body.fulfillment === 'delivery' ? 'delivery' : 'pickup';
+      let deliveryFeeCents = 0;
+      let zone: DemoDeliveryZone | undefined;
+      if (fulfillment === 'delivery') {
+        const address = String(body.deliveryAddress ?? '').trim();
+        const district = String(body.deliveryDistrict ?? '');
+        if (address.length < 3 || !district) return fail('Укажите адрес доставки', 'delivery_address_required');
+        zone = getZones().find(item => item.placeId === place.id && item.district === district && item.isActive);
+        if (!zone) return fail('Доставка в этот район недоступна', 'delivery_unavailable');
+        if (goodsCents < zone.minOrderCents) return fail('Сумма меньше минимальной для доставки', 'min_order');
+        deliveryFeeCents = zone.feeCents;
+      }
+      const totalCents = goodsCents + deliveryFeeCents;
       const order: DemoShopOrder = {
-        id: `sh-${Date.now()}`, status: 'placed', total: money(total),
+        id: `sh-${Date.now()}`, status: 'placed', total: money(totalCents),
+        goods: money(goodsCents), deliveryFee: money(deliveryFeeCents), fulfillment,
         pickupCode: String(Math.floor(1000 + Math.random() * 9000)), note: String(body.note ?? '').slice(0, 300),
         createdAt: new Date().toISOString(), key,
         client: { id: me.user.id, name: me.user.displayName },
@@ -799,12 +872,21 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
           total: money(line!.product.price.cents * line!.qty),
         })),
       };
+      if (fulfillment === 'delivery' && zone) {
+        const job: DemoDeliveryJob = {
+          id: `dj-${Date.now()}`, orderId: order.id, status: 'pending',
+          address: String(body.deliveryAddress).trim(), district: zone.district,
+          feeCents: zone.feeCents, etaMin: zone.etaMin, createdAt: order.createdAt, courier: null,
+        };
+        order.deliveryJobId = job.id;
+        saveJobs([job, ...getJobs()]);
+      }
       for (const line of lines) line!.product.stockQty -= line!.qty;
       saveProducts(products);
       saveShopOrders([order, ...orders]);
-      return order as T;
+      return orderView(order) as T;
     }
-    return { items: getShopOrders().filter(item => item.client.id === me.user.id) } as T;
+    return { items: getShopOrders().filter(item => item.client.id === me.user.id).map(orderView) } as T;
   }
 
   const shopCancelMatch = url.pathname.match(/^\/api\/v1\/me\/shop-orders\/([^/]+)\/cancel$/);
@@ -817,6 +899,10 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (order.client.id !== me.user.id) return fail('Это не ваш заказ', 'forbidden');
     if (!['placed', 'confirmed'].includes(order.status)) return fail('Заказ уже нельзя отменить', 'invalid_transition');
     order.status = 'cancelled';
+    const jobs = getJobs();
+    const job = jobs.find(item => item.orderId === order.id && ['pending', 'assigned'].includes(item.status));
+    if (job) job.status = 'cancelled';
+    saveJobs(jobs);
     const products = getProducts();
     for (const line of order.items) {
       const product = products.find(item => item.id === line.productId);
@@ -824,7 +910,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     }
     saveProducts(products);
     saveShopOrders(orders);
-    return order as T;
+    return orderView(order) as T;
   }
 
   if (url.pathname === '/api/v1/partner/shop-orders') {
@@ -832,9 +918,9 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
     const orders = getShopOrders().filter(order => {
       const place = placeById(order.place.id);
-      return place && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready'].includes(order.status);
+      return place && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(order.status);
     });
-    return { items: orders } as T;
+    return { items: orders.map(orderView) } as T;
   }
 
   const shopStatusMatch = url.pathname.match(/^\/api\/v1\/partner\/shop-orders\/([^/]+)\/status$/);
@@ -850,9 +936,14 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     }
     const action = String(body.action);
     const flow: Record<string, string> = { confirm: 'placed', ready: 'confirmed', complete: 'ready' };
+    if (action === 'complete' && order.fulfillment === 'delivery') return fail('Доставку завершает курьер', 'courier_required');
     if (action === 'cancel') {
       if (!['placed', 'confirmed'].includes(order.status)) return fail('Заказ уже нельзя отменить', 'invalid_transition');
       order.status = 'cancelled';
+      const jobs = getJobs();
+      const job = jobs.find(item => item.orderId === order.id && ['pending', 'assigned'].includes(item.status));
+      if (job) job.status = 'cancelled';
+      saveJobs(jobs);
       const products = getProducts();
       for (const line of order.items) {
         const product = products.find(item => item.id === line.productId);
@@ -865,7 +956,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       order.status = ({ confirm: 'confirmed', ready: 'ready', complete: 'completed' } as Record<string, DemoShopOrder['status']>)[action];
     }
     saveShopOrders(orders);
-    return order as T;
+    return orderView(order) as T;
   }
 
   const partnerProductAdd = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/products$/);
@@ -920,6 +1011,131 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     target.review = { id: `r-${Date.now()}`, rating: Number(body.rating) || 5, status: 'pending' };
     saveBookings(items);
     return { ok: true, status: 'pending' } as T;
+  }
+
+  const zoneAddMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/zones$/);
+  if (zoneAddMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const place = placeById(zoneAddMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
+    const zones = getZones();
+    const district = String(body.district ?? '');
+    const existing = zones.find(item => item.placeId === place.id && item.district === district);
+    const zone: DemoDeliveryZone = existing ?? {
+      id: `dz-${Date.now()}`, placeId: place.id, district, feeCents: 0, minOrderCents: 0, etaMin: 45, isActive: true,
+    };
+    zone.feeCents = Math.max(0, Number(body.feeCents) || 0);
+    zone.minOrderCents = Math.max(0, Number(body.minOrderCents) || 0);
+    zone.etaMin = Math.max(5, Number(body.etaMin) || 45);
+    zone.isActive = true;
+    if (!existing) zones.push(zone);
+    saveZones(zones);
+    return { id: zone.id, district: zone.district, fee: money(zone.feeCents), minOrder: money(zone.minOrderCents),
+      etaMin: zone.etaMin, isActive: zone.isActive } as T;
+  }
+
+  const zoneMatch = url.pathname.match(/^\/api\/v1\/partner\/zones\/([^/]+)$/);
+  if (zoneMatch && method === 'PATCH') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const zones = getZones();
+    const zone = zones.find(item => item.id === zoneMatch[1]);
+    if (!zone) return fail('Зона не найдена', 'not_found');
+    const place = placeById(zone.placeId);
+    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваша зона', 'forbidden');
+    if (body.feeCents !== undefined) zone.feeCents = Math.max(0, Number(body.feeCents));
+    if (body.minOrderCents !== undefined) zone.minOrderCents = Math.max(0, Number(body.minOrderCents));
+    if (body.etaMin !== undefined) zone.etaMin = Math.max(5, Number(body.etaMin));
+    if (body.isActive !== undefined) zone.isActive = Boolean(body.isActive);
+    saveZones(zones);
+    return { id: zone.id, district: zone.district, fee: money(zone.feeCents), minOrder: money(zone.minOrderCents),
+      etaMin: zone.etaMin, isActive: zone.isActive } as T;
+  }
+
+  if (url.pathname === '/api/v1/courier/delivery-jobs') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (!me.roles.some(role => role.role === 'courier')) return fail('Недостаточно прав', 'forbidden');
+    const jobs = getJobs();
+    const orderById = new Map(getShopOrders().map(item => [item.id, item]));
+    return {
+      available: jobs.filter(job => job.status === 'pending' && orderById.get(job.orderId)?.status === 'ready').map(jobView),
+      mine: jobs.filter(job => job.courier?.id === me.user.id && ['assigned', 'picked_up'].includes(job.status)).map(jobView),
+    } as T;
+  }
+
+  const courierActionMatch = url.pathname.match(/^\/api\/v1\/courier\/delivery-jobs\/([^/]+)\/(claim|pickup|deliver)$/);
+  if (courierActionMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (!me.roles.some(role => role.role === 'courier')) return fail('Недостаточно прав', 'forbidden');
+    const jobs = getJobs();
+    const job = jobs.find(item => item.id === courierActionMatch[1]);
+    if (!job) return fail('Доставка не найдена', 'not_found');
+    const orders = getShopOrders();
+    const order = orders.find(item => item.id === job.orderId);
+    if (!order) return fail('Заказ не найден', 'not_found');
+    const action = courierActionMatch[2];
+    if (action === 'claim') {
+      if (job.status !== 'pending') return fail('Доставку уже взяли', 'delivery_taken');
+      if (order.status !== 'ready') return fail('Заказ ещё не готов', 'not_ready');
+      if (jobs.some(item => item.courier?.id === me.user.id && ['assigned', 'picked_up'].includes(item.status))) {
+        return fail('У вас уже есть активная доставка', 'courier_busy');
+      }
+      job.status = 'assigned';
+      job.courier = { id: me.user.id, name: me.user.displayName };
+    } else if (action === 'pickup') {
+      if (job.courier?.id !== me.user.id) return fail('Это не ваша доставка', 'forbidden');
+      if (job.status !== 'assigned') return fail('Доставка уже в другом состоянии', 'invalid_transition');
+      job.status = 'picked_up';
+      order.status = 'out_for_delivery';
+    } else {
+      if (job.courier?.id !== me.user.id) return fail('Это не ваша доставка', 'forbidden');
+      if (job.status !== 'picked_up') return fail('Доставка уже в другом состоянии', 'invalid_transition');
+      job.status = 'delivered';
+      order.status = 'completed';
+    }
+    saveJobs(jobs);
+    saveShopOrders(orders);
+    return jobView(job) as T;
+  }
+
+  if (url.pathname === '/api/v1/operator/delivery-jobs') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    return { items: getJobs().filter(job => ['pending', 'assigned', 'picked_up'].includes(job.status)).map(jobView) } as T;
+  }
+
+  if (url.pathname === '/api/v1/operator/couriers') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const jobs = getJobs();
+    const items = [{
+      id: 'u-000005', display_name: 'Курьер Демо', transport: 'Велосипед', is_online: true, deliveries_count: 0,
+      active_jobs: jobs.filter(job => job.courier?.id === 'u-000005' && ['assigned', 'picked_up'].includes(job.status)).length,
+    }];
+    if (me.roles.some(role => role.role === 'courier') && !items.some(item => item.id === me.user.id)) {
+      items.push({ id: me.user.id, display_name: me.user.displayName, transport: 'Пешком', is_online: true,
+        deliveries_count: 0, active_jobs: jobs.filter(job => job.courier?.id === me.user.id && ['assigned', 'picked_up'].includes(job.status)).length });
+    }
+    return { items } as T;
+  }
+
+  const assignMatch = url.pathname.match(/^\/api\/v1\/operator\/delivery-jobs\/([^/]+)\/assign$/);
+  if (assignMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const jobs = getJobs();
+    const job = jobs.find(item => item.id === assignMatch[1]);
+    if (!job) return fail('Доставка не найдена', 'not_found');
+    if (['picked_up', 'delivered'].includes(job.status)) return fail('Доставку уже нельзя переназначить', 'invalid_transition');
+    const courierId = String(body.courierUserId ?? '');
+    job.status = 'assigned';
+    job.courier = { id: courierId, name: courierId === 'u-000005' ? 'Курьер Демо' : getMe()?.user.displayName ?? 'Курьер' };
+    saveJobs(jobs);
+    return jobView(job) as T;
   }
 
   return fail('Демо-метод не найден', 'not_found');

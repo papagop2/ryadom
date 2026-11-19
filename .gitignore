@@ -13,3 +13,4 @@ web/public/icon-*.png
 *.pfx
 *.key
 dist-pages/
+dist-demo/

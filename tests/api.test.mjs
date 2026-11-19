@@ -49,6 +49,13 @@ async function addPartnerRole(userId, partnerName) {
   return partner.rows[0].id;
 }
 
+async function addCourierRole(userId) {
+  await pool.query(`insert into memberships (user_id, role) values ($1, 'courier')
+    on conflict (user_id, role) do nothing`, [userId]);
+  await pool.query(`insert into courier_profiles (user_id, transport) values ($1, 'Тестовый')
+    on conflict (user_id) do update set transport = excluded.transport`, [userId]);
+}
+
 async function freeSlot(placeName) {
   const { rows } = await pool.query(
     `select s.id, s.starts_at from availability_slots s
@@ -627,4 +634,112 @@ test('товары: партнёр добавляет позицию и меня
   const forbidden = await app.inject({ method: 'PATCH', url: `/api/v1/partner/products/${created.json().id}`,
     headers: outsider.headers, payload: { stockQty: 1 } });
   assert.equal(forbidden.statusCode, 403);
+});
+
+test('доставка: зона, сбор за доставку и путь курьера', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Мастерская «Линия»');
+  const courier = await login();
+  await addCourierRole(courier.userId);
+  const place = (await app.inject({ url: '/api/v1/places?category=food' })).json().items
+    .find(item => item.name === 'Кухня на районе');
+  const detail = (await app.inject({ url: `/api/v1/places/${place.id}` })).json();
+  assert.equal(detail.delivery.available, true);
+  const zone = detail.delivery.zones.find(item => item.district === 'Центр');
+  assert.ok(zone, 'должна быть зона Центр');
+  const lunch = detail.products.find(item => item.title === 'Обед дня');
+  assert.ok(lunch);
+  const payload = {
+    placeId: place.id, items: [{ productId: lunch.id, qty: 1 }],
+    fulfillment: 'delivery', deliveryDistrict: 'Центр', deliveryAddress: 'ул. Тестовая, 1',
+  };
+  const created = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { ...payload, idempotencyKey: `delivery-${Date.now()}` } });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().fulfillment, 'delivery');
+  assert.equal(created.json().goods.cents, lunch.price.cents);
+  assert.equal(created.json().deliveryFee.cents, zone.fee.cents);
+  assert.equal(created.json().total.cents, lunch.price.cents + zone.fee.cents);
+  assert.equal(created.json().delivery.status, 'pending');
+  const orderId = created.json().id;
+
+  const noAddress = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { ...payload, deliveryAddress: '', idempotencyKey: `noaddr-${Date.now()}` } });
+  assert.equal(noAddress.statusCode, 400);
+  const unknownZone = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { ...payload, deliveryDistrict: 'Луна', idempotencyKey: `moon-${Date.now()}` } });
+  assert.equal(unknownZone.statusCode, 409);
+  const drink = detail.products.find(item => item.title === 'Компот');
+  const tooSmall = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { ...payload, items: [{ productId: drink.id, qty: 1 }], idempotencyKey: `small-${Date.now()}` } });
+  assert.equal(tooSmall.statusCode, 409);
+  assert.equal(tooSmall.json().error, 'min_order');
+
+  for (const action of ['confirm', 'ready']) {
+    const moved = await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${orderId}/status`,
+      headers: partner.headers, payload: { action } });
+    assert.equal(moved.statusCode, 200, moved.body);
+  }
+  const partnerComplete = await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${orderId}/status`,
+    headers: partner.headers, payload: { action: 'complete' } });
+  assert.equal(partnerComplete.statusCode, 409);
+  assert.equal(partnerComplete.json().error, 'courier_required');
+
+  const available = await app.inject({ url: '/api/v1/courier/delivery-jobs', headers: courier.headers });
+  const job = available.json().available.find(item => item.orderId === orderId);
+  assert.ok(job, 'готовый заказ должен быть доступен курьеру');
+  const claimed = await app.inject({ method: 'POST', url: `/api/v1/courier/delivery-jobs/${job.id}/claim`,
+    headers: courier.headers });
+  assert.equal(claimed.statusCode, 200, claimed.body);
+  assert.equal(claimed.json().status, 'assigned');
+  assert.equal(claimed.json().courier.id, courier.userId);
+  const picked = await app.inject({ method: 'POST', url: `/api/v1/courier/delivery-jobs/${job.id}/pickup`,
+    headers: courier.headers });
+  assert.equal(picked.statusCode, 200, picked.body);
+  assert.equal(picked.json().status, 'picked_up');
+  assert.equal(picked.json().order.status, 'out_for_delivery');
+  const delivered = await app.inject({ method: 'POST', url: `/api/v1/courier/delivery-jobs/${job.id}/deliver`,
+    headers: courier.headers });
+  assert.equal(delivered.statusCode, 200, delivered.body);
+  assert.equal(delivered.json().status, 'delivered');
+  assert.equal(delivered.json().order.status, 'completed');
+  const mine = await app.inject({ url: '/api/v1/me/shop-orders', headers: client.headers });
+  assert.equal(mine.json().items.find(item => item.id === orderId).delivery.status, 'delivered');
+});
+
+test('доставка: оператор назначает курьера и видит активные задания', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Мастерская «Линия»');
+  const courier = await login();
+  await addCourierRole(courier.userId);
+  const operator = await login();
+  await addOperatorRole(operator.userId);
+  const place = (await app.inject({ url: '/api/v1/places?category=food' })).json().items
+    .find(item => item.name === 'Кухня на районе');
+  const detail = (await app.inject({ url: `/api/v1/places/${place.id}` })).json();
+  const lunch = detail.products.find(item => item.title === 'Обед дня');
+  const created = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 1 }], fulfillment: 'delivery',
+      deliveryDistrict: 'Центр', deliveryAddress: 'ул. Операторская, 7', idempotencyKey: `assign-${Date.now()}` } });
+  assert.equal(created.statusCode, 201, created.body);
+  for (const action of ['confirm', 'ready']) {
+    assert.equal((await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${created.json().id}/status`,
+      headers: partner.headers, payload: { action } })).statusCode, 200);
+  }
+  const jobs = await app.inject({ url: '/api/v1/operator/delivery-jobs', headers: operator.headers });
+  const job = jobs.json().items.find(item => item.orderId === created.json().id);
+  assert.ok(job);
+  const couriers = await app.inject({ url: '/api/v1/operator/couriers', headers: operator.headers });
+  assert.ok(couriers.json().items.some(item => item.id === courier.userId));
+  const assigned = await app.inject({ method: 'POST', url: `/api/v1/operator/delivery-jobs/${job.id}/assign`,
+    headers: operator.headers, payload: { courierUserId: courier.userId } });
+  assert.equal(assigned.statusCode, 200, assigned.body);
+  assert.equal(assigned.json().status, 'assigned');
+  assert.equal(assigned.json().courier.id, courier.userId);
+  const mine = await app.inject({ url: '/api/v1/courier/delivery-jobs', headers: courier.headers });
+  assert.ok(mine.json().mine.some(item => item.id === job.id));
 });

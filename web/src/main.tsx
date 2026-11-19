@@ -12,14 +12,32 @@ type PlaceCard = {
 type Offer = { id: string; title: string; description: string; durationMin: number; price: Money; nextSlot: string | null };
 type ShopProduct = { id: string; title: string; description: string; price: Money; stockQty: number; unit: string; isActive: boolean };
 type ShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
-type ShopOrderStatus = 'placed' | 'confirmed' | 'ready' | 'completed' | 'cancelled';
+type ShopOrderStatus = 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'completed' | 'cancelled';
+type DeliveryStatus = 'pending' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
+type DeliveryZone = { id: string; district: string; fee: Money; minOrder: Money; etaMin: number; isActive: boolean };
+type DeliveryInfo = {
+  id: string; status: DeliveryStatus; address: string; district: string; fee: Money; etaMin: number;
+  courier: { id: string; name: string } | null;
+};
 type ShopOrder = {
-  id: string; status: ShopOrderStatus; total: Money; pickupCode: string; note: string; createdAt: string;
+  id: string; status: ShopOrderStatus; total: Money; goods: Money; deliveryFee: Money;
+  fulfillment: 'pickup' | 'delivery'; pickupCode: string; note: string; createdAt: string;
   client: { id: string; name: string };
   place: { id: string; name: string; address: string; district: string };
+  delivery: DeliveryInfo | null;
   items: ShopOrderItem[];
 };
-type PlaceDetail = { place: PlaceCard & { phone: string | null }; offers: Offer[]; products: ShopProduct[]; reviews: Review[] };
+type DeliveryJob = {
+  id: string; orderId: string; status: DeliveryStatus; address: string; district: string;
+  fee: Money; etaMin: number; createdAt: string; courier: { id: string; name: string } | null;
+  order: {
+    id: string; status: ShopOrderStatus; pickupCode: string; total: Money;
+    client: { id: string; name: string }; place: { id: string; name: string; address: string };
+  };
+};
+type CourierInfo = { id: string; display_name: string; transport: string; is_online: boolean; deliveries_count: number; active_jobs: number };
+type PlaceDetail = { place: PlaceCard & { phone: string | null }; offers: Offer[]; products: ShopProduct[];
+  delivery: { available: boolean; zones: DeliveryZone[] }; reviews: Review[] };
 type Slot = { id: string; startsAt: string; endsAt: string };
 type Review = { id: string; rating: number; body: string; createdAt: string; author: string };
 type Booking = {
@@ -56,7 +74,7 @@ type PartnerOffer = { id: string; title: string; description: string; durationMi
 type PartnerPlace = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
   phone: string | null; location: { lat: number; lng: number }; isPublished: boolean; updatedAt: string;
-  offers: PartnerOffer[]; products: ShopProduct[];
+  offers: PartnerOffer[]; products: ShopProduct[]; zones: DeliveryZone[];
 };
 type Notice = { id: number; kind: string; payload: Record<string, unknown>; channel: string; created_at: string; read_at: string | null; delivered_at: string | null; last_error: string | null };
 type ModerationItem = {
@@ -70,7 +88,7 @@ const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB
 const price = (value: Money | null) => value ? money.format(value.cents / 100) : '—';
 const dayTime = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор', driver: 'водитель' };
+const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор', driver: 'водитель', courier: 'курьер' };
 const plural = (n: number, one: string, few: string, many: string) =>
   n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
 const unitLabel = (unit: string, qty: number) => unit === 'порция'
@@ -91,7 +109,11 @@ const serviceStatusLabel: Record<ServiceStatus, string> = {
   cancelled: 'Отменена', expired: 'Истекла',
 };
 const shopStatusLabel: Record<ShopOrderStatus, string> = {
-  placed: 'Ждёт подтверждения', confirmed: 'Подтверждён', ready: 'Готов к выдаче', completed: 'Выдан', cancelled: 'Отменён',
+  placed: 'Ждёт подтверждения', confirmed: 'Подтверждён', ready: 'Готов', out_for_delivery: 'В пути',
+  completed: 'Выдан', cancelled: 'Отменён',
+};
+const deliveryStatusLabel: Record<DeliveryStatus, string> = {
+  pending: 'Ищем курьера', assigned: 'Курьер назначен', picked_up: 'В пути', delivered: 'Доставлено', cancelled: 'Отменено',
 };
 const serviceOfferStatusLabel: Record<ServiceOffer['status'], string> = {
   pending: 'Ждёт ответа', accepted: 'Выбрано', declined: 'Отклонено', withdrawn: 'Отозвано',
@@ -621,6 +643,118 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
 }
 
 
+function DeliveryCard({ job, children }: { job: DeliveryJob; children?: ReactNode }) {
+  return <div className="service-card delivery-card">
+    <div className="service-card-head">
+      <span className={`status ${job.status}`}><span className="dot" />{deliveryStatusLabel[job.status]}</span>
+      <strong>{price(job.fee)}</strong>
+    </div>
+    <h3>{job.order.place.name}</h3>
+    <p className="meta"><Icon name="pin" size={13} />{job.address} · {job.district}</p>
+    <p className="meta"><Icon name="user" size={13} />{job.order.client.name} · заказ {price(job.order.total)} · {job.etaMin} мин</p>
+    <div className="trip-actions">
+      <span className="pickup-code"><Icon name="receipt" size={12} />{job.order.pickupCode}</span>
+      {children}
+    </div>
+  </div>;
+}
+
+function CourierPanel({ notify }: { notify: (text: string) => void }) {
+  const [data, setData] = useState<{ available: DeliveryJob[]; mine: DeliveryJob[] } | null>(null);
+  const load = useCallback(() => {
+    void api<{ available: DeliveryJob[]; mine: DeliveryJob[] }>('/api/v1/courier/delivery-jobs')
+      .then(setData).catch(() => setData({ available: [], mine: [] }));
+  }, []);
+  useEffect(load, [load]);
+  useEffect(() => {
+    const timer = setInterval(load, 8000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  async function act(id: string, action: 'claim' | 'pickup' | 'deliver') {
+    try {
+      await api(`/api/v1/courier/delivery-jobs/${id}/${action}`, { method: 'POST' });
+      notify({ claim: 'Доставка взята', pickup: 'Заказ у вас, в путь', deliver: 'Доставлено' }[action]);
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'courier_busy' ? 'У вас уже есть активная доставка'
+        : code === 'delivery_taken' ? 'Доставку уже взяли'
+          : 'Не удалось обновить доставку');
+    }
+  }
+
+  return <div className="driver-panel">
+    <div className="panel-title"><h2>Кабинет курьера</h2><span className="count-chip">{data ? data.mine.length : '—'}</span></div>
+    {!data ? <div className="skeleton-card" />
+      : !data.mine.length ? <p className="notice">Нет активных доставок</p>
+        : data.mine.map(job => <DeliveryCard key={job.id} job={job}>
+          {job.status === 'assigned' && <button type="button" className="primary mini" onClick={() => void act(job.id, 'pickup')}>Забрал заказ</button>}
+          {job.status === 'picked_up' && <button type="button" className="primary mini" onClick={() => void act(job.id, 'deliver')}>Доставил</button>}
+        </DeliveryCard>)}
+    {data && data.available.length > 0 && <>
+      <h3 className="sub-title">Готовые заказы</h3>
+      {data.available.map(job => <DeliveryCard key={job.id} job={job}>
+        <button type="button" className="primary mini" onClick={() => void act(job.id, 'claim')}>Взять</button>
+      </DeliveryCard>)}
+    </>}
+  </div>;
+}
+
+function OperatorDeliveries({ notify }: { notify: (text: string) => void }) {
+  const [jobs, setJobs] = useState<DeliveryJob[] | null>(null);
+  const [couriers, setCouriers] = useState<CourierInfo[]>([]);
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const load = useCallback(() => {
+    void Promise.all([
+      api<{ items: DeliveryJob[] }>('/api/v1/operator/delivery-jobs'),
+      api<{ items: CourierInfo[] }>('/api/v1/operator/couriers'),
+    ]).then(([jobsData, courierData]) => {
+      setJobs(jobsData.items);
+      setCouriers(courierData.items);
+    }).catch(() => setJobs([]));
+  }, []);
+  useEffect(load, [load]);
+
+  async function assign(job: DeliveryJob) {
+    const courierUserId = picked[job.id];
+    if (!courierUserId) return;
+    try {
+      await api(`/api/v1/operator/delivery-jobs/${job.id}/assign`, { method: 'POST', body: { courierUserId } });
+      notify('Курьер назначен');
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'courier_busy' ? 'У курьера уже есть активная доставка' : 'Не удалось назначить');
+    }
+  }
+
+  return <div className="partner-service">
+    <div className="panel-title"><h2>Доставка</h2><span className="count-chip">{jobs ? jobs.length : '—'}</span></div>
+    {!jobs && <div className="skeleton-card" />}
+    {jobs && !jobs.length && <p className="notice">Активных доставок нет</p>}
+    {jobs?.map(job => <div className="service-card delivery-card" key={job.id}>
+      <div className="service-card-head">
+        <span className={`status ${job.status}`}><span className="dot" />{deliveryStatusLabel[job.status]}</span>
+        <strong>{price(job.fee)}</strong>
+      </div>
+      <h3>{job.order.place.name} → {job.address}</h3>
+      <p className="meta"><Icon name="user" size={13} />{job.order.client.name} · {job.district} · {job.etaMin} мин</p>
+      {job.courier && <p className="meta"><Icon name="car" size={13} />{job.courier.name}</p>}
+      {job.status === 'pending' || job.status === 'assigned' ? <div className="assign-row">
+        <select value={picked[job.id] ?? job.courier?.id ?? ''} onChange={event => setPicked(current => ({ ...current, [job.id]: event.target.value }))}>
+          <option value="">Курьер</option>
+          {couriers.map(courier => <option key={courier.id} value={courier.id}>
+            {courier.display_name} · {courier.active_jobs > 0 ? 'занят' : courier.transport || 'свободен'}
+          </option>)}
+        </select>
+        <button type="button" className="primary mini" disabled={!picked[job.id] && !job.courier}
+          onClick={() => void assign(job)}>Назначить</button>
+      </div> : null}
+    </div>)}
+  </div>;
+}
+
 function Catalogue({ me, notify, withMap = false, onPick }: {
   me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void;
 }) {
@@ -758,6 +892,9 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
+  const [deliveryDistrict, setDeliveryDistrict] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
 
   const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
@@ -780,6 +917,11 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     const product = detail?.products.find(item => item.id === id);
     return sum + (product ? product.price.cents * qty : 0);
   }, 0);
+  const zones = detail?.delivery.zones ?? [];
+  const activeDistrict = deliveryDistrict || zones[0]?.district || '';
+  const zone = zones.find(item => item.district === activeDistrict) ?? null;
+  const deliveryFee = fulfillment === 'delivery' && zone ? zone.fee.cents : 0;
+  const grandTotal = cartTotal + deliveryFee;
 
   function changeQty(product: ShopProduct, delta: number) {
     if (!me) { notify('Войдите, чтобы заказать'); return; }
@@ -792,21 +934,36 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   async function checkout() {
     if (!me) { notify('Войдите, чтобы заказать'); return; }
     if (!cartItems.length) return;
+    if (fulfillment === 'delivery') {
+      if (!zone) { notify('Выберите район доставки'); return; }
+      if (cartTotal < zone.minOrder.cents) {
+        notify(`Минимальный заказ с доставкой — ${price(zone.minOrder)}`); return;
+      }
+      if (deliveryAddress.trim().length < 3) { notify('Укажите адрес доставки'); return; }
+    }
     setBusy(true);
     try {
       const order = await api<ShopOrder>('/api/v1/me/shop-orders', { method: 'POST', body: {
         placeId: place.id,
         items: cartItems.map(([productId, qty]) => ({ productId, qty })),
         note,
+        fulfillment,
+        deliveryDistrict: fulfillment === 'delivery' ? activeDistrict : undefined,
+        deliveryAddress: fulfillment === 'delivery' ? deliveryAddress.trim() : undefined,
         idempotencyKey: `shop-${place.id}-${Date.now()}`,
       } });
-      notify(`Заказ оформлен, код ${order.pickupCode}`);
+      notify(fulfillment === 'delivery'
+        ? `Заказ оформлен, курьер привезёт · ${price(order.total)}`
+        : `Заказ оформлен, код ${order.pickupCode}`);
       setCart({});
       loadDetail();
       onBack();
     } catch (error) {
       const code = (error as { code?: string }).code;
-      notify(code === 'out_of_stock' ? 'Часть товаров уже разобрали' : (error as Error).message || 'Не удалось оформить');
+      notify(code === 'out_of_stock' ? 'Часть товаров уже разобрали'
+        : code === 'min_order' ? 'Сумма меньше минимальной для доставки'
+          : code === 'delivery_unavailable' ? 'Доставка в этот район недоступна'
+            : (error as Error).message || 'Не удалось оформить');
     } finally { setBusy(false); }
   }
 
@@ -868,6 +1025,26 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           </div>
         </li>;
       })}</ul>
+      {cartCount > 0 && (zones.length > 0 ? <div className="shop-checkout">
+        <div className="segmented two">
+          <button type="button" className={fulfillment === 'pickup' ? 'active' : ''}
+            onClick={() => setFulfillment('pickup')}><Icon name="receipt" size={14} />Самовывоз</button>
+          <button type="button" className={fulfillment === 'delivery' ? 'active' : ''}
+            onClick={() => setFulfillment('delivery')}><Icon name="car" size={14} />Доставка</button>
+        </div>
+        {fulfillment === 'delivery' && <>
+          <div className="delivery-fields">
+            <label>Район<select value={activeDistrict} onChange={event => setDeliveryDistrict(event.target.value)}>
+              {zones.map(item => <option key={item.id} value={item.district}>{item.district}</option>)}
+            </select></label>
+            <label>Адрес<input value={deliveryAddress} maxLength={240} placeholder="улица, дом, квартира"
+              onChange={event => setDeliveryAddress(event.target.value)} /></label>
+          </div>
+          <p className="hint">{zone
+            ? `${price(zone.fee)} · ${zone.etaMin} мин · от ${price(zone.minOrder)}`
+            : 'Выберите район'}</p>
+        </>}
+      </div> : (cartCount > 0 && <p className="hint">Доставка для этой точки пока недоступна</p>))}
     </>}
 
       <div className="panel-title"><h2>Услуги</h2><span className="count-chip">{detail.offers.length}</span></div>
@@ -920,8 +1097,8 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     </>}
 
     {cartCount > 0 ? <div className="book-bar shop-bar">
-      <div><span className="meta">{cartCount} {plural(cartCount, 'товар', 'товара', 'товаров')} · самовывоз</span>
-        <strong>{price({ cents: cartTotal, currency: 'RUB' })}</strong></div>
+      <div><span className="meta">{cartCount} {plural(cartCount, 'товар', 'товара', 'товаров')} · {fulfillment === 'delivery' ? 'доставка' : 'самовывоз'}</span>
+        <strong>{price({ cents: grandTotal, currency: 'RUB' })}</strong></div>
       <button type="button" className="primary" disabled={busy} onClick={() => void checkout()}>
         {busy ? 'Оформляем…' : 'Заказать'}<Icon name="chevron" size={16} />
       </button>
@@ -1213,7 +1390,7 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
   }
 
   return <div className="service-panel">
-    <div className="service-intro"><div><strong>Самовывоз</strong><span className="meta">Заказ ждёт вас в заведении</span></div></div>
+    <div className="service-intro"><div><strong>Мои заказы</strong><span className="meta">Самовывоз или доставка курьером</span></div></div>
     {!items && <div className="skeleton-card tall" />}
     {items && !items.length && <div className="empty-state small">
       <Icon name="food" size={28} /><p>Заказов пока нет</p><span className="meta">Добавьте товары в карточке заведения</span>
@@ -1224,12 +1401,18 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
         <strong>{price(item.total)}</strong>
       </div>
       <h3>{item.place.name}</h3>
-      <p className="meta"><Icon name="pin" size={13} />{item.place.address}</p>
+      <p className="meta"><Icon name="pin" size={13} />{item.fulfillment === 'delivery' && item.delivery ? item.delivery.address : item.place.address}</p>
       <div className="shop-order-items">{item.items.map(line => <span key={line.id}>
         <span>{line.title} × {line.qty} {unitLabel(line.unit, line.qty)}</span><strong>{price(line.total)}</strong>
       </span>)}</div>
+      {item.fulfillment === 'delivery' && item.delivery && <p className="delivery-line">
+        <Icon name="car" size={13} />{deliveryStatusLabel[item.delivery.status]}
+        <span>{price(item.deliveryFee)} · {item.delivery.etaMin} мин</span>
+      </p>}
       <div className="trip-actions">
-        <span className="pickup-code"><Icon name="receipt" size={12} />Код {item.pickupCode}</span>
+        {item.fulfillment === 'pickup'
+          ? <span className="pickup-code"><Icon name="receipt" size={12} />Код {item.pickupCode}</span>
+          : <span className="meta">{item.delivery?.courier ? `Курьер ${item.delivery.courier.name}` : 'Курьер ещё не назначен'}</span>}
         {(item.status === 'placed' || item.status === 'confirmed') &&
           <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
       </div>
@@ -1319,6 +1502,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
   const isPartner = Boolean(me?.partnerIds.length) || Boolean(me?.roles.some(role => role.role === 'operator'));
   const isOperator = Boolean(me?.roles.some(role => role.role === 'operator'));
   const isDriver = Boolean(me?.roles.some(role => role.role === 'driver'));
+  const isCourier = Boolean(me?.roles.some(role => role.role === 'courier'));
 
   const loadPartner = useCallback(() => {
     if (!isPartner) return;
@@ -1367,7 +1551,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
       }}><Icon name="logout" size={18} /></button>
     </div>
     <div className="chips-row">{me.roles.map(role => <span className="chip" key={role.role}>
-      <Icon name={role.role === 'operator' ? 'shield' : role.role === 'partner' ? 'edit' : 'user'} size={13} />{roleLabel[role.role] ?? role.role}
+      <Icon name={role.role === 'operator' ? 'shield' : role.role === 'partner' ? 'edit' : role.role === 'courier' ? 'car' : 'user'} size={13} />{roleLabel[role.role] ?? role.role}
     </span>)}</div>
 
     {isPartner && <div className="partner">
@@ -1390,6 +1574,8 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     {Boolean(me.partnerIds.length) && <PartnerShopOrders notify={notify} />}
     {isPartner && <PartnerPlaces notify={notify} />}
     {isDriver && <DriverPanel notify={notify} />}
+    {isCourier && <CourierPanel notify={notify} />}
+    {isOperator && <OperatorDeliveries notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
     <Notifications />
   </section>;
@@ -1443,9 +1629,9 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
     } catch (error) { notify((error as Error).message || 'Не удалось обновить'); }
   }
 
-  const active = items?.filter(item => ['placed', 'confirmed', 'ready'].includes(item.status)) ?? [];
+  const active = items?.filter(item => ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(item.status)) ?? [];
   return <div className="partner-service">
-    <div className="panel-title"><h2>Самовывоз</h2><span className="count-chip">{items ? active.length : '—'}</span></div>
+    <div className="panel-title"><h2>Заказы</h2><span className="count-chip">{items ? active.length : '—'}</span></div>
     {!items && <div className="skeleton-card" />}
     {items && !items.length && <p className="notice">Заказов пока нет</p>}
     {active.map(item => <div className="service-card shop-order-card" key={item.id}>
@@ -1453,15 +1639,18 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
         <span className={`status ${item.status}`}><span className="dot" />{shopStatusLabel[item.status]}</span>
         <strong>{price(item.total)}</strong>
       </div>
-      <h3>{item.client.name} · код {item.pickupCode}</h3>
+      <h3>{item.client.name} · {item.fulfillment === 'delivery' ? 'доставка' : `код ${item.pickupCode}`}</h3>
+      {item.fulfillment === 'delivery' && item.delivery && <p className="meta"><Icon name="pin" size={13} />{item.delivery.address} · {item.delivery.district}</p>}
       <div className="shop-order-items">{item.items.map(line => <span key={line.id}>
         <span>{line.title} × {line.qty} {unitLabel(line.unit, line.qty)}</span><strong>{price(line.total)}</strong>
       </span>)}</div>
       {item.note && <p className="service-desc">{item.note}</p>}
       <div className="service-actions">
         {item.status === 'placed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'confirm')}>Подтвердить</button>}
-        {item.status === 'confirmed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'ready')}>Готов к выдаче</button>}
-        {item.status === 'ready' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан</button>}
+        {item.status === 'confirmed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'ready')}>
+          {item.fulfillment === 'delivery' ? 'Готов к доставке' : 'Готов к выдаче'}</button>}
+        {item.status === 'ready' && item.fulfillment === 'pickup' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан</button>}
+        {item.status === 'out_for_delivery' && <span className="meta">Курьер везёт заказ</span>}
         {['placed', 'confirmed'].includes(item.status) && <button type="button" className="ghost-mini" onClick={() => void act(item.id, 'cancel')}>Отменить</button>}
       </div>
     </div>)}
@@ -1477,7 +1666,14 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [addingProduct, setAddingProduct] = useState<string | null>(null);
   const [productDraft, setProductDraft] = useState({ title: '', price: '300', stock: '10', unit: 'шт' });
+  const [districts, setDistricts] = useState<string[]>([]);
+  const [addingZone, setAddingZone] = useState<string | null>(null);
+  const [zoneDraft, setZoneDraft] = useState({ district: '', fee: '199', min: '500', eta: '45' });
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void api<{ items: string[] }>('/api/v1/districts').then(data => setDistricts(data.items)).catch(() => setDistricts([]));
+  }, []);
 
   const load = useCallback(() => {
     void api<{ items: PartnerPlace[] }>('/api/v1/partner/places')
@@ -1531,6 +1727,27 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
     finally { setBusy(false); }
   }
 
+  async function addZone(placeId: string) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/zones`, { method: 'POST', body: {
+        district: zoneDraft.district, feeCents: Math.round(Number(zoneDraft.fee) * 100),
+        minOrderCents: Math.round(Number(zoneDraft.min) * 100), etaMin: Number(zoneDraft.eta),
+      } });
+      notify('Зона доставки сохранена');
+      setAddingZone(null);
+      load();
+    } catch (error) { notify((error as Error).message || 'Проверьте зону доставки'); }
+    finally { setBusy(false); }
+  }
+
+  async function toggleZone(zone: DeliveryZone) {
+    try {
+      await api(`/api/v1/partner/zones/${zone.id}`, { method: 'PATCH', body: { isActive: !zone.isActive } });
+      load();
+    } catch { notify('Не удалось изменить зону'); }
+  }
+
   if (!items) return <p className="notice">Загружаем карточки…</p>;
   if (!items.length) return <p className="notice">Нет доступных карточек.</p>;
 
@@ -1577,6 +1794,30 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
               onClose={() => setOpenProduct(null)} />}
           </li>)}</ul>
         </>}
+        <p className="partner-sub">Доставка</p>
+        <ul className="partner-offers">{place.zones.map(zone => <li key={zone.id}>
+          <div className="offer-line">
+            <div><strong>{zone.district}</strong><span className="meta"> {price(zone.fee)} · от {price(zone.minOrder)} · {zone.etaMin} мин</span></div>
+            <button type="button" onClick={() => void toggleZone(zone)}>{zone.isActive ? 'Скрыть' : 'Включить'}</button>
+          </div>
+        </li>)}</ul>
+        {addingZone === place.id ? <div className="confirm">
+          <div className="row">
+            <label>Район<select value={zoneDraft.district} onChange={event => setZoneDraft({ ...zoneDraft, district: event.target.value })}>
+              <option value="">Выберите</option>
+              {districts.map(district => <option key={district} value={district}>{district}</option>)}
+            </select></label>
+            <label>Доставка, ₽<input value={zoneDraft.fee} inputMode="decimal" onChange={event => setZoneDraft({ ...zoneDraft, fee: event.target.value })} /></label>
+          </div>
+          <div className="row">
+            <label>Мин. заказ, ₽<input value={zoneDraft.min} inputMode="decimal" onChange={event => setZoneDraft({ ...zoneDraft, min: event.target.value })} /></label>
+            <label>Минут<input value={zoneDraft.eta} inputMode="numeric" onChange={event => setZoneDraft({ ...zoneDraft, eta: event.target.value })} /></label>
+          </div>
+          <div className="row">
+            <button type="button" className="primary" disabled={busy || !zoneDraft.district} onClick={() => void addZone(place.id)}>Сохранить</button>
+            <button type="button" onClick={() => setAddingZone(null)}>Отмена</button>
+          </div>
+        </div> : <button type="button" className="add-offer" onClick={() => { setAddingZone(place.id); setZoneDraft({ district: districts[0] ?? '', fee: '199', min: '500', eta: '45' }); }}>+ Зона доставки</button>}
         {addingProduct === place.id ? <div className="confirm">
           <label>Название товара<input value={productDraft.title} maxLength={120} onChange={event => setProductDraft({ ...productDraft, title: event.target.value })} /></label>
           <div className="row">

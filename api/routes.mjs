@@ -230,10 +230,46 @@ function shopProductView(row) {
 
 const SHOP_ORDER_SELECT = `
   select o.*, p.name as place_name, p.address as place_address, p.district as place_district,
-         u.display_name as client_name
+         u.display_name as client_name, dj.id as delivery_job_id, dj.status as delivery_status,
+         dj.eta_min as delivery_eta_min, dj.fee_cents as delivery_job_fee,
+         dj.courier_user_id, c.display_name as courier_name
   from shop_orders o
   join places p on p.id = o.place_id
-  join users u on u.id = o.client_user_id`;
+  join users u on u.id = o.client_user_id
+  left join delivery_jobs dj on dj.order_id = o.id
+  left join users c on c.id = dj.courier_user_id`;
+
+function deliveryZoneView(row) {
+  return {
+    id: row.id, district: row.district, fee: money(row.fee_cents), minOrder: money(row.min_order_cents),
+    etaMin: row.eta_min, isActive: row.is_active,
+  };
+}
+
+const DELIVERY_JOB_SELECT = `
+  select dj.*, o.status as order_status, o.pickup_code, o.total_cents, o.client_user_id, o.place_id,
+         p.name as place_name, p.address as place_address, u.display_name as client_name,
+         c.display_name as courier_name
+  from delivery_jobs dj
+  join shop_orders o on o.id = dj.order_id
+  join places p on p.id = o.place_id
+  join users u on u.id = o.client_user_id
+  left join users c on c.id = dj.courier_user_id`;
+
+function deliveryJobView(row) {
+  return {
+    id: row.id, orderId: row.order_id, status: row.status,
+    address: row.address, district: row.district,
+    fee: money(row.fee_cents), etaMin: row.eta_min,
+    createdAt: row.created_at,
+    courier: row.courier_user_id ? { id: row.courier_user_id, name: row.courier_name } : null,
+    order: {
+      id: row.order_id, status: row.order_status, pickupCode: row.pickup_code,
+      total: money(row.total_cents), client: { id: row.client_user_id, name: row.client_name },
+      place: { id: row.place_id, name: row.place_name, address: row.place_address },
+    },
+  };
+}
 
 async function shopItemsFor(db, orderIds) {
   const byOrder = new Map();
@@ -264,10 +300,19 @@ function shopOrderView(row, items = []) {
     id: row.id,
     status: row.status,
     total: money(row.total_cents, row.currency),
+    goods: money(row.goods_total_cents, row.currency),
+    deliveryFee: money(row.delivery_fee_cents, row.currency),
+    fulfillment: row.fulfillment,
     pickupCode: row.pickup_code,
     note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    delivery: row.delivery_job_id ? {
+      id: row.delivery_job_id, status: row.delivery_status,
+      address: row.delivery_address, district: row.delivery_district,
+      fee: money(row.delivery_fee_cents, row.currency), etaMin: row.delivery_eta_min,
+      courier: row.courier_user_id ? { id: row.courier_user_id, name: row.courier_name } : null,
+    } : null,
     client: { id: row.client_user_id, name: row.client_name },
     place: { id: row.place_id, name: row.place_name, address: row.place_address, district: row.place_district },
     items: items.map(item => ({
@@ -326,6 +371,7 @@ export function routes(app, { pool, demoLogin = false }) {
       return reply.code(error.statusCode).send({ error: 'invalid_request', message: 'Проверьте запрос' });
     }
     request.log.error({ err: error }, 'unhandled');
+    if (process.env.TEST_DEBUG) console.error(error);
     return reply.code(500).send({ error: 'server_error', message: 'Внутренняя ошибка' });
   });
 
@@ -526,6 +572,9 @@ export function routes(app, { pool, demoLogin = false }) {
     const products = await pool.query(
       `select id, title, description, price_cents, currency, stock_qty, unit, is_active
        from products where place_id = $1 and is_active order by price_cents`, [place.id]);
+    const zones = await pool.query(
+      `select id, district, fee_cents, min_order_cents, eta_min, is_active
+       from delivery_zones where place_id = $1 and is_active order by fee_cents`, [place.id]);
     reply.header('Cache-Control', 'no-store');
     return {
       place: {
@@ -549,6 +598,7 @@ export function routes(app, { pool, demoLogin = false }) {
         nextSlot: o.next_slot,
       })),
       products: products.rows.map(shopProductView),
+      delivery: { available: zones.rows.length > 0, zones: zones.rows.map(deliveryZoneView) },
       reviews: reviews.rows.map(r => ({
         id: r.id, rating: r.rating, body: r.body, createdAt: r.created_at, author: r.display_name,
       })),
@@ -792,6 +842,9 @@ export function routes(app, { pool, demoLogin = false }) {
     const products = await client.query(
       `select id, title, description, price_cents, currency, stock_qty, unit, is_active
        from products where place_id = $1 order by created_at`, [p.id]);
+    const zones = await client.query(
+      `select id, district, fee_cents, min_order_cents, eta_min, is_active
+       from delivery_zones where place_id = $1 order by district`, [p.id]);
     return {
       id: p.id, name: p.name, category: p.category, district: p.district, address: p.address,
       about: p.about, phone: p.phone, location: { lat: Number(p.lat), lng: Number(p.lng) },
@@ -802,6 +855,7 @@ export function routes(app, { pool, demoLogin = false }) {
         slotCount: o.slot_count, nextSlot: o.next_slot,
       })),
       products: products.rows.map(shopProductView),
+      zones: zones.rows.map(deliveryZoneView),
     };
   }
 
@@ -1649,6 +1703,9 @@ export function routes(app, { pool, demoLogin = false }) {
         },
         note: { type: 'string', maxLength: 300 },
         idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
+        fulfillment: { type: 'string', enum: ['pickup', 'delivery'] },
+        deliveryAddress: { type: 'string', maxLength: 240 },
+        deliveryDistrict: { type: 'string', maxLength: 60 },
       },
     } },
   }, async (request, reply) => {
@@ -1675,17 +1732,39 @@ export function routes(app, { pool, demoLogin = false }) {
          where id = any($1::uuid[]) and place_id = $2 and is_active order by id for update`,
         [ids, place.rows[0].id]);
       if (products.rows.length !== ids.length) fail(409, 'product_unavailable', 'Часть товаров уже недоступна');
-      let totalCents = 0;
+      let goodsCents = 0;
       const lines = products.rows.map(row => {
         const qty = wanted.get(row.id);
         if (row.stock_qty < qty) fail(409, 'out_of_stock', `«${row.title}»: осталось ${row.stock_qty}`);
-        totalCents += row.price_cents * qty;
+        goodsCents += row.price_cents * qty;
         return { row, qty, total: row.price_cents * qty };
       });
+      const fulfillment = body.fulfillment ?? 'pickup';
+      let deliveryFeeCents = 0;
+      let deliveryEtaMin = null;
+      if (fulfillment === 'delivery') {
+        const address = (body.deliveryAddress ?? '').trim();
+        const district = (body.deliveryDistrict ?? '').trim();
+        if (address.length < 3 || !district) fail(400, 'delivery_address_required', 'Укажите адрес доставки');
+        const zone = await client.query(
+          `select fee_cents, min_order_cents, eta_min from delivery_zones
+           where place_id = $1 and district = $2 and is_active`, [place.rows[0].id, district]);
+        if (!zone.rows[0]) fail(409, 'delivery_unavailable', 'Доставка в этот район недоступна');
+        if (goodsCents < zone.rows[0].min_order_cents) {
+          fail(409, 'min_order', 'Сумма меньше минимальной для доставки');
+        }
+        deliveryFeeCents = zone.rows[0].fee_cents;
+        deliveryEtaMin = zone.rows[0].eta_min;
+      }
+      const totalCents = goodsCents + deliveryFeeCents;
       const orderId = (await client.query(
-        `insert into shop_orders (place_id, client_user_id, total_cents, pickup_code, note, idempotency_key)
-         values ($1, $2, $3, $4, $5, $6) returning id`,
-        [place.rows[0].id, auth.userId, totalCents, String(randomInt(1000, 10000)), body.note ?? '', idempotencyKey]
+        `insert into shop_orders (place_id, client_user_id, total_cents, goods_total_cents, fulfillment,
+                                  delivery_address, delivery_district, delivery_fee_cents,
+                                  pickup_code, note, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+        [place.rows[0].id, auth.userId, totalCents, goodsCents, fulfillment,
+          body.deliveryAddress ?? null, body.deliveryDistrict ?? null, deliveryFeeCents,
+          String(randomInt(1000, 10000)), body.note ?? '', idempotencyKey]
       )).rows[0].id;
       for (const line of lines) {
         await client.query(
@@ -1699,6 +1778,12 @@ export function routes(app, { pool, demoLogin = false }) {
       await client.query(
         `insert into shop_order_events (order_id, status, actor_user_id) values ($1, 'placed', $2)`,
         [orderId, auth.userId]);
+      if (fulfillment === 'delivery') {
+        await client.query(
+          `insert into delivery_jobs (order_id, address, district, fee_cents, eta_min)
+           values ($1, $2, $3, $4, $5)`,
+          [orderId, body.deliveryAddress, body.deliveryDistrict, deliveryFeeCents, deliveryEtaMin]);
+      }
       await notifyPartner(client, place.rows[0].partner_id, 'shop_order_new',
         { orderId, total: totalCents, placeId: place.rows[0].id });
       return { order: await loadShopOrder(client, orderId), created: true };
@@ -1729,6 +1814,16 @@ export function routes(app, { pool, demoLogin = false }) {
         fail(409, 'invalid_transition', 'Заказ уже нельзя отменить');
       }
       await restockShopOrder(client, orderId);
+      const job = await client.query(
+        'select courier_user_id, status from delivery_jobs where order_id = $1 for update', [orderId]);
+      await client.query(
+        `update delivery_jobs set status = 'cancelled', cancelled_at = now(), updated_at = now()
+         where order_id = $1 and status in ('pending', 'assigned')`, [orderId]);
+      if (job.rows[0]?.courier_user_id) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'delivery_cancelled', $2)`,
+          [job.rows[0].courier_user_id, JSON.stringify({ orderId })]);
+      }
       await client.query(
         `update shop_orders set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
         [orderId]);
@@ -1780,14 +1875,29 @@ export function routes(app, { pool, demoLogin = false }) {
         if (!['placed', 'confirmed'].includes(order.status)) fail(409, 'invalid_transition', 'Заказ уже нельзя отменить');
         await restockShopOrder(client, orderId);
         await client.query(
+          `update delivery_jobs set status = 'cancelled', cancelled_at = now(), updated_at = now()
+           where order_id = $1 and status in ('pending', 'assigned')`, [orderId]);
+        await client.query(
           `update shop_orders set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
           [orderId]);
       } else {
+        if (action === 'complete' && order.fulfillment === 'delivery') {
+          fail(409, 'courier_required', 'Доставку завершает курьер');
+        }
         const transition = transitions[action];
         if (order.status !== transition.from) fail(409, 'invalid_transition', 'Заказ уже в другом состоянии');
         await client.query(
           `update shop_orders set status = $2, ${transition.stamp} = now(), updated_at = now() where id = $1`,
           [orderId, transition.to]);
+        if (action === 'ready' && order.fulfillment === 'delivery') {
+          const job = await client.query('select id from delivery_jobs where order_id = $1', [orderId]);
+          const couriers = await client.query('select user_id from courier_profiles where is_online');
+          for (const courier of couriers.rows) {
+            await client.query(
+              `insert into notifications (user_id, kind, payload) values ($1, 'delivery_available', $2)`,
+              [courier.user_id, JSON.stringify({ orderId, jobId: job.rows[0]?.id })]);
+          }
+        }
       }
       const nextStatus = action === 'cancel' ? 'cancelled' : transitions[action].to;
       await client.query(
@@ -1807,6 +1917,208 @@ export function routes(app, { pool, demoLogin = false }) {
     const items = await shopItemsFor(pool, rows.map(row => row.id));
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(row => shopOrderView(row, items.get(row.id) ?? [])) };
+  });
+
+
+  // ---- зоны доставки и курьер ----
+  app.post('/api/v1/partner/places/:id/zones', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['district', 'feeCents', 'etaMin'],
+      properties: {
+        district: { type: 'string', minLength: 1, maxLength: 60 },
+        feeCents: { type: 'integer', minimum: 0, maximum: 100000 },
+        minOrderCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+        etaMin: { type: 'integer', minimum: 5, maximum: 180 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const place = await loadPlaceForManager(auth, uuidParam(request));
+    const { district, feeCents, minOrderCents = 0, etaMin } = request.body;
+    const { rows } = await pool.query(
+      `insert into delivery_zones (place_id, district, fee_cents, min_order_cents, eta_min)
+       values ($1, $2, $3, $4, $5)
+       on conflict (place_id, district) do update set fee_cents = excluded.fee_cents,
+         min_order_cents = excluded.min_order_cents, eta_min = excluded.eta_min, is_active = true, updated_at = now()
+       returning *`, [place.id, district, feeCents, minOrderCents, etaMin]);
+    reply.code(201);
+    return deliveryZoneView(rows[0]);
+  });
+
+  app.patch('/api/v1/partner/zones/:id', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        feeCents: { type: 'integer', minimum: 0, maximum: 100000 },
+        minOrderCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+        etaMin: { type: 'integer', minimum: 5, maximum: 180 },
+        isActive: { type: 'boolean' },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const zone = await pool.query(
+      `select z.id, z.place_id, p.partner_id from delivery_zones z
+       join places p on p.id = z.place_id where z.id = $1`, [uuidParam(request)]);
+    if (!zone.rows[0]) fail(404, 'zone_not_found', 'Зона не найдена');
+    if (!canManagePartner(auth, zone.rows[0].partner_id)) fail(403, 'forbidden', 'Это не ваша зона');
+    const columns = { feeCents: 'fee_cents', minOrderCents: 'min_order_cents', etaMin: 'eta_min', isActive: 'is_active' };
+    const updates = [];
+    const values = [];
+    for (const [key, column] of Object.entries(columns)) {
+      if (!(key in request.body)) continue;
+      values.push(request.body[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+    if (!updates.length) fail(400, 'empty_update', 'Нет полей для изменения');
+    values.push(zone.rows[0].id);
+    const { rows } = await pool.query(
+      `update delivery_zones set ${updates.join(', ')}, updated_at = now() where id = $${values.length} returning *`, values);
+    return deliveryZoneView(rows[0]);
+  });
+
+  app.get('/api/v1/courier/delivery-jobs', async (request, reply) => {
+    const auth = requireRole(request, 'courier', 'operator');
+    const available = await pool.query(
+      `${DELIVERY_JOB_SELECT} where dj.status = 'pending' and o.status = 'ready' order by dj.created_at limit 50`);
+    const mine = await pool.query(
+      `${DELIVERY_JOB_SELECT} where dj.courier_user_id = $1 and dj.status in ('assigned', 'picked_up')
+       order by dj.created_at`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { available: available.rows.map(deliveryJobView), mine: mine.rows.map(deliveryJobView) };
+  });
+
+  app.post('/api/v1/courier/delivery-jobs/:id/claim', async (request) => {
+    const auth = requireRole(request, 'courier');
+    const jobId = uuidParam(request);
+    try {
+      return await withTransaction(pool, async (client) => {
+        const { rows } = await client.query(
+          `select dj.*, o.status as order_status, o.client_user_id, o.place_id from delivery_jobs dj
+           join shop_orders o on o.id = dj.order_id where dj.id = $1 for update`, [jobId]);
+        const job = rows[0];
+        if (!job) fail(404, 'delivery_not_found', 'Доставка не найдена');
+        if (job.status !== 'pending') fail(409, 'delivery_taken', 'Доставку уже взяли');
+        if (job.order_status !== 'ready') fail(409, 'not_ready', 'Заказ ещё не готов');
+        await client.query(
+          `update delivery_jobs set status = 'assigned', courier_user_id = $2, assigned_at = now(), updated_at = now()
+           where id = $1`, [jobId, auth.userId]);
+        await client.query(
+          `insert into delivery_job_events (job_id, status, actor_user_id) values ($1, 'assigned', $2)`,
+          [jobId, auth.userId]);
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'delivery_assigned', $2)`,
+          [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id })]);
+        const view = await client.query(`${DELIVERY_JOB_SELECT} where dj.id = $1`, [jobId]);
+        return deliveryJobView(view.rows[0]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'delivery_jobs_courier_active_uq') {
+        fail(409, 'courier_busy', 'У вас уже есть активная доставка');
+      }
+      throw error;
+    }
+  });
+
+  async function courierTransition(request, fromStatus, toStatus) {
+    const auth = requireRole(request, 'courier');
+    const jobId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `select dj.*, o.status as order_status, o.client_user_id, o.place_id, p.partner_id
+         from delivery_jobs dj join shop_orders o on o.id = dj.order_id
+         join places p on p.id = o.place_id where dj.id = $1 for update`, [jobId]);
+      const job = rows[0];
+      if (!job) fail(404, 'delivery_not_found', 'Доставка не найдена');
+      if (job.courier_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша доставка');
+      if (job.status !== fromStatus) fail(409, 'invalid_transition', 'Доставка уже в другом состоянии');
+      await client.query(
+        `update delivery_jobs set status = $2, ${toStatus === 'picked_up' ? 'picked_up_at' : 'delivered_at'} = now(),
+                updated_at = now() where id = $1`, [jobId, toStatus]);
+      await client.query(
+        `insert into delivery_job_events (job_id, status, actor_user_id) values ($1, $2, $3)`,
+        [jobId, toStatus, auth.userId]);
+      if (toStatus === 'picked_up') {
+        await client.query(
+          `update shop_orders set status = 'out_for_delivery', updated_at = now() where id = $1`, [job.order_id]);
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'delivery_picked_up', $2)`,
+          [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id })]);
+      } else {
+        await client.query(
+          `update shop_orders set status = 'completed', completed_at = now(), updated_at = now() where id = $1`,
+          [job.order_id]);
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'delivery_completed', $2)`,
+          [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id })]);
+        await notifyPartner(client, job.partner_id, 'delivery_completed', { orderId: job.order_id });
+        await client.query(
+          'update courier_profiles set deliveries_count = deliveries_count + 1 where user_id = $1', [auth.userId]);
+      }
+      const view = await client.query(`${DELIVERY_JOB_SELECT} where dj.id = $1`, [jobId]);
+      return deliveryJobView(view.rows[0]);
+    });
+  }
+
+  app.post('/api/v1/courier/delivery-jobs/:id/pickup', async (request) =>
+    courierTransition(request, 'assigned', 'picked_up'));
+  app.post('/api/v1/courier/delivery-jobs/:id/deliver', async (request) =>
+    courierTransition(request, 'picked_up', 'delivered'));
+
+  app.get('/api/v1/operator/delivery-jobs', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `${DELIVERY_JOB_SELECT} where dj.status in ('pending', 'assigned', 'picked_up')
+       order by dj.created_at limit 100`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(deliveryJobView) };
+  });
+
+  app.get('/api/v1/operator/couriers', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `select u.id, u.display_name, cp.transport, cp.is_online, cp.deliveries_count,
+              (select count(*)::int from delivery_jobs dj where dj.courier_user_id = u.id
+                and dj.status in ('assigned', 'picked_up')) as active_jobs
+       from courier_profiles cp join users u on u.id = cp.user_id order by u.display_name`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows };
+  });
+
+  app.post('/api/v1/operator/delivery-jobs/:id/assign', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['courierUserId'],
+      properties: { courierUserId: { type: 'string', format: 'uuid' } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'operator');
+    const jobId = uuidParam(request);
+    const courier = await pool.query(
+      'select user_id from courier_profiles where user_id = $1', [request.body.courierUserId]);
+    if (!courier.rows[0]) fail(404, 'courier_not_found', 'Курьер не найден');
+    try {
+      return await withTransaction(pool, async (client) => {
+        const { rows } = await client.query(
+          'select * from delivery_jobs where id = $1 for update', [jobId]);
+        const job = rows[0];
+        if (!job) fail(404, 'delivery_not_found', 'Доставка не найдена');
+        if (job.status === 'picked_up' || job.status === 'delivered') {
+          fail(409, 'invalid_transition', 'Доставку уже нельзя переназначить');
+        }
+        await client.query(
+          `update delivery_jobs set status = 'assigned', courier_user_id = $2, assigned_at = now(), updated_at = now()
+           where id = $1`, [jobId, request.body.courierUserId]);
+        await client.query(
+          `insert into delivery_job_events (job_id, status, actor_user_id, note) values ($1, 'assigned', $2, 'operator')`,
+          [jobId, auth.userId]);
+        return deliveryJobView((await client.query(`${DELIVERY_JOB_SELECT} where dj.id = $1`, [jobId])).rows[0]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'delivery_jobs_courier_active_uq') {
+        fail(409, 'courier_busy', 'У курьера уже есть активная доставка');
+      }
+      throw error;
+    }
   });
 
 
