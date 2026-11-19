@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { demoRequest } from './demo';
 import './style.css';
 
@@ -91,6 +92,9 @@ const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-
 const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор', driver: 'водитель', courier: 'курьер' };
 const plural = (n: number, one: string, few: string, many: string) =>
   n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
+const haptic = (pattern: number | number[] = 6) => {
+  try { navigator.vibrate?.(pattern); } catch { /* вибрация необязательна */ }
+};
 const unitLabel = (unit: string, qty: number) => unit === 'порция'
   ? plural(qty, 'порция', 'порции', 'порций')
   : unit === 'стакан' ? plural(qty, 'стакан', 'стакана', 'стаканов') : unit;
@@ -149,7 +153,7 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
 type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
   | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
   | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
-  | 'send' | 'heart' | 'bolt' | 'dots' | 'car';
+  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download';
 
 const iconPaths: Record<IconName, ReactNode> = {
   home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
@@ -184,6 +188,7 @@ const iconPaths: Record<IconName, ReactNode> = {
   bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></>,
   dots: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>,
   car: <><path d="M5 15.5 6.6 10A3 3 0 0 1 9.5 8h5a3 3 0 0 1 2.9 2l1.6 5.5" /><path d="M4 15.5h16V19H4z" /><circle cx="7.5" cy="19" r="1.6" /><circle cx="16.5" cy="19" r="1.6" /></>,
+  download: <><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M5 20h14" /></>,
 };
 
 function Icon({ name, size = 20, stroke = 1.8, className = '' }: {
@@ -205,12 +210,49 @@ const tabs: { key: Tab; label: string }[] = [
   { key: 'home', label: 'Главная' }, { key: 'map', label: 'Карта' }, { key: 'taxi', label: 'Такси' },
   { key: 'orders', label: 'Заказы' }, { key: 'profile', label: 'Профиль' },
 ];
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
+
+function Sheet({ open, onClose, title, children }: {
+  open: boolean; onClose: () => void; title: string; children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return createPortal(<div className="sheet-layer">
+    <button type="button" className="sheet-backdrop" aria-label="Закрыть" onClick={onClose} />
+    <section className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <span className="sheet-grip" aria-hidden="true" />
+      <div className="sheet-head">
+        <h2>{title}</h2>
+        <button type="button" className="sheet-close" onClick={onClose} aria-label="Закрыть">
+          <Icon name="close" size={17} />
+        </button>
+      </div>
+      <div className="sheet-body">{children}</div>
+    </section>
+  </div>, document.body);
+}
 
 function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [me, setMe] = useState<Me | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const [toast, setToast] = useState<string | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(() =>
+    window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -218,6 +260,35 @@ function App() {
     window.addEventListener('offline', update);
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
   }, []);
+
+  useEffect(() => {
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    const onInstalled = () => { setInstalled(true); setInstallPrompt(null); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === 'accepted') setInstalled(true);
+    setInstallPrompt(null);
+    haptic(12);
+  }
+
+  function goTab(next: Tab) {
+    if (next === tab) return;
+    haptic();
+    setTab(next);
+  }
 
   const refreshMe = useCallback(() => {
     void api<Me>('/api/v1/me').then(setMe).catch(() => setMe(null));
@@ -237,10 +308,13 @@ function App() {
         <span className="brand-name">рядом<i>.</i></span>
       </a>
       <div className="appbar-right">
-        <span className="status-pill" title={DEMO ? 'Демо-режим' : 'Демо-стенд'}>
-          <span className="pulse" aria-hidden="true" />{DEMO ? 'demo' : 'local'}
+        <span className="status-pill" title={DEMO ? 'Демо-режим' : 'Рядом'}>
+          <span className="pulse" aria-hidden="true" />Демоград
         </span>
-        <button type="button" className="avatar" onClick={() => setTab('profile')} aria-label={me ? 'Профиль' : 'Войти'}>
+        {installPrompt && !installed && <button type="button" className="icon-btn install" onClick={() => void installApp()} aria-label="Установить приложение">
+          <Icon name="download" size={17} />
+        </button>}
+        <button type="button" className="avatar" onClick={() => goTab('profile')} aria-label={me ? 'Профиль' : 'Войти'}>
           {me ? me.user.displayName.trim().slice(0, 1).toUpperCase() : <Icon name="user" size={18} />}
         </button>
       </div>
@@ -249,16 +323,16 @@ function App() {
     {toast && <p className="toast" role="status">{toast}</p>}
 
     <div className="screen" key={tab}>
-      {tab === 'home' && <Catalogue me={me} onPick={() => setTab('map')} notify={setToast} />}
+      {tab === 'home' && <Catalogue me={me} onPick={() => goTab('map')} notify={setToast} />}
       {tab === 'map' && <Catalogue me={me} withMap notify={setToast} />}
-      {tab === 'taxi' && <TaxiScreen me={me} notify={setToast} onLogin={() => setTab('profile')} />}
+      {tab === 'taxi' && <TaxiScreen me={me} notify={setToast} onLogin={() => goTab('profile')} />}
       {tab === 'orders' && <Orders me={me} notify={setToast} />}
       {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
     </div>
 
     <nav className="dock" aria-label="Разделы">
       {tabs.map(item => <button key={item.key} type="button" className={tab === item.key ? 'active' : ''}
-        aria-current={tab === item.key ? 'page' : undefined} onClick={() => setTab(item.key)}>
+        aria-current={tab === item.key ? 'page' : undefined} onClick={() => goTab(item.key)}>
         <span className="dock-icon"><Icon name={tabIcon[item.key]} size={21} /></span>
         <span className="dock-label">{item.label}</span>
       </button>)}
@@ -765,6 +839,7 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
   const [items, setItems] = useState<PlaceCard[] | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<PlaceCard | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     void api<{ items: string[] }>('/api/v1/districts').then(d => setDistricts(d.items)).catch(() => setDistricts([]));
@@ -814,24 +889,25 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
     <div className="search-row">
       <label className="search-box">
         <Icon name="search" size={17} />
-        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти место" aria-label="Поиск" />
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск" aria-label="Поиск" />
         {query && <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Очистить"><Icon name="close" size={14} /></button>}
       </label>
-      <label className="district-pick">
-        <Icon name="pin" size={15} />
-        <select value={district} onChange={event => setDistrict(event.target.value)} aria-label="Район">
-          <option value="all">Район</option>
-          {districts.map(item => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <Icon name="chevronDown" size={13} />
-      </label>
+      <button type="button" className={`filter-button ${district !== 'all' ? 'active' : ''}`}
+        onClick={() => { haptic(); setFilterOpen(true); }} aria-label="Фильтр по району">
+        <Icon name="sliders" size={18} />
+        {district !== 'all' && <span className="filter-dot" aria-hidden="true" />}
+      </button>
     </div>
+
+    {district !== 'all' && <button type="button" className="active-filter" onClick={() => { haptic(); setDistrict('all'); }}>
+      <Icon name="pin" size={12} />{district}<Icon name="close" size={12} />
+    </button>}
 
     <div className="filters" aria-label="Категории">
       {(Object.keys(categories) as (keyof typeof categories)[]).map(key =>
         <button key={key} type="button" className={category === key ? 'active' : ''} aria-pressed={category === key}
-          onClick={() => setCategory(key as 'all' | Category)}>
-          <span className="filter-icon"><Icon name={categoryIcon[key]} size={18} /></span>
+          onClick={() => { haptic(); setCategory(key as 'all' | Category); }}>
+          <span className="filter-icon"><Icon name={categoryIcon[key]} size={16} /></span>
           <span>{categories[key]}</span>
         </button>)}
     </div>
@@ -879,6 +955,17 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
               </button>
             </li>)}</ul>}
     </section>
+
+    <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Район">
+      <div className="sheet-options">
+        {['all', ...districts].map(item => <button key={item} type="button"
+          className={district === item ? 'selected' : ''}
+          onClick={() => { haptic(); setDistrict(item); setFilterOpen(false); }}>
+          <span>{item === 'all' ? 'Весь город' : item}</span>
+          {district === item && <Icon name="check" size={17} />}
+        </button>)}
+      </div>
+    </Sheet>
   </>;
 }
 
@@ -895,6 +982,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup');
   const [deliveryDistrict, setDeliveryDistrict] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
@@ -925,6 +1013,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
 
   function changeQty(product: ShopProduct, delta: number) {
     if (!me) { notify('Войдите, чтобы заказать'); return; }
+    haptic(delta > 0 ? 5 : 3);
     setCart(current => {
       const next = Math.max(0, Math.min(product.stockQty, (current[product.id] ?? 0) + delta));
       return { ...current, [product.id]: next };
@@ -955,6 +1044,8 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
       notify(fulfillment === 'delivery'
         ? `Заказ оформлен, курьер привезёт · ${price(order.total)}`
         : `Заказ оформлен, код ${order.pickupCode}`);
+      setCheckoutOpen(false);
+      haptic([8, 40, 12]);
       setCart({});
       loadDetail();
       onBack();
@@ -1025,27 +1116,6 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           </div>
         </li>;
       })}</ul>
-      {cartCount > 0 && (zones.length > 0 ? <div className="shop-checkout">
-        <div className="segmented two">
-          <button type="button" className={fulfillment === 'pickup' ? 'active' : ''}
-            onClick={() => setFulfillment('pickup')}><Icon name="receipt" size={14} />Самовывоз</button>
-          <button type="button" className={fulfillment === 'delivery' ? 'active' : ''}
-            onClick={() => setFulfillment('delivery')}><Icon name="car" size={14} />Доставка</button>
-        </div>
-        {fulfillment === 'delivery' && <>
-          <div className="delivery-fields">
-            <label>Район<select value={activeDistrict} onChange={event => setDeliveryDistrict(event.target.value)}>
-              {zones.map(item => <option key={item.id} value={item.district}>{item.district}</option>)}
-            </select></label>
-            <label>Адрес<input value={deliveryAddress} maxLength={240} placeholder="улица, дом, квартира"
-              onChange={event => setDeliveryAddress(event.target.value)} /></label>
-          </div>
-          <p className="hint">{zone
-            ? `${price(zone.fee)} · ${zone.etaMin} мин · от ${price(zone.minOrder)}`
-            : 'Выберите район'}</p>
-        </>}
-        <p className="hint">Оплата наличными при получении</p>
-      </div> : (cartCount > 0 && <p className="hint">Доставка для этой точки пока недоступна</p>))}
     </>}
 
       <div className="panel-title"><h2>Услуги</h2><span className="count-chip">{detail.offers.length}</span></div>
@@ -1100,7 +1170,11 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     {cartCount > 0 ? <div className="book-bar shop-bar">
       <div><span className="meta">{cartCount} {plural(cartCount, 'товар', 'товара', 'товаров')} · {fulfillment === 'delivery' ? 'доставка' : 'самовывоз'}</span>
         <strong>{price({ cents: grandTotal, currency: 'RUB' })}</strong></div>
-      <button type="button" className="primary" disabled={busy} onClick={() => void checkout()}>
+      <button type="button" className="primary" disabled={busy} onClick={() => {
+        if (!me) { notify('Войдите, чтобы заказать'); return; }
+        haptic();
+        setCheckoutOpen(true);
+      }}>
         {busy ? 'Оформляем…' : 'Заказать'}<Icon name="chevron" size={16} />
       </button>
     </div> : slot && offer && <div className="book-bar">
@@ -1109,6 +1183,42 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         {busy ? 'Записываем…' : 'Записаться'}<Icon name="chevron" size={16} />
       </button>
     </div>}
+
+    <Sheet open={checkoutOpen} onClose={() => { if (!busy) setCheckoutOpen(false); }} title="Оформление">
+      <div className="checkout-sheet">
+        <div className="checkout-lines">
+          {cartItems.map(([id, qty]) => {
+            const product = detail?.products.find(item => item.id === id);
+            if (!product) return null;
+            return <div key={id}><span>{product.title} × {qty}</span><strong>{price({ cents: product.price.cents * qty, currency: 'RUB' })}</strong></div>;
+          })}
+        </div>
+        {zones.length > 0 && <div className="segmented two">
+          <button type="button" className={fulfillment === 'pickup' ? 'active' : ''}
+            onClick={() => { haptic(); setFulfillment('pickup'); }}><Icon name="receipt" size={14} />Самовывоз</button>
+          <button type="button" className={fulfillment === 'delivery' ? 'active' : ''}
+            onClick={() => { haptic(); setFulfillment('delivery'); }}><Icon name="car" size={14} />Доставка</button>
+        </div>}
+        {fulfillment === 'delivery' && zones.length > 0 ? <>
+          <div className="delivery-fields">
+            <label>Район<select value={activeDistrict} onChange={event => setDeliveryDistrict(event.target.value)}>
+              {zones.map(item => <option key={item.id} value={item.district}>{item.district}</option>)}
+            </select></label>
+            <label>Адрес<input value={deliveryAddress} maxLength={240} placeholder="улица, дом, квартира"
+              onChange={event => setDeliveryAddress(event.target.value)} /></label>
+          </div>
+          <p className="hint">{zone
+            ? `${price(zone.fee)} · ${zone.etaMin} мин · от ${price(zone.minOrder)}`
+            : 'Выберите район'}</p>
+        </> : <p className="hint">Заберите в заведении: {detail?.place.address}</p>}
+        <div className="checkout-total"><span>Итого</span><strong>{price({ cents: grandTotal, currency: 'RUB' })}</strong></div>
+        <p className="hint cash-line"><Icon name="receipt" size={13} />Оплата наличными при получении</p>
+        <button type="button" className="primary wide" disabled={busy || !cartItems.length}
+          onClick={() => void checkout()}>
+          {busy ? 'Оформляем…' : 'Подтвердить заказ'}<Icon name="chevron" size={16} />
+        </button>
+      </div>
+    </Sheet>
   </section>;
 }
 

@@ -1,10 +1,17 @@
 {
   "name": "Рядом: услуги города",
   "short_name": "Рядом",
+  "description": "Городские услуги, записи, заказы и такси рядом.",
   "lang": "ru",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "prefer_related_applications": false,
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "categories": ["lifestyle", "shopping", "travel"],
   "background_color": "#0b0c0f",
   "theme_color": "#0b0c0f",
   "icons": [
