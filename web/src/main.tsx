@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { demoRequest } from './demo';
 import './style.css';
@@ -40,6 +40,9 @@ const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB
 const price = (value: Money | null) => value ? money.format(value.cents / 100) : '—';
 const dayTime = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор' };
+const plural = (n: number, one: string, few: string, many: string) =>
+  n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
 const statusLabel: Record<Booking['status'], string> = {
   requested: 'Ждёт подтверждения', confirmed: 'Подтверждено', completed: 'Завершено',
   cancelled: 'Отменено', expired: 'Истекло',
@@ -65,6 +68,59 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
   if (!response.ok) throw Object.assign(new Error(data?.message ?? 'Ошибка сети'), { code: data?.error });
   return data as T;
 }
+
+type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
+  | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
+  | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
+  | 'send' | 'heart' | 'bolt' | 'dots';
+
+const iconPaths: Record<IconName, ReactNode> = {
+  home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
+  map: <><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2z" /><path d="M9 4v14M15 6v14" /></>,
+  receipt: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+  user: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c.7-3.4 3.4-5.2 7-5.2s6.3 1.8 7 5.2" /></>,
+  search: <><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></>,
+  pin: <><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></>,
+  star: <><path d="m12 3 2.7 5.6 6.1.8-4.5 4.3 1.1 6-5.4-3-5.4 3 1.1-6L3.2 9.4l6.1-.8z" /></>,
+  clock: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></>,
+  chevron: <><path d="m9 6 6 6-6 6" /></>,
+  chevronDown: <><path d="m6 9 6 6 6-6" /></>,
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></>,
+  sliders: <><path d="M4 7h9M18 7h2M4 17h4M13 17h7" /><circle cx="15.5" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>,
+  sparkles: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /><path d="m12 9 1.3 1.7L15 12l-1.7 1.3L12 15l-1.3-1.7L9 12l1.7-1.3z" /></>,
+  scissors: <><circle cx="6" cy="7" r="2.4" /><circle cx="6" cy="17" r="2.4" /><path d="M8 8.4 20 19M8 15.6 20 5" /></>,
+  spa: <><path d="M12 21c-4.2 0-7.5-3.3-7.5-7.5C8.7 13.5 12 16.8 12 21zM12 21c4.2 0 7.5-3.3 7.5-7.5C15.3 13.5 12 16.8 12 21z" /><path d="M12 14c-2.2-1.8-3-4.7-1.2-7.2 2 2.5 3 5.2 1.2 7.2z" /></>,
+  food: <><path d="M4 12h16a8 8 0 0 1-16 0z" /><path d="M8 8c0-1.8 1.6-2 1.6-3.6M12.5 8c0-1.8 1.6-2 1.6-3.6M17 8c0-1.8 1.6-2 1.6-3.6" /></>,
+  wrench: <><path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17l3 3 5.5-5.5a4 4 0 0 0 5.2-5.2l-2.3 2.3-3-3z" /></>,
+  grid: <><rect x="4" y="4" width="6" height="6" rx="2" /><rect x="14" y="4" width="6" height="6" rx="2" /><rect x="4" y="14" width="6" height="6" rx="2" /><rect x="14" y="14" width="6" height="6" rx="2" /></>,
+  arrowLeft: <><path d="M19 12H5M11 6l-6 6 6 6" /></>,
+  plus: <><path d="M12 5v14M5 12h14" /></>,
+  check: <><path d="m5 12.5 4.5 4.5L19 7" /></>,
+  edit: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z" /><path d="m14 7 3 3" /></>,
+  logout: <><path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9" /></>,
+  calendar: <><rect x="4" y="5" width="16" height="15" rx="3" /><path d="M8 3v4M16 3v4M4 10h16" /></>,
+  shield: <><path d="M12 3 5 6v6c0 4.4 3 7.5 7 9 4-1.5 7-4.6 7-9V6z" /><path d="m9 12 2 2 4-4" /></>,
+  close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+  phone: <><path d="M6 3h3l1.5 4-2 1.5a12 12 0 0 0 5 5L15 11.5 19 13v3a2 2 0 0 1-2.2 2A15 15 0 0 1 4 5.2 2 2 0 0 1 6 3z" /></>,
+  send: <><path d="m21 3-7 18-3.5-7.5L3 10z" /><path d="M21 3 10.5 13.5" /></>,
+  heart: <><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 4.6-7 9-7 9z" /></>,
+  bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></>,
+  dots: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>,
+};
+
+function Icon({ name, size = 20, stroke = 1.8, className = '' }: {
+  name: IconName; size?: number; stroke?: number; className?: string;
+}) {
+  return <svg className={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">{iconPaths[name]}</svg>;
+}
+
+const categoryIcon: Record<string, IconName> = {
+  all: 'sparkles', salon: 'scissors', services: 'wrench', health: 'spa', food: 'food',
+};
+
+const tabIcon: Record<Tab, IconName> = { home: 'home', map: 'map', orders: 'receipt', profile: 'user' };
 
 type Tab = 'home' | 'map' | 'orders' | 'profile';
 const tabs: { key: Tab; label: string }[] = [
@@ -97,21 +153,36 @@ function App() {
 
   return <main className="page">
     <div className="ambient" aria-hidden="true"><span /><span /><span /></div>
-    <header className="mast">
-      <a href="/" className="wordmark">рядом<span>.</span></a>
-      <span className="badge">{DEMO ? 'Демо · Pages' : 'Демо-стенд'}</span>
+    <header className="appbar">
+      <a href="/" className="brand" aria-label="Рядом — на главную">
+        <span className="brand-mark" aria-hidden="true"><span /></span>
+        <span className="brand-name">рядом<i>.</i></span>
+      </a>
+      <div className="appbar-right">
+        <span className="status-pill" title={DEMO ? 'Демо-режим' : 'Демо-стенд'}>
+          <span className="pulse" aria-hidden="true" />{DEMO ? 'demo' : 'local'}
+        </span>
+        <button type="button" className="avatar" onClick={() => setTab('profile')} aria-label={me ? 'Профиль' : 'Войти'}>
+          {me ? me.user.displayName.trim().slice(0, 1).toUpperCase() : <Icon name="user" size={18} />}
+        </button>
+      </div>
     </header>
-    {!online && <p className="notice" role="status">Нет сети. Записаться и подтвердить можно только онлайн.</p>}
+    {!online && <p className="notice" role="status">Нет сети</p>}
     {toast && <p className="toast" role="status">{toast}</p>}
 
-    {tab === 'home' && <Catalogue onPick={() => setTab('map')} notify={setToast} />}
-    {tab === 'map' && <Catalogue withMap notify={setToast} />}
-    {tab === 'orders' && <Orders me={me} notify={setToast} />}
-    {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
+    <div className="screen" key={tab}>
+      {tab === 'home' && <Catalogue me={me} onPick={() => setTab('map')} notify={setToast} />}
+      {tab === 'map' && <Catalogue me={me} withMap notify={setToast} />}
+      {tab === 'orders' && <Orders me={me} notify={setToast} />}
+      {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
+    </div>
 
-    <nav className="tabs" aria-label="Разделы">
-      {tabs.map(item => <button key={item.key} type="button" aria-current={tab === item.key ? 'page' : undefined}
-        onClick={() => setTab(item.key)}>{item.label}</button>)}
+    <nav className="dock" aria-label="Разделы">
+      {tabs.map(item => <button key={item.key} type="button" className={tab === item.key ? 'active' : ''}
+        aria-current={tab === item.key ? 'page' : undefined} onClick={() => setTab(item.key)}>
+        <span className="dock-icon"><Icon name={tabIcon[item.key]} size={21} /></span>
+        <span className="dock-label">{item.label}</span>
+      </button>)}
     </nav>
   </main>;
 }
@@ -223,7 +294,9 @@ function MapView({ items, onOpen, notify }: { items: PlaceCard[]; onOpen: (place
   </div>;
 }
 
-function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string) => void; withMap?: boolean; onPick?: () => void }) {
+function Catalogue({ me, notify, withMap = false, onPick }: {
+  me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void;
+}) {
   const [category, setCategory] = useState<'all' | Category>('all');
   const [district, setDistrict] = useState('all');
   const [query, setQuery] = useState('');
@@ -253,47 +326,98 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
 
   if (open) return <PlaceScreen place={open} onBack={() => setOpen(null)} notify={notify} />;
 
+  const firstName = me?.user.displayName.split(' ')[0];
+
   return <>
-    <section className="hero" aria-labelledby="title">
-      <p className="label">ГОРОДСКИЕ УСЛУГИ</p>
-      <h1 id="title">Нужное в городе.<br /><em>Ближе, чем кажется.</em></h1>
-      <p>Найдите мастера, посмотрите свободное время и запишитесь за пару шагов.</p>
-    </section>
+    {withMap ? <div className="map-head">
+      <span className="eyebrow"><Icon name="pin" size={14} /> Демоград</span>
+      <span className="map-count">{items ? `${items.length} мест` : '…'}</span>
+    </div> : <section className="spotlight">
+      <div className="spotlight-copy">
+        <span className="eyebrow"><span className="pulse" aria-hidden="true" />{firstName ? `${firstName}, вы рядом` : 'Демоград · онлайн'}</span>
+        <h1>Что делаем <em>сегодня?</em></h1>
+        <div className="spotlight-tags">
+          <span><Icon name="bolt" size={13} /> {items ? `${items.length} рядом` : 'ищем…'}</span>
+          <span><Icon name="clock" size={13} /> свободно сейчас</span>
+        </div>
+      </div>
+      <div className="spotlight-art" aria-hidden="true">
+        <span className="orb" />
+        <Icon name="sparkles" size={26} />
+        {onPick && <button type="button" className="map-chip" onClick={onPick} aria-label="Открыть карту">
+          <Icon name="map" size={17} />
+        </button>}
+      </div>
+    </section>}
+
+    <div className="search-row">
+      <label className="search-box">
+        <Icon name="search" size={17} />
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти место" aria-label="Поиск" />
+        {query && <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Очистить"><Icon name="close" size={14} /></button>}
+      </label>
+      <label className="district-pick">
+        <Icon name="pin" size={15} />
+        <select value={district} onChange={event => setDistrict(event.target.value)} aria-label="Район">
+          <option value="all">Район</option>
+          {districts.map(item => <option key={item} value={item}>{item}</option>)}
+        </select>
+        <Icon name="chevronDown" size={13} />
+      </label>
+    </div>
 
     <div className="filters" aria-label="Категории">
       {(Object.keys(categories) as (keyof typeof categories)[]).map(key =>
-        <button key={key} type="button" aria-pressed={category === key} onClick={() => setCategory(key as 'all' | Category)}>{categories[key]}</button>)}
-    </div>
-
-    <div className="search">
-      <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск по названию" aria-label="Поиск" />
-      <select value={district} onChange={event => setDistrict(event.target.value)} aria-label="Район">
-        <option value="all">Все районы</option>
-        {districts.map(item => <option key={item} value={item}>{item}</option>)}
-      </select>
+        <button key={key} type="button" className={category === key ? 'active' : ''} aria-pressed={category === key}
+          onClick={() => setCategory(key as 'all' | Category)}>
+          <span className="filter-icon"><Icon name={categoryIcon[key]} size={18} /></span>
+          <span>{categories[key]}</span>
+        </button>)}
     </div>
 
     {withMap && <MapView items={items ?? []} onOpen={setOpen} notify={notify} />}
 
     <section aria-labelledby="catalogue">
-      <div className="section-title"><h2 id="catalogue">{withMap ? 'Рядом с вами' : 'Выбрать услугу'}</h2>
-        <span>{items ? `${items.length} мест` : '—'}</span></div>
-      {error ? <div className="notice" role="status">Каталог недоступен. <button type="button" onClick={() => setCategory(c => c)}>Повторить</button></div>
-        : !items ? <p className="notice" role="status">Загружаем каталог…</p>
-          : !items.length ? <p className="notice" role="status">Ничего не нашлось. Измените фильтры.</p>
-            : <ul className="places">{items.map(place => <li key={place.id}>
+      <div className="section-title">
+        <h2 id="catalogue">{withMap ? 'На карте' : 'Рядом с вами'}</h2>
+        <span className="count-chip">{items ? items.length : '—'}</span>
+      </div>
+
+      {error ? <div className="notice" role="status">
+        <span>Каталог недоступен</span>
+        <button type="button" className="ghost-mini" onClick={() => setCategory(c => c)}>Повторить</button>
+      </div>
+        : !items ? <ul className="places skeleton-list" aria-hidden="true">
+          {[0, 1, 2].map(index => <li key={index}><div className="skeleton-card" style={{ animationDelay: `${index * 90}ms` }} /></li>)}
+        </ul>
+          : !items.length ? <div className="empty-state">
+            <Icon name="search" size={26} />
+            <p>Ничего не нашлось</p>
+            <button type="button" className="ghost-mini" onClick={() => { setQuery(''); setDistrict('all'); setCategory('all'); }}>Сбросить</button>
+          </div>
+            : <ul className="places">{items.map((place, index) => <li key={place.id} style={{ animationDelay: `${index * 45}ms` }}>
               <button type="button" className="place-button" onClick={() => setOpen(place)}>
-                <span className="stamp" aria-hidden="true">{place.name.slice(0, 1)}</span>
-                <span className="details">
-                  <span className="meta">{place.district} · {place.rating ? `★ ${place.rating.toFixed(1)} (${place.ratingCount})` : 'нет отзывов'}</span>
-                  <strong className="title">{place.name}</strong>
-                  <span className="sub">{place.about}</span>
+                <span className={`cat-avatar ${place.category}`} aria-hidden="true">
+                  <Icon name={categoryIcon[place.category]} size={21} />
                 </span>
-                <span className="price">от {price(place.priceFrom)}</span>
+                <span className="details">
+                  <span className="title-row">
+                    <strong className="title">{place.name}</strong>
+                    {place.rating !== null && <span className="rating"><Icon name="star" size={11} stroke={0} />{place.rating.toFixed(1)}</span>}
+                  </span>
+                  <span className="sub">
+                    <span>{place.district}</span>
+                    {place.distanceKm !== null && <span>{place.distanceKm.toFixed(1)} км</span>}
+                    <span>{place.offerCount} {plural(place.offerCount, 'услуга', 'услуги', 'услуг')}</span>
+                  </span>
+                </span>
+                <span className="price-block">
+                  <span className="price">{price(place.priceFrom)}</span>
+                  <Icon name="chevron" size={16} />
+                </span>
               </button>
             </li>)}</ul>}
     </section>
-    {onPick && <p className="hint"><button type="button" onClick={onPick}>Открыть карту →</button></p>}
   </>;
 }
 
@@ -304,6 +428,7 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
   const [note, setNote] = useState('');
+  const [showAllSlots, setShowAllSlots] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -314,6 +439,7 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
     if (!offer) return;
     setSlots(null);
     setSlot(null);
+    setShowAllSlots(false);
     void api<{ slots: Slot[] }>(`/api/v1/offers/${offer.id}/slots`)
       .then(data => setSlots(data.slots))
       .catch(() => setSlots([]));
@@ -327,60 +453,92 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
         method: 'POST',
         body: { slotId: slot.id, note, idempotencyKey: `ui-${slot.id}-${Date.now()}` },
       });
-      notify('Запись создана. Партнёр подтвердит её в кабинете.');
+      notify('Записали. Ждём подтверждения');
       onBack();
     } catch (requestError) {
       const code = (requestError as { code?: string }).code;
-      notify(code === 'slot_taken' ? 'Это время только что заняли. Выберите другое.' : 'Не удалось записаться');
+      notify(code === 'slot_taken' ? 'Время только что заняли' : 'Не удалось записаться');
     } finally {
       setBusy(false);
     }
   }
 
   return <section className="detail">
-    <button type="button" className="back" onClick={onBack}>← Назад</button>
-    <h1>{place.name}</h1>
-    <p className="meta">{place.district} · {place.address}</p>
-    <p>{place.about}</p>
-    {place.rating && <p className="rating">★ {place.rating.toFixed(1)} · {place.ratingCount} отзывов</p>}
+    <div className="detail-top">
+      <button type="button" className="round-btn" onClick={onBack} aria-label="Назад"><Icon name="arrowLeft" size={19} /></button>
+      <div className="detail-heading">
+        <h1>{place.name}</h1>
+        <span className="meta"><Icon name="pin" size={12} />{place.district} · {place.address}</span>
+      </div>
+      {place.rating !== null && <span className="score"><Icon name="star" size={12} stroke={0} />{place.rating.toFixed(1)}</span>}
+    </div>
 
-    {error && <p className="notice">{error}</p>}
-    {!detail && !error && <p className="notice">Открываем услуги…</p>}
-    {detail && <ul className="offers">{detail.offers.map(item =>
-      <li key={item.id} className={offer?.id === item.id ? 'selected' : ''}>
-        <button type="button" onClick={() => setOffer(item)}>
-          <strong>{item.title}</strong>
-          <span>{item.durationMin} мин · {price(item.price)}</span>
-        </button>
-      </li>)}</ul>}
+    <div className="chips-row">
+      <span className="chip"><Icon name={categoryIcon[place.category]} size={14} />{categories[place.category]}</span>
+      {place.rating !== null && <span className="chip"><Icon name="heart" size={14} />{place.ratingCount} {plural(place.ratingCount, 'отзыв', 'отзыва', 'отзывов')}</span>}
+      {detail?.place.phone && <a className="chip" href={`tel:${detail.place.phone}`}><Icon name="phone" size={14} />Позвонить</a>}
+    </div>
 
-    {offer && <div className="booking">
-      <h2>Свободное время</h2>
-      {!slots ? <p className="notice">Загружаем окна…</p>
-        : !slots.length ? <p className="notice">Свободных окон нет. Выберите другую услугу.</p>
-          : <div className="slots">{slots.slice(0, 24).map(item =>
-            <button key={item.id} type="button" aria-pressed={slot?.id === item.id} onClick={() => setSlot(item)}>
-              <span>{dayTime.format(new Date(item.startsAt)).split(', ')[0]}</span>
-              <strong>{timeOnly.format(new Date(item.startsAt))}</strong>
-            </button>)}</div>}
-      {slot && <div className="confirm">
-        <p>Выберите время: <strong>{dayTime.format(new Date(slot.startsAt))}</strong></p>
-        <label>Комментарий мастеру
-          <input value={note} onChange={event => setNote(event.target.value)} maxLength={200} placeholder="Необязательно" />
-        </label>
-        <button type="button" className="primary" disabled={busy} onClick={() => void book()}>
-          {busy ? 'Записываем…' : `Записаться · ${price(offer.price)}`}
-        </button>
-        <p className="hint">Оплата на месте. Отменить можно в разделе «Заказы».</p>
+    <p className="about">{place.about}</p>
+
+    {error && <div className="notice"><span>{error}</span></div>}
+    {!detail && !error && <div className="skeleton-card tall" />}
+
+    {detail && <>
+      <div className="panel-title"><h2>Услуги</h2><span className="count-chip">{detail.offers.length}</span></div>
+      <ul className="offers compact">{detail.offers.map(item =>
+        <li key={item.id} className={offer?.id === item.id ? 'selected' : ''}>
+          <button type="button" onClick={() => setOffer(item)}>
+            <span className="offer-check"><Icon name={offer?.id === item.id ? 'check' : 'plus'} size={14} /></span>
+            <span className="offer-info">
+              <strong>{item.title}</strong>
+              <span className="meta"><Icon name="clock" size={12} />{item.durationMin} мин</span>
+            </span>
+            <span className="offer-price">{price(item.price)}</span>
+          </button>
+        </li>)}
+      </ul>
+
+      {offer && <div className="booking-sheet">
+        <span className="sheet-grip" aria-hidden="true" />
+        <div className="panel-title"><h2>Свободное время</h2><span className="count-chip">{slots ? slots.length : '…'}</span></div>
+        {!slots ? <div className="slots-skeleton">{Array.from({ length: 8 }).map((_, index) => <span key={index} />)}</div>
+          : !slots.length ? <div className="empty-state small"><Icon name="calendar" size={22} /><p>Свободных окон нет</p></div>
+            : <div className="slots">{slots.slice(0, showAllSlots ? 24 : 8).map(item =>
+              <button key={item.id} type="button" aria-pressed={slot?.id === item.id} onClick={() => setSlot(item)}>
+                <span>{dayTime.format(new Date(item.startsAt)).split(', ')[0]}</span>
+                <strong>{timeOnly.format(new Date(item.startsAt))}</strong>
+              </button>)}</div>}
+        {slots && slots.length > 8 && <button type="button" className="ghost-mini wide more-slots" onClick={() => setShowAllSlots(value => !value)}>
+          {showAllSlots ? 'Свернуть' : `Ещё ${Math.min(slots.length, 24) - 8}`}
+        </button>}
+
+        {slot && <>
+          <label className="note-field"><Icon name="edit" size={14} />
+            <input value={note} onChange={event => setNote(event.target.value)} maxLength={200} placeholder="Комментарий мастеру" />
+          </label>
+          <p className="hint">Оплата на месте · отмена в «Заказах»</p>
+        </>}
       </div>}
-    </div>}
+    </>}
 
-    {detail && detail.reviews.length > 0 && <div className="reviews">
-      <h2>Отзывы</h2>
-      <ul>{detail.reviews.map(review => <li key={review.id}>
-        <strong>★ {review.rating}</strong> <span className="meta">{review.author}, {new Date(review.createdAt).toLocaleDateString('ru-RU')}</span>
-        <p>{review.body}</p>
+    {detail && detail.reviews.length > 0 && <>
+      <div className="panel-title"><h2>Отзывы</h2><span className="count-chip">{detail.reviews.length}</span></div>
+      <ul className="reviews compact">{detail.reviews.slice(0, 4).map(review => <li key={review.id}>
+        <div className="review-head">
+          <span className="mini-avatar">{review.author.slice(0, 1)}</span>
+          <strong>{review.author}</strong>
+          <span className="rating"><Icon name="star" size={11} stroke={0} />{review.rating}</span>
+        </div>
+        {review.body && <p>{review.body}</p>}
       </li>)}</ul>
+    </>}
+
+    {slot && offer && <div className="book-bar">
+      <div><span className="meta">{dayTime.format(new Date(slot.startsAt))}</span><strong>{price(offer.price)}</strong></div>
+      <button type="button" className="primary" disabled={busy} onClick={() => void book()}>
+        {busy ? 'Записываем…' : 'Записаться'}<Icon name="chevron" size={16} />
+      </button>
     </div>}
   </section>;
 }
@@ -394,32 +552,39 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
   }, [me]);
   useEffect(load, [load]);
 
-  if (!me) return <p className="notice">Войдите в профиле, чтобы видеть записи.</p>;
+  if (!me) return <div className="empty-state"><Icon name="user" size={30} /><p>Войдите, чтобы видеть записи</p></div>;
 
   async function cancel(id: string) {
     try {
       await api(`/api/v1/bookings/${id}/cancel`, { method: 'POST' });
-      notify('Запись отменена, время снова свободно');
+      notify('Запись отменена');
       load();
-    } catch { notify('Отменить не удалось'); }
+    } catch { notify('Не удалось отменить'); }
   }
 
   return <section>
-    <div className="section-title"><h2>Мои записи</h2><span>{items ? items.length : '—'}</span></div>
-    {!items && <p className="notice">Загружаем…</p>}
-    {items && !items.length && <p className="notice">Пока нет записей. Выберите услугу на главной.</p>}
+    <div className="section-title"><h2>Заказы</h2><span className="count-chip">{items ? items.length : '—'}</span></div>
+    {!items && <div className="skeleton-card tall" />}
+    {items && !items.length && <div className="empty-state">
+      <Icon name="receipt" size={30} /><p>Пока пусто</p>
+      <span className="meta">Выберите услугу на главной</span>
+    </div>}
     <ul className="orders">{items?.map(item => <li key={item.id}>
       <div className="order-head">
         <strong>{item.place.name}</strong>
-        <span className={`status ${item.status}`}>{statusLabel[item.status]}</span>
+        <span className={`status ${item.status}`}><span className="dot" />{statusLabel[item.status]}</span>
       </div>
-      <p className="meta">{item.offer.title} · {dayTime.format(new Date(item.slot.startsAt))} · {price(item.price)}</p>
-      {(item.status === 'requested' || item.status === 'confirmed') &&
-        <button type="button" onClick={() => void cancel(item.id)}>Отменить</button>}
-      {item.status === 'completed' && !item.review && (reviewing === item.id
-        ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
-        : <button type="button" onClick={() => setReviewing(item.id)}>Оставить отзыв</button>)}
-      {item.review && <p className="meta">{item.review.status === 'pending' ? 'Отзыв на модерации' : item.review.status === 'hidden' ? 'Отзыв скрыт модератором' : `Ваша оценка: ★ ${item.review.rating}`}</p>}
+      <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))}</p>
+      <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
+      <div className="order-actions">
+        {(item.status === 'requested' || item.status === 'confirmed') &&
+          <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
+        {item.status === 'completed' && !item.review && (reviewing === item.id
+          ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
+          : <button type="button" className="ghost-mini accent" onClick={() => setReviewing(item.id)}><Icon name="star" size={14} />Оценить</button>)}
+        {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
+          {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
+      </div>
     </li>)}</ul>
   </section>;
 }
@@ -427,18 +592,17 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
 function ReviewForm({ bookingId, onDone, notify }: { bookingId: string; onDone: () => void; notify: (text: string) => void }) {
   const [rating, setRating] = useState(5);
   const [body, setBody] = useState('');
-  return <div className="confirm">
-    <label>Оценка
-      <select value={rating} onChange={event => setRating(Number(event.target.value))}>
-        {[5, 4, 3, 2, 1].map(value => <option key={value} value={value}>{value}</option>)}
-      </select>
-    </label>
-    <label>Комментарий
-      <input value={body} onChange={event => setBody(event.target.value)} maxLength={500} />
-    </label>
-    <button type="button" className="primary" onClick={() => {
+  return <div className="review-form">
+    <div className="star-picker" role="radiogroup" aria-label="Оценка">
+      {[1, 2, 3, 4, 5].map(value => <button key={value} type="button" role="radio" aria-checked={rating === value}
+        aria-label={`${value} из 5`} className={value <= rating ? 'lit' : ''} onClick={() => setRating(value)}>
+        <Icon name="star" size={19} stroke={0} />
+      </button>)}
+    </div>
+    <input value={body} onChange={event => setBody(event.target.value)} maxLength={500} placeholder="Пара слов (необязательно)" />
+    <button type="button" className="primary mini" onClick={() => {
       void api('/api/v1/reviews', { method: 'POST', body: { bookingId, rating, body } })
-        .then(() => { notify('Отзыв отправлен на модерацию'); onDone(); })
+        .then(() => { notify('Отзыв на модерации'); onDone(); })
         .catch(() => notify('Отзыв уже оставлен'));
     }}>Отправить</button>
   </div>;
@@ -460,49 +624,62 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
   useEffect(loadPartner, [loadPartner]);
 
   if (!me) return <section className="login">
+    <div className="login-orb" aria-hidden="true"><span /></div>
     <h1>Вход</h1>
-    <p className="meta">Демо-стенд: код показывается на экране. На телефоне СМС не подключены.</p>
+    <p className="meta">Код покажем здесь же</p>
     <label>Телефон
-      <input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="+79000000001" />
+      <span className="input-wrap"><Icon name="phone" size={16} />
+        <input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="+79000000001" />
+      </span>
     </label>
-    <button type="button" onClick={() => {
+    <button type="button" className="ghost-mini wide" onClick={() => {
       void api<{ demoCode?: string }>('/api/v1/auth/code', { method: 'POST', body: { phone } })
         .then(data => { setDemoCode(data.demoCode ?? null); notify('Код готов'); })
         .catch(() => notify('Не удалось получить код'));
-    }}>Получить код</button>
-    {demoCode && <p className="code">Код: <strong>{demoCode}</strong></p>}
+    }}>Получить код<Icon name="send" size={15} /></button>
+    {demoCode && <div className="code"><span>Код</span><strong>{demoCode}</strong></div>}
     <label>Код из шести цифр
-      <input value={code} onChange={event => setCode(event.target.value)} inputMode="numeric" maxLength={6} />
+      <span className="input-wrap"><Icon name="shield" size={16} />
+        <input value={code} onChange={event => setCode(event.target.value)} inputMode="numeric" maxLength={6} />
+      </span>
     </label>
     <label>Как к вам обращаться
-      <input value={name} onChange={event => setName(event.target.value)} maxLength={60} />
+      <span className="input-wrap"><Icon name="user" size={16} />
+        <input value={name} onChange={event => setName(event.target.value)} maxLength={60} />
+      </span>
     </label>
     <button type="button" className="primary" onClick={() => {
       void api('/api/v1/auth/session', { method: 'POST', body: { phone, code, displayName: name } })
         .then(() => { refreshMe(); notify('Вы вошли'); })
         .catch(() => notify('Проверьте код'));
-    }}>Войти</button>
+    }}>Войти<Icon name="chevron" size={16} /></button>
   </section>;
 
   return <section className="profile">
-    <div className="section-title"><h2>{me.user.displayName}</h2><span>{me.user.phone}</span></div>
-    <p className="meta">Роли: {me.roles.map(role => role.role).join(', ')}</p>
-    <button type="button" onClick={() => {
-      void api('/api/v1/auth/logout', { method: 'POST' }).then(() => { refreshMe(); notify('Вы вышли'); });
-    }}>Выйти</button>
+    <div className="profile-card">
+      <span className="avatar big">{me.user.displayName.slice(0, 1).toUpperCase()}</span>
+      <div className="profile-copy"><h2>{me.user.displayName}</h2><span className="meta">{me.user.phone}</span></div>
+      <button type="button" className="round-btn" aria-label="Выйти" onClick={() => {
+        void api('/api/v1/auth/logout', { method: 'POST' }).then(() => { refreshMe(); notify('Вы вышли'); });
+      }}><Icon name="logout" size={18} /></button>
+    </div>
+    <div className="chips-row">{me.roles.map(role => <span className="chip" key={role.role}>
+      <Icon name={role.role === 'operator' ? 'shield' : role.role === 'partner' ? 'edit' : 'user'} size={13} />{roleLabel[role.role] ?? role.role}
+    </span>)}</div>
 
     {isPartner && <div className="partner">
-      <h2>Кабинет партнёра</h2>
-      {!partner ? <p className="notice">Загружаем заявки…</p>
-        : !partner.length ? <p className="notice">Заявок нет.</p>
+      <div className="panel-title"><h2>Заявки</h2><span className="count-chip">{partner ? partner.length : '—'}</span></div>
+      {!partner ? <div className="skeleton-card" />
+        : !partner.length ? <p className="notice">Заявок нет</p>
           : <ul className="orders">{partner.map(item => <li key={item.id}>
             <div className="order-head"><strong>{item.place.name}</strong>
-              <span className={`status ${item.status}`}>{statusLabel[item.status]}</span></div>
-            <p className="meta">{item.offer.title} · {dayTime.format(new Date(item.slot.startsAt))} · {item.note || 'без комментария'}</p>
-            {item.status === 'requested' && <div className="row">
-              <button type="button" className="primary" onClick={() => void api(`/api/v1/bookings/${item.id}/confirm`, { method: 'POST' }).then(() => { notify('Подтверждено'); loadPartner(); })}>Подтвердить</button>
-            </div>}
-            {item.status === 'confirmed' && <button type="button" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта'); loadPartner(); })}>Завершить</button>}
+              <span className={`status ${item.status}`}><span className="dot" />{statusLabel[item.status]}</span></div>
+            <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))} · {item.offer.title}</p>
+            {item.note && <p className="order-offer">{item.note}</p>}
+            <div className="order-actions">
+              {item.status === 'requested' && <button type="button" className="primary mini" onClick={() => void api(`/api/v1/bookings/${item.id}/confirm`, { method: 'POST' }).then(() => { notify('Подтверждено'); loadPartner(); })}>Подтвердить</button>}
+              {item.status === 'confirmed' && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта'); loadPartner(); })}>Завершить</button>}
+            </div>
           </li>)}</ul>}
     </div>}
 
