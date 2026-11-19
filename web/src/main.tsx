@@ -153,7 +153,7 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
 type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
   | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
   | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
-  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download';
+  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download' | 'refresh';
 
 const iconPaths: Record<IconName, ReactNode> = {
   home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
@@ -189,6 +189,7 @@ const iconPaths: Record<IconName, ReactNode> = {
   dots: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>,
   car: <><path d="M5 15.5 6.6 10A3 3 0 0 1 9.5 8h5a3 3 0 0 1 2.9 2l1.6 5.5" /><path d="M4 15.5h16V19H4z" /><circle cx="7.5" cy="19" r="1.6" /><circle cx="16.5" cy="19" r="1.6" /></>,
   download: <><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M5 20h14" /></>,
+  refresh: <><path d="M20 11a8 8 0 1 0-2.4 5.7" /><path d="M20 4v7h-7" /></>,
 };
 
 function Icon({ name, size = 20, stroke = 1.8, className = '' }: {
@@ -215,9 +216,39 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 };
 
+function useModalHistory(open: boolean, onClose: () => void) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const pushed = useRef(false);
+  useEffect(() => {
+    if (!open) return;
+    const marker = `rjadom-${Math.random().toString(36).slice(2)}`;
+    const base = history.state && typeof history.state === 'object' ? history.state : {};
+    history.pushState({ ...base, rjadomModal: marker }, '');
+    pushed.current = true;
+    const onPop = () => {
+      if (!pushed.current) return;
+      pushed.current = false;
+      closeRef.current();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (pushed.current) {
+        pushed.current = false;
+        if (history.state?.rjadomModal === marker) history.back();
+      }
+    };
+  }, [open]);
+}
+
 function Sheet({ open, onClose, title, children }: {
   open: boolean; onClose: () => void; title: string; children: ReactNode;
 }) {
+  const [drag, setDrag] = useState(0);
+  const dragStart = useRef<number | null>(null);
+  const lastDrag = useRef(0);
+  useModalHistory(open, onClose);
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -229,30 +260,113 @@ function Sheet({ open, onClose, title, children }: {
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose]);
+  useEffect(() => { if (!open) { setDrag(0); lastDrag.current = 0; dragStart.current = null; } }, [open]);
   if (!open) return null;
+  const onDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    dragStart.current = event.clientY;
+    lastDrag.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onDragMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStart.current === null) return;
+    const next = Math.max(0, event.clientY - dragStart.current);
+    lastDrag.current = next;
+    setDrag(next);
+  };
+  const onDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStart.current === null) return;
+    dragStart.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (lastDrag.current > 84) onClose();
+    else setDrag(0);
+  };
   return createPortal(<div className="sheet-layer">
     <button type="button" className="sheet-backdrop" aria-label="Закрыть" onClick={onClose} />
-    <section className="sheet" role="dialog" aria-modal="true" aria-label={title}>
-      <span className="sheet-grip" aria-hidden="true" />
-      <div className="sheet-head">
-        <h2>{title}</h2>
-        <button type="button" className="sheet-close" onClick={onClose} aria-label="Закрыть">
-          <Icon name="close" size={17} />
-        </button>
+    <section className={`sheet${drag ? ' dragging' : ''}`} role="dialog" aria-modal="true" aria-label={title}
+      style={drag ? { transform: `translateY(${drag}px)` } : undefined}>
+      <div className="sheet-drag" onPointerDown={onDragStart} onPointerMove={onDragMove}
+        onPointerUp={onDragEnd} onPointerCancel={onDragEnd}>
+        <span className="sheet-grip" aria-hidden="true" />
+        <div className="sheet-head">
+          <h2>{title}</h2>
+          <button type="button" className="sheet-close" onClick={onClose} aria-label="Закрыть">
+            <Icon name="close" size={17} />
+          </button>
+        </div>
       </div>
       <div className="sheet-body">{children}</div>
     </section>
   </div>, document.body);
 }
 
+function PwaUpdate() {
+  const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
+  const reloading = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+    let registration: ServiceWorkerRegistration | undefined;
+    let installing: ServiceWorker | null = null;
+    let poll = 0;
+    const show = (worker: ServiceWorker | null) => {
+      if (!worker || !navigator.serviceWorker.controller || reloading.current) return;
+      setWaiting(worker);
+    };
+    const watch = (worker: ServiceWorker | null) => {
+      if (!worker) return;
+      installing = worker;
+      const onState = () => { if (worker.state === 'installed') show(worker); };
+      worker.addEventListener('statechange', onState);
+    };
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then(reg => {
+      registration = reg;
+      show(reg.waiting);
+      watch(reg.installing);
+      reg.addEventListener('updatefound', () => watch(reg.installing));
+      poll = window.setInterval(() => show(reg.waiting), 2000);
+    }).catch(error => console.error('PWA registration failed', error));
+    const onController = () => { if (reloading.current) window.location.reload(); };
+    navigator.serviceWorker.addEventListener('controllerchange', onController);
+    return () => {
+      clearInterval(poll);
+      navigator.serviceWorker.removeEventListener('controllerchange', onController);
+      if (registration) registration.onupdatefound = null;
+      if (installing) installing.onstatechange = null;
+    };
+  }, []);
+  if (!waiting) return null;
+  const apply = () => {
+    reloading.current = true;
+    setWaiting(null);
+    haptic(12);
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+  };
+  return <div className="update-bar" role="status">
+    <span><strong>Есть обновление</strong><small>Приложение обновится за секунду</small></span>
+    <button type="button" onClick={apply}>Обновить</button>
+  </div>;
+}
+
+function tabFromLaunch(): Tab {
+  const value = new URLSearchParams(location.search).get('tab');
+  return tabs.some(item => item.key === value) ? value as Tab : 'home';
+}
+
 function App() {
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] = useState<Tab>(tabFromLaunch);
   const [me, setMe] = useState<Me | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const [toast, setToast] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() =>
     window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('tab')) return;
+    const url = new URL(location.href);
+    url.searchParams.delete('tab');
+    history.replaceState(history.state, '', url);
+  }, []);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -295,6 +409,25 @@ function App() {
   }, []);
   useEffect(refreshMe, [refreshMe]);
   useEffect(() => {
+    const badge = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (!badge.setAppBadge) return;
+    if (!me) { void badge.clearAppBadge?.(); return; }
+    let alive = true;
+    const sync = () => {
+      void api<{ items: { read_at: string | null }[] }>('/api/v1/me/notifications').then(data => {
+        if (!alive) return;
+        const count = data.items.filter(item => !item.read_at).length;
+        return count ? badge.setAppBadge?.(count) : badge.clearAppBadge?.();
+      }).catch(() => undefined);
+    };
+    void sync();
+    const timer = setInterval(sync, 60000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [me]);
+  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(timer);
@@ -321,6 +454,7 @@ function App() {
     </header>
     {!online && <p className="notice" role="status">Нет сети</p>}
     {toast && <p className="toast" role="status">{toast}</p>}
+    <PwaUpdate />
 
     <div className="screen" key={tab}>
       {tab === 'home' && <Catalogue me={me} onPick={() => goTab('map')} notify={setToast} />}
@@ -840,6 +974,11 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<PlaceCard | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullRef = useRef(0);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     void api<{ items: string[] }>('/api/v1/districts').then(d => setDistricts(d.items)).catch(() => setDistricts([]));
@@ -854,17 +993,82 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
     setError(false);
     const timer = setTimeout(() => {
       void api<{ items: PlaceCard[] }>(`/api/v1/places?${params}`, { signal: controller.signal })
-        .then(data => setItems(data.items))
-        .catch(() => { if (!controller.signal.aborted) { setItems(null); setError(true); } });
+        .then(data => {
+          if (controller.signal.aborted) return;
+          setItems(data.items);
+          setRefreshing(false);
+          setPull(0);
+          pullRef.current = 0;
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setItems(null);
+          setError(true);
+          setRefreshing(false);
+          setPull(0);
+          pullRef.current = 0;
+        });
     }, 220);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [category, district, query]);
+  }, [category, district, query, refreshKey]);
 
+  useEffect(() => {
+    if (open || filterOpen || refreshing) return;
+    const onStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || window.scrollY > 0) return;
+      touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    };
+    const onMove = (event: TouchEvent) => {
+      const start = touchStart.current;
+      if (!start) return;
+      if (window.scrollY > 0) { touchStart.current = null; pullRef.current = 0; setPull(0); return; }
+      const dy = event.touches[0].clientY - start.y;
+      const dx = event.touches[0].clientX - start.x;
+      if (dy <= 0 || Math.abs(dx) > Math.abs(dy)) {
+        if (dy < -4) { touchStart.current = null; pullRef.current = 0; setPull(0); }
+        return;
+      }
+      if (dy > 6) event.preventDefault();
+      const next = Math.min(108, Math.max(0, (dy - 6) * 0.55));
+      pullRef.current = next;
+      setPull(next);
+    };
+    const onEnd = () => {
+      if (!touchStart.current) return;
+      touchStart.current = null;
+      if (pullRef.current > 56) {
+        setRefreshing(true);
+        setPull(52);
+        pullRef.current = 52;
+        setRefreshKey(value => value + 1);
+      } else {
+        setPull(0);
+        pullRef.current = 0;
+      }
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+    window.addEventListener('touchcancel', onEnd);
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, [open, filterOpen, refreshing]);
+
+  useModalHistory(Boolean(open), () => setOpen(null));
   if (open) return <PlaceScreen place={open} me={me} onBack={() => setOpen(null)} notify={notify} />;
 
   const firstName = me?.user.displayName.split(' ')[0];
 
   return <>
+    <div className={`pull-indicator${refreshing || pull > 4 ? ' visible' : ''}${refreshing ? ' refreshing' : ''}`}
+      style={{ transform: `translate(-50%, ${(refreshing ? 52 : pull) - 46}px)` }} role="status">
+      <Icon name="refresh" size={15} />
+      <span>{refreshing ? 'Обновляем…' : pull > 56 ? 'Отпустите' : 'Потяните вниз'}</span>
+    </div>
     {withMap ? <div className="map-head">
       <span className="eyebrow"><Icon name="pin" size={14} /> Демоград</span>
       <span className="map-count">{items ? `${items.length} мест` : '…'}</span>
@@ -2081,7 +2285,3 @@ function Notifications() {
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
-
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => console.error('PWA registration failed', error));
-}

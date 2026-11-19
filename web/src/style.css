@@ -1547,3 +1547,27 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 .checkout-sheet .delivery-fields input, .checkout-sheet .delivery-fields select { color: #fff; background: rgba(255, 255, 255, 0.07); }
 .checkout-sheet .delivery-fields select { color-scheme: dark; }
+
+/* Native update snackbar */
+.update-bar { position: fixed; z-index: 55; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(calc(100% - 28px), 390px); display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px 10px 14px; border: 1px solid rgba(255, 225, 120, 0.5); border-radius: 16px;
+  background: rgba(22, 24, 29, 0.96); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); backdrop-filter: blur(18px); }
+.update-bar span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.update-bar strong { font-size: 12.5px; color: #fff; }
+.update-bar small { font-size: 10.5px; color: #aeb3bd; }
+.update-bar button { flex: 0 0 auto; padding: 8px 12px; border: 0; border-radius: 10px; background: #f5d547; color: #17181c; font: inherit; font-size: 11.5px; font-weight: 800; }
+.sheet.dragging { transition: none; }
+.sheet-drag { touch-action: none; cursor: grab; }
+.sheet-drag:active { cursor: grabbing; }
+
+/* Pull to refresh, like a native feed */
+.pull-indicator { position: fixed; z-index: 24; top: calc(58px + env(safe-area-inset-top)); left: 50%;
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(18, 20, 25, 0.94); color: var(--muted);
+  font-size: 10.5px; font-weight: 600; opacity: 0; pointer-events: none; backdrop-filter: blur(14px);
+  transition: opacity 0.16s ease, transform 0.16s ease; }
+.pull-indicator.visible { opacity: 1; }
+.pull-indicator .icon { color: var(--yellow); }
+.pull-indicator.refreshing .icon { animation: refresh-spin 0.8s linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
