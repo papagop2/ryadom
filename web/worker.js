@@ -11,9 +11,10 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (request.mode === 'navigate' && url.pathname === '/') {
-    event.respondWith(caches.open(CACHE).then(cache => cache.match('/index.html')).then(hit => hit || fetch(request)));
-  } else if (FILES.includes(url.pathname) && url.pathname !== '/index.html' && !url.search) {
+  const page = `${BASE}index.html`;
+  if (request.mode === 'navigate' && (url.pathname === BASE || url.pathname === page)) {
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(page)).then(hit => hit || fetch(request)));
+  } else if (FILES.includes(url.pathname) && url.pathname !== page && !url.search) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(request)).then(hit => hit || fetch(request)));
   }
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { demoRequest } from './demo';
 import './style.css';
 
 type Money = { cents: number; currency: string };
@@ -35,7 +36,10 @@ const statusLabel: Record<Booking['status'], string> = {
 
 const csrf = () => document.cookie.split('; ').find(row => row.startsWith('rjadom_csrf='))?.split('=')[1] ?? '';
 
-async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+const DEMO = import.meta.env.VITE_DEMO === '1';
+
+async function api<T>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  if (DEMO) return demoRequest<T>(path, init);
   const headers: Record<string, string> = { 'x-csrf-token': decodeURIComponent(csrf()) };
   if (init.body !== undefined) headers['content-type'] = 'application/json';
   const response = await fetch(path, {
@@ -43,6 +47,7 @@ async function api<T>(path: string, init: { method?: string; body?: unknown } = 
     credentials: 'same-origin',
     cache: 'no-store',
     headers,
+    signal: init.signal,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
   const data = await response.json().catch(() => ({}));
@@ -83,7 +88,7 @@ function App() {
     <div className="ambient" aria-hidden="true"><span /><span /><span /></div>
     <header className="mast">
       <a href="/" className="wordmark">рядом<span>.</span></a>
-      <span className="badge">Демо-стенд</span>
+      <span className="badge">{DEMO ? 'Демо · Pages' : 'Демо-стенд'}</span>
     </header>
     {!online && <p className="notice" role="status">Нет сети. Записаться и подтвердить можно только онлайн.</p>}
     {toast && <p className="toast" role="status">{toast}</p>}
@@ -121,11 +126,8 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
     if (query.trim()) params.set('q', query.trim());
     setError(false);
     const timer = setTimeout(() => {
-      void fetch(`/api/v1/places?${params}`, { signal: controller.signal, cache: 'no-store' })
-        .then(async response => {
-          if (!response.ok) throw new Error('catalogue');
-          setItems((await response.json()).items);
-        })
+      void api<{ items: PlaceCard[] }>(`/api/v1/places?${params}`, { signal: controller.signal })
+        .then(data => setItems(data.items))
         .catch(() => { if (!controller.signal.aborted) { setItems(null); setError(true); } });
     }, 220);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -407,5 +409,5 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
 createRoot(document.getElementById('root')!).render(<App />);
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.register('/sw.js').catch(error => console.error('PWA registration failed', error));
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => console.error('PWA registration failed', error));
 }

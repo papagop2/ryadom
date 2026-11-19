@@ -24,8 +24,8 @@ for (const [name, size] of [['192', 192], ['512', 512], ['maskable', 512]]) {
     const dx = x / size - .5;
     const dy = y / size - .5;
     const head = Math.hypot(dx, dy + .07);
-    const color = head < .059 ? [201, 105, 75] : head < .17 ||
-      (dy >= .015 && dy < .27 && Math.abs(dx) < (.27 - dy) * .67) ? [255, 244, 220] : [36, 70, 55];
+    const color = head < .059 ? [255, 214, 10] : head < .17 ||
+      (dy >= .015 && dy < .27 && Math.abs(dx) < (.27 - dy) * .67) ? [236, 238, 242] : [12, 13, 16];
     pixels.set(color, y * stride + 1 + x * 3);
   }
   const header = Buffer.alloc(13);

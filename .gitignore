@@ -12,3 +12,4 @@ web/public/icon-*.png
 *.log
 *.pfx
 *.key
+dist-pages/
