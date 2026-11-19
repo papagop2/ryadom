@@ -216,6 +216,72 @@ async function notifyPartner(db, partnerId, kind, payload) {
   }
 }
 
+function shopProductView(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    price: money(row.price_cents, row.currency),
+    stockQty: row.stock_qty,
+    unit: row.unit,
+    isActive: row.is_active,
+  };
+}
+
+const SHOP_ORDER_SELECT = `
+  select o.*, p.name as place_name, p.address as place_address, p.district as place_district,
+         u.display_name as client_name
+  from shop_orders o
+  join places p on p.id = o.place_id
+  join users u on u.id = o.client_user_id`;
+
+async function shopItemsFor(db, orderIds) {
+  const byOrder = new Map();
+  if (!orderIds.length) return byOrder;
+  const { rows } = await db.query(
+    `select * from shop_order_items where order_id = any($1::uuid[]) order by id`, [orderIds]);
+  for (const row of rows) {
+    if (!byOrder.has(row.order_id)) byOrder.set(row.order_id, []);
+    byOrder.get(row.order_id).push(row);
+  }
+  return byOrder;
+}
+
+async function restockShopOrder(db, orderId) {
+  await db.query(`update products p set stock_qty = p.stock_qty + i.qty, updated_at = now()
+                from shop_order_items i where i.order_id = $1 and i.product_id = p.id`, [orderId]);
+}
+
+async function loadShopOrder(db, id) {
+  const { rows } = await db.query(`${SHOP_ORDER_SELECT} where o.id = $1`, [id]);
+  if (!rows[0]) return null;
+  const items = await shopItemsFor(db, [id]);
+  return shopOrderView(rows[0], items.get(id) ?? []);
+}
+
+function shopOrderView(row, items = []) {
+  return {
+    id: row.id,
+    status: row.status,
+    total: money(row.total_cents, row.currency),
+    pickupCode: row.pickup_code,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    client: { id: row.client_user_id, name: row.client_name },
+    place: { id: row.place_id, name: row.place_name, address: row.place_address, district: row.place_district },
+    items: items.map(item => ({
+      id: item.id,
+      productId: item.product_id,
+      title: item.title,
+      unit: item.unit,
+      qty: item.qty,
+      price: money(item.unit_price_cents, row.currency),
+      total: money(item.total_cents, row.currency),
+    })),
+  };
+}
+
 export function routes(app, { pool, demoLogin = false }) {
   // ---- сессия и CSRF ----
   app.decorateRequest('auth', null);
@@ -457,6 +523,9 @@ export function routes(app, { pool, demoLogin = false }) {
        from reviews r join users u on u.id = r.author_user_id
        where r.place_id = $1 and r.status = 'published'
        order by r.created_at desc limit 5`, [place.id]);
+    const products = await pool.query(
+      `select id, title, description, price_cents, currency, stock_qty, unit, is_active
+       from products where place_id = $1 and is_active order by price_cents`, [place.id]);
     reply.header('Cache-Control', 'no-store');
     return {
       place: {
@@ -479,6 +548,7 @@ export function routes(app, { pool, demoLogin = false }) {
         price: money(o.price_cents, o.currency),
         nextSlot: o.next_slot,
       })),
+      products: products.rows.map(shopProductView),
       reviews: reviews.rows.map(r => ({
         id: r.id, rating: r.rating, body: r.body, createdAt: r.created_at, author: r.display_name,
       })),
@@ -699,6 +769,15 @@ export function routes(app, { pool, demoLogin = false }) {
     return rows[0];
   }
 
+  async function loadProductForManager(auth, productId, client = pool) {
+    const { rows } = await client.query(
+      `select pr.id, pr.place_id, p.partner_id from products pr
+       join places p on p.id = pr.place_id where pr.id = $1`, [productId]);
+    if (!rows[0]) fail(404, 'product_not_found', 'Товар не найден');
+    if (!canManagePartner(auth, rows[0].partner_id)) fail(403, 'forbidden', 'Это не ваш товар');
+    return rows[0];
+  }
+
   async function partnerPlaceView(client, placeId) {
     const place = await client.query(
       `select id, name, category, district, address, about, phone, lat, lng, is_published, updated_at
@@ -710,6 +789,9 @@ export function routes(app, { pool, demoLogin = false }) {
               (select count(*)::int from availability_slots s where s.offer_id = o.id and s.starts_at > now()) as slot_count,
               (select min(s.starts_at) from availability_slots s where s.offer_id = o.id and s.starts_at > now()) as next_slot
        from offers o where o.place_id = $1 order by o.created_at`, [p.id]);
+    const products = await client.query(
+      `select id, title, description, price_cents, currency, stock_qty, unit, is_active
+       from products where place_id = $1 order by created_at`, [p.id]);
     return {
       id: p.id, name: p.name, category: p.category, district: p.district, address: p.address,
       about: p.about, phone: p.phone, location: { lat: Number(p.lat), lng: Number(p.lng) },
@@ -719,6 +801,7 @@ export function routes(app, { pool, demoLogin = false }) {
         price: money(o.price_cents, o.currency), isActive: o.is_active,
         slotCount: o.slot_count, nextSlot: o.next_slot,
       })),
+      products: products.rows.map(shopProductView),
     };
   }
 
@@ -818,6 +901,60 @@ export function routes(app, { pool, demoLogin = false }) {
     await pool.query(
       `update offers set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
     return (await partnerPlaceView(pool, offer.place_id)).offers.find(o => o.id === offer.id);
+  });
+
+  app.post('/api/v1/partner/places/:id/products', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['title', 'priceCents'],
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 120 },
+        description: { type: 'string', maxLength: 1000 },
+        priceCents: { type: 'integer', minimum: 1, maximum: 100000000 },
+        stockQty: { type: 'integer', minimum: 0, maximum: 1000000 },
+        unit: { type: 'string', minLength: 1, maxLength: 20 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    await loadPlaceForManager(auth, uuidParam(request));
+    const { title, description = '', priceCents, stockQty = 0, unit = 'шт' } = request.body;
+    const { rows } = await pool.query(
+      `insert into products (place_id, title, description, price_cents, stock_qty, unit)
+       values ($1, $2, $3, $4, $5, $6) returning id`,
+      [uuidParam(request), title, description, priceCents, stockQty, unit]);
+    reply.code(201);
+    return (await partnerPlaceView(pool, uuidParam(request))).products.find(product => product.id === rows[0].id);
+  });
+
+  app.patch('/api/v1/partner/products/:id', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 120 },
+        description: { type: 'string', maxLength: 1000 },
+        priceCents: { type: 'integer', minimum: 1, maximum: 100000000 },
+        stockQty: { type: 'integer', minimum: 0, maximum: 1000000 },
+        unit: { type: 'string', minLength: 1, maxLength: 20 },
+        isActive: { type: 'boolean' },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const product = await loadProductForManager(auth, uuidParam(request));
+    const columns = { title: 'title', description: 'description', priceCents: 'price_cents',
+      stockQty: 'stock_qty', unit: 'unit', isActive: 'is_active' };
+    const updates = [];
+    const values = [];
+    for (const [key, column] of Object.entries(columns)) {
+      if (!(key in request.body)) continue;
+      values.push(request.body[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+    if (!updates.length) fail(400, 'empty_update', 'Нет полей для изменения');
+    values.push(product.id);
+    await pool.query(
+      `update products set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
+    return (await partnerPlaceView(pool, product.place_id)).products.find(item => item.id === product.id);
   });
 
   app.post('/api/v1/partner/offers/:id/slots', {
@@ -1482,6 +1619,194 @@ export function routes(app, { pool, demoLogin = false }) {
     const offers = await offersForRequests(pool, rows.map(row => row.id));
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(row => serviceRequestView(row, offers.get(row.id) ?? [])) };
+  });
+
+
+  // ---- товары и самовывоз ----
+  app.get('/api/v1/me/shop-orders', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `${SHOP_ORDER_SELECT} where o.client_user_id = $1 order by o.created_at desc limit 50`, [auth.userId]);
+    const items = await shopItemsFor(pool, rows.map(row => row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => shopOrderView(row, items.get(row.id) ?? [])) };
+  });
+
+  app.post('/api/v1/me/shop-orders', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['placeId', 'items'],
+      properties: {
+        placeId: { type: 'string', format: 'uuid' },
+        items: {
+          type: 'array', minItems: 1, maxItems: 40,
+          items: {
+            type: 'object', additionalProperties: false, required: ['productId', 'qty'],
+            properties: {
+              productId: { type: 'string', format: 'uuid' },
+              qty: { type: 'integer', minimum: 1, maximum: 99 },
+            },
+          },
+        },
+        note: { type: 'string', maxLength: 300 },
+        idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const body = request.body;
+    const idempotencyKey = body.idempotencyKey ?? null;
+    const attempt = async () => withTransaction(pool, async (client) => {
+      if (idempotencyKey) {
+        const existing = await client.query(
+          `${SHOP_ORDER_SELECT} where o.client_user_id = $1 and o.idempotency_key = $2`,
+          [auth.userId, idempotencyKey]);
+        if (existing.rows[0]) return { order: await loadShopOrder(client, existing.rows[0].id), created: false };
+      }
+      const place = await client.query(
+        'select id, partner_id from places where id = $1 and is_published', [uuidValue(body.placeId, 'Заведение')]);
+      if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+
+      const wanted = new Map();
+      for (const item of body.items) wanted.set(item.productId, (wanted.get(item.productId) ?? 0) + item.qty);
+      if ([...wanted.values()].some(qty => qty > 99)) fail(400, 'too_many', 'Слишком много одного товара');
+      const ids = [...wanted.keys()];
+      const products = await client.query(
+        `select id, title, price_cents, stock_qty, unit from products
+         where id = any($1::uuid[]) and place_id = $2 and is_active order by id for update`,
+        [ids, place.rows[0].id]);
+      if (products.rows.length !== ids.length) fail(409, 'product_unavailable', 'Часть товаров уже недоступна');
+      let totalCents = 0;
+      const lines = products.rows.map(row => {
+        const qty = wanted.get(row.id);
+        if (row.stock_qty < qty) fail(409, 'out_of_stock', `«${row.title}»: осталось ${row.stock_qty}`);
+        totalCents += row.price_cents * qty;
+        return { row, qty, total: row.price_cents * qty };
+      });
+      const orderId = (await client.query(
+        `insert into shop_orders (place_id, client_user_id, total_cents, pickup_code, note, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6) returning id`,
+        [place.rows[0].id, auth.userId, totalCents, String(randomInt(1000, 10000)), body.note ?? '', idempotencyKey]
+      )).rows[0].id;
+      for (const line of lines) {
+        await client.query(
+          `insert into shop_order_items (order_id, product_id, title, unit, unit_price_cents, qty, total_cents)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
+          [orderId, line.row.id, line.row.title, line.row.unit, line.row.price_cents, line.qty, line.total]);
+        await client.query(
+          'update products set stock_qty = stock_qty - $2, updated_at = now() where id = $1',
+          [line.row.id, line.qty]);
+      }
+      await client.query(
+        `insert into shop_order_events (order_id, status, actor_user_id) values ($1, 'placed', $2)`,
+        [orderId, auth.userId]);
+      await notifyPartner(client, place.rows[0].partner_id, 'shop_order_new',
+        { orderId, total: totalCents, placeId: place.rows[0].id });
+      return { order: await loadShopOrder(client, orderId), created: true };
+    });
+    try {
+      const result = await attempt();
+      reply.code(result.created ? 201 : 200);
+      return result.order;
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'shop_orders_client_idem_uq') {
+        fail(409, 'duplicate_order', 'Повтор заказа');
+      }
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/me/shop-orders/:id/cancel', async (request) => {
+    const auth = requireUser(request);
+    const orderId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `select o.*, p.partner_id from shop_orders o join places p on p.id = o.place_id
+         where o.id = $1 for update`, [orderId]);
+      const order = rows[0];
+      if (!order) fail(404, 'order_not_found', 'Заказ не найден');
+      if (order.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваш заказ');
+      if (!['placed', 'confirmed'].includes(order.status)) {
+        fail(409, 'invalid_transition', 'Заказ уже нельзя отменить');
+      }
+      await restockShopOrder(client, orderId);
+      await client.query(
+        `update shop_orders set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
+        [orderId]);
+      await client.query(
+        `insert into shop_order_events (order_id, status, actor_user_id) values ($1, 'cancelled', $2)`,
+        [orderId, auth.userId]);
+      await notifyPartner(client, order.partner_id, 'shop_order_cancelled', { orderId });
+      return loadShopOrder(client, orderId);
+    });
+  });
+
+  app.get('/api/v1/partner/shop-orders', async (request, reply) => {
+    const auth = requireRole(request, 'partner');
+    const partnerIds = partnerIdsOf(auth);
+    if (!partnerIds.length) fail(403, 'forbidden', 'Нет кабинета партнёра');
+    const { rows } = await pool.query(
+      `${SHOP_ORDER_SELECT} where p.partner_id = any($1::uuid[])
+       order by case o.status when 'placed' then 0 when 'confirmed' then 1 when 'ready' then 2 else 3 end,
+                o.created_at desc limit 100`, [partnerIds]);
+    const items = await shopItemsFor(pool, rows.map(row => row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => shopOrderView(row, items.get(row.id) ?? [])) };
+  });
+
+  app.post('/api/v1/partner/shop-orders/:id/status', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['action'],
+      properties: { action: { type: 'string', enum: ['confirm', 'ready', 'complete', 'cancel'] } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const orderId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `select o.*, p.partner_id from shop_orders o join places p on p.id = o.place_id
+         where o.id = $1 for update`, [orderId]);
+      const order = rows[0];
+      if (!order) fail(404, 'order_not_found', 'Заказ не найден');
+      if (!isOperator(auth) && !partnerIdsOf(auth).includes(order.partner_id)) {
+        fail(403, 'forbidden', 'Это не ваш заказ');
+      }
+      const action = request.body.action;
+      const transitions = {
+        confirm: { from: 'placed', to: 'confirmed', stamp: 'confirmed_at' },
+        ready: { from: 'confirmed', to: 'ready', stamp: 'ready_at' },
+        complete: { from: 'ready', to: 'completed', stamp: 'completed_at' },
+      };
+      if (action === 'cancel') {
+        if (!['placed', 'confirmed'].includes(order.status)) fail(409, 'invalid_transition', 'Заказ уже нельзя отменить');
+        await restockShopOrder(client, orderId);
+        await client.query(
+          `update shop_orders set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
+          [orderId]);
+      } else {
+        const transition = transitions[action];
+        if (order.status !== transition.from) fail(409, 'invalid_transition', 'Заказ уже в другом состоянии');
+        await client.query(
+          `update shop_orders set status = $2, ${transition.stamp} = now(), updated_at = now() where id = $1`,
+          [orderId, transition.to]);
+      }
+      const nextStatus = action === 'cancel' ? 'cancelled' : transitions[action].to;
+      await client.query(
+        `insert into shop_order_events (order_id, status, actor_user_id) values ($1, $2, $3)`,
+        [orderId, nextStatus, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, $2, $3)`,
+        [order.client_user_id, `shop_${nextStatus}`, JSON.stringify({ orderId, status: nextStatus })]);
+      return loadShopOrder(client, orderId);
+    });
+  });
+
+  app.get('/api/v1/operator/shop-orders', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `${SHOP_ORDER_SELECT} order by o.created_at desc limit 100`);
+    const items = await shopItemsFor(pool, rows.map(row => row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => shopOrderView(row, items.get(row.id) ?? [])) };
   });
 
 

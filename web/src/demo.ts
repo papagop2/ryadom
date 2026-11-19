@@ -9,6 +9,8 @@ const BOOKINGS_KEY = 'rjadom.demo.bookings';
 const CODE_KEY = 'rjadom.demo.code';
 const TRIPS_KEY = 'rjadom.demo.trips';
 const SERVICE_KEY = 'rjadom.demo.services';
+const PRODUCTS_KEY = 'rjadom.demo.products';
+const SHOP_ORDERS_KEY = 'rjadom.demo.shop-orders';
 const DAY = 86400000;
 
 const places = [
@@ -77,6 +79,18 @@ type DemoServiceRequest = {
   client: { id: string; name: string }; partner: { id: string; name: string } | null;
   offers: DemoServiceOffer[];
 };
+type DemoShopProduct = {
+  id: string; placeId: string; title: string; description: string; price: Money;
+  stockQty: number; unit: string; isActive: boolean;
+};
+type DemoShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
+type DemoShopOrder = {
+  id: string; status: 'placed' | 'confirmed' | 'ready' | 'completed' | 'cancelled';
+  total: Money; pickupCode: string; note: string; createdAt: string; key?: string | null;
+  client: { id: string; name: string };
+  place: { id: string; name: string; address: string; district: string };
+  items: DemoShopOrderItem[];
+};
 type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
@@ -103,6 +117,23 @@ const saveBookings = (items: DemoBooking[]) => write(BOOKINGS_KEY, items);
 const getTrips = () => read<DemoTrip[]>(TRIPS_KEY, []);
 const saveTrips = (items: DemoTrip[]) => write(TRIPS_KEY, items);
 const TRIP_ACTIVE: DemoTripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
+const defaultProducts: DemoShopProduct[] = [
+  { id: 'sp-spray', placeId: 'forma', title: 'Стайлинг-спрей', description: 'Лёгкая фиксация, 150 мл', price: { cents: 120000, currency: 'RUB' }, stockQty: 8, unit: 'шт', isActive: true },
+  { id: 'sp-comb', placeId: 'forma', title: 'Гребень', description: 'Для укладки', price: { cents: 60000, currency: 'RUB' }, stockQty: 12, unit: 'шт', isActive: true },
+  { id: 'sp-lunch', placeId: 'kuhnya', title: 'Обед дня', description: 'Суп, горячее и напиток', price: { cents: 45000, currency: 'RUB' }, stockQty: 12, unit: 'порция', isActive: true },
+  { id: 'sp-soup', placeId: 'kuhnya', title: 'Суп куриный', description: 'С домашней лапшой', price: { cents: 22000, currency: 'RUB' }, stockQty: 8, unit: 'порция', isActive: true },
+  { id: 'sp-drink', placeId: 'kuhnya', title: 'Компот', description: 'Из ягод, без сахара', price: { cents: 8000, currency: 'RUB' }, stockQty: 15, unit: 'стакан', isActive: true },
+  { id: 'sp-cream', placeId: 'ugol', title: 'Крем для обуви', description: 'Нейтральный, 50 мл', price: { cents: 35000, currency: 'RUB' }, stockQty: 6, unit: 'шт', isActive: true },
+];
+const getProducts = (): DemoShopProduct[] => {
+  const saved = read<DemoShopProduct[] | null>(PRODUCTS_KEY, null);
+  if (saved) return saved;
+  write(PRODUCTS_KEY, defaultProducts);
+  return defaultProducts;
+};
+const saveProducts = (items: DemoShopProduct[]) => write(PRODUCTS_KEY, items);
+const getShopOrders = () => read<DemoShopOrder[]>(SHOP_ORDERS_KEY, []);
+const saveShopOrders = (items: DemoShopOrder[]) => write(SHOP_ORDERS_KEY, items);
 const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress'];
 const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p2: 'Мастерская «Линия»' };
 const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
@@ -188,6 +219,7 @@ function partnerPlaceView(place: typeof places[number]) {
     location: { lat: place.lat, lng: place.lng },
     isPublished: (place as { isPublished?: boolean }).isPublished !== false,
     updatedAt: new Date().toISOString(),
+    products: getProducts().filter(item => item.placeId === place.id),
     offers: offers.filter(item => item.placeId === place.id).map(item => ({
       id: item.id, title: item.title, description: '', durationMin: item.durationMin,
       price: money(item.price), isActive: (item as { isActive?: boolean }).isActive !== false,
@@ -276,7 +308,9 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       ...item, price: money(item.price), nextSlot: slotsFor(item.id)[0]?.startsAt ?? null,
     }));
     const base = card(place, bookings);
-    return { place: { ...base, phone: place.phone }, offers: list, reviews: reviewsFor(place.id, bookings) } as T;
+    return { place: { ...base, phone: place.phone }, offers: list,
+      products: getProducts().filter(item => item.placeId === place.id && item.isActive),
+      reviews: reviewsFor(place.id, bookings) } as T;
   }
 
   const slotsMatch = url.pathname.match(/^\/api\/v1\/offers\/([^/]+)\/slots$/);
@@ -727,6 +761,147 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     }
     saveServices(services);
     return request as T;
+  }
+
+  if (url.pathname === '/api/v1/me/shop-orders') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (method === 'POST') {
+      const place = placeById(String(body.placeId ?? ''));
+      if (!place) return fail('Заведение не найдено', 'not_found');
+      const items = (body.items as unknown as { productId: string; qty: number }[] | undefined) ?? [];
+      const products = getProducts();
+      const wanted = new Map<string, number>();
+      for (const item of items) wanted.set(item.productId, (wanted.get(item.productId) ?? 0) + Number(item.qty));
+      const lines = [...wanted.entries()].map(([productId, qty]) => {
+        const product = products.find(item => item.id === productId && item.placeId === place.id && item.isActive);
+        if (!product) return null;
+        if (product.stockQty < qty) return null;
+        return { product, qty };
+      });
+      if (lines.some(line => !line)) return fail('Часть товаров уже недоступна', 'out_of_stock');
+      const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : null;
+      const orders = getShopOrders();
+      if (key) {
+        const existing = orders.find(item => item.client.id === me.user.id && item.key === key);
+        if (existing) return existing as T;
+      }
+      const total = lines.reduce((sum, line) => sum + line!.product.price.cents * line!.qty, 0);
+      const order: DemoShopOrder = {
+        id: `sh-${Date.now()}`, status: 'placed', total: money(total),
+        pickupCode: String(Math.floor(1000 + Math.random() * 9000)), note: String(body.note ?? '').slice(0, 300),
+        createdAt: new Date().toISOString(), key,
+        client: { id: me.user.id, name: me.user.displayName },
+        place: { id: place.id, name: place.name, address: place.address, district: place.district },
+        items: lines.map((line, index) => ({
+          id: `soi-${Date.now()}-${index}`, productId: line!.product.id, title: line!.product.title,
+          unit: line!.product.unit, qty: line!.qty, price: line!.product.price,
+          total: money(line!.product.price.cents * line!.qty),
+        })),
+      };
+      for (const line of lines) line!.product.stockQty -= line!.qty;
+      saveProducts(products);
+      saveShopOrders([order, ...orders]);
+      return order as T;
+    }
+    return { items: getShopOrders().filter(item => item.client.id === me.user.id) } as T;
+  }
+
+  const shopCancelMatch = url.pathname.match(/^\/api\/v1\/me\/shop-orders\/([^/]+)\/cancel$/);
+  if (shopCancelMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const orders = getShopOrders();
+    const order = orders.find(item => item.id === shopCancelMatch[1]);
+    if (!order) return fail('Заказ не найден', 'not_found');
+    if (order.client.id !== me.user.id) return fail('Это не ваш заказ', 'forbidden');
+    if (!['placed', 'confirmed'].includes(order.status)) return fail('Заказ уже нельзя отменить', 'invalid_transition');
+    order.status = 'cancelled';
+    const products = getProducts();
+    for (const line of order.items) {
+      const product = products.find(item => item.id === line.productId);
+      if (product) product.stockQty += line.qty;
+    }
+    saveProducts(products);
+    saveShopOrders(orders);
+    return order as T;
+  }
+
+  if (url.pathname === '/api/v1/partner/shop-orders') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
+    const orders = getShopOrders().filter(order => {
+      const place = placeById(order.place.id);
+      return place && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready'].includes(order.status);
+    });
+    return { items: orders } as T;
+  }
+
+  const shopStatusMatch = url.pathname.match(/^\/api\/v1\/partner\/shop-orders\/([^/]+)\/status$/);
+  if (shopStatusMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const orders = getShopOrders();
+    const order = orders.find(item => item.id === shopStatusMatch[1]);
+    if (!order) return fail('Заказ не найден', 'not_found');
+    const place = placeById(order.place.id);
+    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) {
+      return fail('Это не ваш заказ', 'forbidden');
+    }
+    const action = String(body.action);
+    const flow: Record<string, string> = { confirm: 'placed', ready: 'confirmed', complete: 'ready' };
+    if (action === 'cancel') {
+      if (!['placed', 'confirmed'].includes(order.status)) return fail('Заказ уже нельзя отменить', 'invalid_transition');
+      order.status = 'cancelled';
+      const products = getProducts();
+      for (const line of order.items) {
+        const product = products.find(item => item.id === line.productId);
+        if (product) product.stockQty += line.qty;
+      }
+      saveProducts(products);
+    } else {
+      const from = flow[action];
+      if (!from || order.status !== from) return fail('Заказ уже в другом состоянии', 'invalid_transition');
+      order.status = ({ confirm: 'confirmed', ready: 'ready', complete: 'completed' } as Record<string, DemoShopOrder['status']>)[action];
+    }
+    saveShopOrders(orders);
+    return order as T;
+  }
+
+  const partnerProductAdd = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/products$/);
+  if (partnerProductAdd && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const place = placeById(partnerProductAdd[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
+    const products = getProducts();
+    const product: DemoShopProduct = {
+      id: `sp-${Date.now()}`, placeId: place.id, title: String(body.title ?? '').slice(0, 120),
+      description: String(body.description ?? ''), price: money(Number(body.priceCents) || 1),
+      stockQty: Math.max(0, Number(body.stockQty) || 0), unit: String(body.unit || 'шт'), isActive: true,
+    };
+    products.push(product);
+    saveProducts(products);
+    return product as T;
+  }
+
+  const partnerProductMatch = url.pathname.match(/^\/api\/v1\/partner\/products\/([^/]+)$/);
+  if (partnerProductMatch && method === 'PATCH') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const products = getProducts();
+    const product = products.find(item => item.id === partnerProductMatch[1]);
+    if (!product) return fail('Товар не найден', 'not_found');
+    const place = placeById(product.placeId);
+    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваш товар', 'forbidden');
+    if (body.priceCents !== undefined) product.price = money(Number(body.priceCents));
+    if (body.stockQty !== undefined) product.stockQty = Math.max(0, Number(body.stockQty));
+    if (body.title !== undefined) product.title = String(body.title).slice(0, 120);
+    if (body.unit !== undefined) product.unit = String(body.unit).slice(0, 20);
+    if (body.isActive !== undefined) product.isActive = Boolean(body.isActive);
+    saveProducts(products);
+    return product as T;
   }
 
   if (url.pathname === '/api/v1/partner/bookings') {

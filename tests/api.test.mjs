@@ -530,3 +530,101 @@ test('выезд: заявка, предложения партнёров, вы�
   const jobs = await app.inject({ url: '/api/v1/partner/service-requests', headers: partnerB.headers });
   assert.equal(jobs.json().jobs.find(item => item.id === requestId), undefined);
 });
+
+test('товары: витрина, остатки, самовывоз и изоляция заказов', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Мастерская «Линия»');
+  const catalogue = await app.inject({ url: '/api/v1/places?category=food' });
+  const place = catalogue.json().items.find(item => item.name === 'Кухня на районе');
+  assert.ok(place, 'нужна витрина «Кухня на районе»');
+  const detail = await app.inject({ url: `/api/v1/places/${place.id}` });
+  assert.equal(detail.statusCode, 200, detail.body);
+  const lunch = detail.json().products.find(item => item.title === 'Обед дня');
+  const drink = detail.json().products.find(item => item.title === 'Компот');
+  assert.ok(lunch && drink, 'товары должны попадать в карточку');
+  const stockBefore = lunch.stockQty;
+
+  const key = `shop-${Date.now()}`;
+  const created = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 2 }, { productId: drink.id, qty: 1 }],
+      note: 'Приду к 13:00', idempotencyKey: key } });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().total.cents, lunch.price.cents * 2 + drink.price.cents);
+  assert.match(created.json().pickupCode, /^[0-9]{4}$/);
+  const orderId = created.json().id;
+
+  const repeated = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 2 }], idempotencyKey: key } });
+  assert.equal(repeated.statusCode, 200);
+  assert.equal(repeated.json().id, orderId);
+
+  const afterOrder = await app.inject({ url: `/api/v1/places/${place.id}` });
+  assert.equal(afterOrder.json().products.find(item => item.id === lunch.id).stockQty, stockBefore - 2);
+
+  const partnerOrders = await app.inject({ url: '/api/v1/partner/shop-orders', headers: partner.headers });
+  assert.equal(partnerOrders.statusCode, 200, partnerOrders.body);
+  assert.ok(partnerOrders.json().items.some(item => item.id === orderId));
+  const otherPartner = await login();
+  await addPartnerRole(otherPartner.userId, 'Студия «Форма»');
+  const foreign = await app.inject({ url: '/api/v1/partner/shop-orders', headers: otherPartner.headers });
+  assert.equal(foreign.json().items.some(item => item.id === orderId), false);
+
+  for (const action of ['confirm', 'ready', 'complete']) {
+    const moved = await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${orderId}/status`,
+      headers: partner.headers, payload: { action } });
+    assert.equal(moved.statusCode, 200, moved.body);
+  }
+  const mine = await app.inject({ url: '/api/v1/me/shop-orders', headers: client.headers });
+  assert.equal(mine.json().items.find(item => item.id === orderId).status, 'completed');
+  assert.equal((await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${orderId}/cancel`,
+    headers: client.headers })).statusCode, 409);
+
+  const tooMany = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 100 }], idempotencyKey: `many-${Date.now()}` } });
+  assert.equal(tooMany.statusCode, 400);
+
+  const second = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 29 }], idempotencyKey: `stock-${Date.now()}` } });
+  assert.equal(second.statusCode, 409, second.body);
+  assert.equal(second.json().error, 'out_of_stock');
+
+  const beforeCancel = (await app.inject({ url: `/api/v1/places/${place.id}` })).json()
+    .products.find(item => item.id === lunch.id).stockQty;
+  const cancellable = await app.inject({ method: 'POST', url: '/api/v1/me/shop-orders', headers: client.headers,
+    payload: { placeId: place.id, items: [{ productId: lunch.id, qty: 1 }], idempotencyKey: `cancel-${Date.now()}` } });
+  assert.equal(cancellable.statusCode, 201, cancellable.body);
+  const cancelled = await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${cancellable.json().id}/cancel`,
+    headers: client.headers });
+  assert.equal(cancelled.statusCode, 200, cancelled.body);
+  assert.equal(cancelled.json().status, 'cancelled');
+  const afterCancel = (await app.inject({ url: `/api/v1/places/${place.id}` })).json()
+    .products.find(item => item.id === lunch.id).stockQty;
+  assert.equal(afterCancel, beforeCancel);
+});
+
+test('товары: партнёр добавляет позицию и меняет остаток', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Мастерская «Линия»');
+  const places = await app.inject({ url: '/api/v1/partner/places', headers: partner.headers });
+  const kitchen = places.json().items.find(item => item.name === 'Кухня на районе');
+  assert.ok(kitchen);
+  const title = `Тестовый товар ${Date.now()}`;
+  const created = await app.inject({ method: 'POST', url: `/api/v1/partner/places/${kitchen.id}/products`,
+    headers: partner.headers, payload: { title, priceCents: 12300, stockQty: 4, unit: 'шт' } });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().stockQty, 4);
+  const updated = await app.inject({ method: 'PATCH', url: `/api/v1/partner/products/${created.json().id}`,
+    headers: partner.headers, payload: { stockQty: 9, priceCents: 15000 } });
+  assert.equal(updated.statusCode, 200, updated.body);
+  assert.equal(updated.json().stockQty, 9);
+  assert.equal(updated.json().price.cents, 15000);
+  const publicPlace = await app.inject({ url: `/api/v1/places/${kitchen.id}` });
+  assert.equal(publicPlace.json().products.find(item => item.id === created.json().id).stockQty, 9);
+  const outsider = await login();
+  const forbidden = await app.inject({ method: 'PATCH', url: `/api/v1/partner/products/${created.json().id}`,
+    headers: outsider.headers, payload: { stockQty: 1 } });
+  assert.equal(forbidden.statusCode, 403);
+});

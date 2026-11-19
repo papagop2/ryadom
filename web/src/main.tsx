@@ -10,7 +10,16 @@ type PlaceCard = {
   priceFrom: Money | null; offerCount: number; distanceKm: number | null;
 };
 type Offer = { id: string; title: string; description: string; durationMin: number; price: Money; nextSlot: string | null };
-type PlaceDetail = { place: PlaceCard & { phone: string | null }; offers: Offer[]; reviews: Review[] };
+type ShopProduct = { id: string; title: string; description: string; price: Money; stockQty: number; unit: string; isActive: boolean };
+type ShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
+type ShopOrderStatus = 'placed' | 'confirmed' | 'ready' | 'completed' | 'cancelled';
+type ShopOrder = {
+  id: string; status: ShopOrderStatus; total: Money; pickupCode: string; note: string; createdAt: string;
+  client: { id: string; name: string };
+  place: { id: string; name: string; address: string; district: string };
+  items: ShopOrderItem[];
+};
+type PlaceDetail = { place: PlaceCard & { phone: string | null }; offers: Offer[]; products: ShopProduct[]; reviews: Review[] };
 type Slot = { id: string; startsAt: string; endsAt: string };
 type Review = { id: string; rating: number; body: string; createdAt: string; author: string };
 type Booking = {
@@ -47,7 +56,7 @@ type PartnerOffer = { id: string; title: string; description: string; durationMi
 type PartnerPlace = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
   phone: string | null; location: { lat: number; lng: number }; isPublished: boolean; updatedAt: string;
-  offers: PartnerOffer[];
+  offers: PartnerOffer[]; products: ShopProduct[];
 };
 type Notice = { id: number; kind: string; payload: Record<string, unknown>; channel: string; created_at: string; read_at: string | null; delivered_at: string | null; last_error: string | null };
 type ModerationItem = {
@@ -64,6 +73,9 @@ const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-
 const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор', driver: 'водитель' };
 const plural = (n: number, one: string, few: string, many: string) =>
   n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
+const unitLabel = (unit: string, qty: number) => unit === 'порция'
+  ? plural(qty, 'порция', 'порции', 'порций')
+  : unit === 'стакан' ? plural(qty, 'стакан', 'стакана', 'стаканов') : unit;
 const statusLabel: Record<Booking['status'], string> = {
   requested: 'Ждёт подтверждения', confirmed: 'Подтверждено', completed: 'Завершено',
   cancelled: 'Отменено', expired: 'Истекло',
@@ -77,6 +89,9 @@ const serviceCategoryIcon: Record<ServiceCategory, IconName> = {
 const serviceStatusLabel: Record<ServiceStatus, string> = {
   open: 'Ищем мастера', assigned: 'Мастер выбран', in_progress: 'В работе', completed: 'Завершена',
   cancelled: 'Отменена', expired: 'Истекла',
+};
+const shopStatusLabel: Record<ShopOrderStatus, string> = {
+  placed: 'Ждёт подтверждения', confirmed: 'Подтверждён', ready: 'Готов к выдаче', completed: 'Выдан', cancelled: 'Отменён',
 };
 const serviceOfferStatusLabel: Record<ServiceOffer['status'], string> = {
   pending: 'Ждёт ответа', accepted: 'Выбрано', declined: 'Отклонено', withdrawn: 'Отозвано',
@@ -636,7 +651,7 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [category, district, query]);
 
-  if (open) return <PlaceScreen place={open} onBack={() => setOpen(null)} notify={notify} />;
+  if (open) return <PlaceScreen place={open} me={me} onBack={() => setOpen(null)} notify={notify} />;
 
   const firstName = me?.user.displayName.split(' ')[0];
 
@@ -733,7 +748,7 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
   </>;
 }
 
-function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () => void; notify: (text: string) => void }) {
+function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me | null; onBack: () => void; notify: (text: string) => void }) {
   const [detail, setDetail] = useState<PlaceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offer, setOffer] = useState<Offer | null>(null);
@@ -742,10 +757,12 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
   const [note, setNote] = useState('');
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cart, setCart] = useState<Record<string, number>>({});
 
-  useEffect(() => {
+  const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
   }, [place.id]);
+  useEffect(loadDetail, [loadDetail]);
 
   useEffect(() => {
     if (!offer) return;
@@ -756,6 +773,42 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
       .then(data => setSlots(data.slots))
       .catch(() => setSlots([]));
   }, [offer]);
+
+  const cartItems = Object.entries(cart).filter(([, qty]) => qty > 0);
+  const cartCount = cartItems.reduce((sum, [, qty]) => sum + qty, 0);
+  const cartTotal = cartItems.reduce((sum, [id, qty]) => {
+    const product = detail?.products.find(item => item.id === id);
+    return sum + (product ? product.price.cents * qty : 0);
+  }, 0);
+
+  function changeQty(product: ShopProduct, delta: number) {
+    if (!me) { notify('Войдите, чтобы заказать'); return; }
+    setCart(current => {
+      const next = Math.max(0, Math.min(product.stockQty, (current[product.id] ?? 0) + delta));
+      return { ...current, [product.id]: next };
+    });
+  }
+
+  async function checkout() {
+    if (!me) { notify('Войдите, чтобы заказать'); return; }
+    if (!cartItems.length) return;
+    setBusy(true);
+    try {
+      const order = await api<ShopOrder>('/api/v1/me/shop-orders', { method: 'POST', body: {
+        placeId: place.id,
+        items: cartItems.map(([productId, qty]) => ({ productId, qty })),
+        note,
+        idempotencyKey: `shop-${place.id}-${Date.now()}`,
+      } });
+      notify(`Заказ оформлен, код ${order.pickupCode}`);
+      setCart({});
+      loadDetail();
+      onBack();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'out_of_stock' ? 'Часть товаров уже разобрали' : (error as Error).message || 'Не удалось оформить');
+    } finally { setBusy(false); }
+  }
 
   async function book() {
     if (!slot) return;
@@ -797,6 +850,26 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
     {!detail && !error && <div className="skeleton-card tall" />}
 
     {detail && <>
+    {detail && detail.products.length > 0 && <>
+      <div className="panel-title"><h2>Товары</h2><span className="count-chip">{detail.products.length}</span></div>
+      <ul className="shop-products">{detail.products.map(product => {
+        const qty = cart[product.id] ?? 0;
+        return <li key={product.id}>
+          <div className="shop-product-info">
+            <strong>{product.title}</strong>
+            <span className="meta">{price(product.price)} · {product.unit} · {product.stockQty > 0 ? `осталось ${product.stockQty}` : 'нет в наличии'}</span>
+            {product.description && <span className="shop-product-note">{product.description}</span>}
+          </div>
+          <div className="stepper">
+            {qty > 0 && <button type="button" aria-label="Убрать" onClick={() => changeQty(product, -1)}>−</button>}
+            {qty > 0 && <span>{qty}</span>}
+            <button type="button" aria-label="Добавить" disabled={product.stockQty === 0 || qty >= product.stockQty}
+              onClick={() => changeQty(product, 1)}>+</button>
+          </div>
+        </li>;
+      })}</ul>
+    </>}
+
       <div className="panel-title"><h2>Услуги</h2><span className="count-chip">{detail.offers.length}</span></div>
       <ul className="offers compact">{detail.offers.map(item =>
         <li key={item.id} className={offer?.id === item.id ? 'selected' : ''}>
@@ -846,7 +919,13 @@ function PlaceScreen({ place, onBack, notify }: { place: PlaceCard; onBack: () =
       </li>)}</ul>
     </>}
 
-    {slot && offer && <div className="book-bar">
+    {cartCount > 0 ? <div className="book-bar shop-bar">
+      <div><span className="meta">{cartCount} {plural(cartCount, 'товар', 'товара', 'товаров')} · самовывоз</span>
+        <strong>{price({ cents: cartTotal, currency: 'RUB' })}</strong></div>
+      <button type="button" className="primary" disabled={busy} onClick={() => void checkout()}>
+        {busy ? 'Оформляем…' : 'Заказать'}<Icon name="chevron" size={16} />
+      </button>
+    </div> : slot && offer && <div className="book-bar">
       <div><span className="meta">{dayTime.format(new Date(slot.startsAt))}</span><strong>{price(offer.price)}</strong></div>
       <button type="button" className="primary" disabled={busy} onClick={() => void book()}>
         {busy ? 'Записываем…' : 'Записаться'}<Icon name="chevron" size={16} />
@@ -1114,8 +1193,52 @@ function PartnerServiceRequests({ notify }: { notify: (text: string) => void }) 
   </div>;
 }
 
+function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [items, setItems] = useState<ShopOrder[] | null>(null);
+  const load = useCallback(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: ShopOrder[] }>('/api/v1/me/shop-orders')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  useEffect(load, [load]);
+
+  if (!me) return <div className="empty-state"><Icon name="user" size={30} /><p>Войдите, чтобы видеть заказы</p></div>;
+
+  async function cancel(id: string) {
+    try {
+      await api(`/api/v1/me/shop-orders/${id}/cancel`, { method: 'POST' });
+      notify('Заказ отменён');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось отменить'); }
+  }
+
+  return <div className="service-panel">
+    <div className="service-intro"><div><strong>Самовывоз</strong><span className="meta">Заказ ждёт вас в заведении</span></div></div>
+    {!items && <div className="skeleton-card tall" />}
+    {items && !items.length && <div className="empty-state small">
+      <Icon name="food" size={28} /><p>Заказов пока нет</p><span className="meta">Добавьте товары в карточке заведения</span>
+    </div>}
+    {items?.map(item => <div className="service-card shop-order-card" key={item.id}>
+      <div className="service-card-head">
+        <span className={`status ${item.status}`}><span className="dot" />{shopStatusLabel[item.status]}</span>
+        <strong>{price(item.total)}</strong>
+      </div>
+      <h3>{item.place.name}</h3>
+      <p className="meta"><Icon name="pin" size={13} />{item.place.address}</p>
+      <div className="shop-order-items">{item.items.map(line => <span key={line.id}>
+        <span>{line.title} × {line.qty} {unitLabel(line.unit, line.qty)}</span><strong>{price(line.total)}</strong>
+      </span>)}</div>
+      <div className="trip-actions">
+        <span className="pickup-code"><Icon name="receipt" size={12} />Код {item.pickupCode}</span>
+        {(item.status === 'placed' || item.status === 'confirmed') &&
+          <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
+      </div>
+    </div>)}
+  </div>;
+}
+
 function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
-  const [view, setView] = useState<'bookings' | 'requests'>('bookings');
+  const [view, setView] = useState<'bookings' | 'requests' | 'shop'>('bookings');
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const load = useCallback(() => {
@@ -1139,8 +1262,9 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
     <div className="segmented">
       <button type="button" className={view === 'bookings' ? 'active' : ''} onClick={() => setView('bookings')}>Записи</button>
       <button type="button" className={view === 'requests' ? 'active' : ''} onClick={() => setView('requests')}>Выезд</button>
+      <button type="button" className={view === 'shop' ? 'active' : ''} onClick={() => setView('shop')}>Товары</button>
     </div>
-    {view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : <>
+    {view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : view === 'shop' ? <ShopOrdersPanel me={me} notify={notify} /> : <>
       {!items && <div className="skeleton-card tall" />}
       {items && !items.length && <div className="empty-state">
         <Icon name="receipt" size={30} /><p>Пока пусто</p>
@@ -1263,11 +1387,85 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     </div>}
 
     {Boolean(me.partnerIds.length) && <PartnerServiceRequests notify={notify} />}
+    {Boolean(me.partnerIds.length) && <PartnerShopOrders notify={notify} />}
     {isPartner && <PartnerPlaces notify={notify} />}
     {isDriver && <DriverPanel notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
     <Notifications />
   </section>;
+}
+
+function ProductEditor({ product, notify, reload, onClose }: {
+  product: ShopProduct; notify: (text: string) => void; reload: () => void; onClose: () => void;
+}) {
+  const [value, setValue] = useState(String(Math.round(product.price.cents / 100)));
+  const [stock, setStock] = useState(String(product.stockQty));
+  const [active, setActive] = useState(product.isActive);
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/products/${product.id}`, { method: 'PATCH', body: {
+        priceCents: Math.round(Number(value) * 100), stockQty: Number(stock), isActive: active,
+      } });
+      notify('Товар обновлён');
+      onClose();
+      reload();
+    } catch (error) { notify((error as Error).message || 'Не удалось сохранить товар'); }
+    finally { setBusy(false); }
+  }
+  return <div className="confirm compact">
+    <div className="row">
+      <label>Цена, ₽<input value={value} inputMode="decimal" onChange={event => setValue(event.target.value)} /></label>
+      <label>Остаток<input value={stock} inputMode="numeric" onChange={event => setStock(event.target.value)} /></label>
+    </div>
+    <label className="check"><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} /> Показывать в витрине</label>
+    <div className="row">
+      <button type="button" className="primary" disabled={busy} onClick={() => void save()}>Сохранить</button>
+      <button type="button" onClick={onClose}>Отмена</button>
+    </div>
+  </div>;
+}
+
+function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
+  const [items, setItems] = useState<ShopOrder[] | null>(null);
+  const load = useCallback(() => {
+    void api<{ items: ShopOrder[] }>('/api/v1/partner/shop-orders')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, []);
+  useEffect(load, [load]);
+
+  async function act(id: string, action: 'confirm' | 'ready' | 'complete' | 'cancel') {
+    try {
+      await api(`/api/v1/partner/shop-orders/${id}/status`, { method: 'POST', body: { action } });
+      notify({ confirm: 'Заказ подтверждён', ready: 'Заказ готов', complete: 'Заказ выдан', cancel: 'Заказ отменён' }[action]);
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось обновить'); }
+  }
+
+  const active = items?.filter(item => ['placed', 'confirmed', 'ready'].includes(item.status)) ?? [];
+  return <div className="partner-service">
+    <div className="panel-title"><h2>Самовывоз</h2><span className="count-chip">{items ? active.length : '—'}</span></div>
+    {!items && <div className="skeleton-card" />}
+    {items && !items.length && <p className="notice">Заказов пока нет</p>}
+    {active.map(item => <div className="service-card shop-order-card" key={item.id}>
+      <div className="service-card-head">
+        <span className={`status ${item.status}`}><span className="dot" />{shopStatusLabel[item.status]}</span>
+        <strong>{price(item.total)}</strong>
+      </div>
+      <h3>{item.client.name} · код {item.pickupCode}</h3>
+      <div className="shop-order-items">{item.items.map(line => <span key={line.id}>
+        <span>{line.title} × {line.qty} {unitLabel(line.unit, line.qty)}</span><strong>{price(line.total)}</strong>
+      </span>)}</div>
+      {item.note && <p className="service-desc">{item.note}</p>}
+      <div className="service-actions">
+        {item.status === 'placed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'confirm')}>Подтвердить</button>}
+        {item.status === 'confirmed' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'ready')}>Готов к выдаче</button>}
+        {item.status === 'ready' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан</button>}
+        {['placed', 'confirmed'].includes(item.status) && <button type="button" className="ghost-mini" onClick={() => void act(item.id, 'cancel')}>Отменить</button>}
+      </div>
+    </div>)}
+  </div>;
 }
 
 function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
@@ -1276,6 +1474,9 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [openOffer, setOpenOffer] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [draft, setDraft] = useState({ title: '', price: '1000', duration: '60' });
+  const [openProduct, setOpenProduct] = useState<string | null>(null);
+  const [addingProduct, setAddingProduct] = useState<string | null>(null);
+  const [productDraft, setProductDraft] = useState({ title: '', price: '300', stock: '10', unit: 'шт' });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -1315,6 +1516,21 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
     finally { setBusy(false); }
   }
 
+  async function addProduct(placeId: string) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/products`, { method: 'POST', body: {
+        title: productDraft.title.trim(), priceCents: Math.round(Number(productDraft.price) * 100),
+        stockQty: Number(productDraft.stock), unit: productDraft.unit.trim() || 'шт',
+      } });
+      notify('Товар добавлен');
+      setProductDraft({ title: '', price: '300', stock: '10', unit: 'шт' });
+      setAddingProduct(null);
+      load();
+    } catch (error) { notify((error as Error).message || 'Проверьте название и цену'); }
+    finally { setBusy(false); }
+  }
+
   if (!items) return <p className="notice">Загружаем карточки…</p>;
   if (!items.length) return <p className="notice">Нет доступных карточек.</p>;
 
@@ -1350,6 +1566,28 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
           {openOffer === offer.id && <OfferEditor offer={offer} notify={notify} reload={load}
             onClose={() => setOpenOffer(null)} />}
         </li>)}</ul>
+        {place.products.length > 0 && <>
+          <p className="partner-sub">Товары</p>
+          <ul className="partner-offers">{place.products.map(product => <li key={product.id}>
+            <div className="offer-line">
+              <div><strong>{product.title}</strong><span className="meta"> {price(product.price)} · остаток {product.stockQty} {product.unit}</span></div>
+              <button type="button" onClick={() => setOpenProduct(openProduct === product.id ? null : product.id)}>Изменить</button>
+            </div>
+            {openProduct === product.id && <ProductEditor product={product} notify={notify} reload={load}
+              onClose={() => setOpenProduct(null)} />}
+          </li>)}</ul>
+        </>}
+        {addingProduct === place.id ? <div className="confirm">
+          <label>Название товара<input value={productDraft.title} maxLength={120} onChange={event => setProductDraft({ ...productDraft, title: event.target.value })} /></label>
+          <div className="row">
+            <label>Цена, ₽<input value={productDraft.price} inputMode="decimal" onChange={event => setProductDraft({ ...productDraft, price: event.target.value })} /></label>
+            <label>Остаток<input value={productDraft.stock} inputMode="numeric" onChange={event => setProductDraft({ ...productDraft, stock: event.target.value })} /></label>
+          </div>
+          <div className="row">
+            <button type="button" className="primary" disabled={busy || productDraft.title.trim().length < 2} onClick={() => void addProduct(place.id)}>Добавить</button>
+            <button type="button" onClick={() => setAddingProduct(null)}>Отмена</button>
+          </div>
+        </div> : <button type="button" className="add-offer" onClick={() => { setAddingProduct(place.id); setProductDraft({ title: '', price: '300', stock: '10', unit: 'шт' }); }}>+ Товар</button>}
         {adding === place.id ? <div className="confirm">
           <label>Название услуги<input value={draft.title} maxLength={120} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
           <div className="row">
@@ -1462,6 +1700,8 @@ const noticeLabel: Record<string, string> = {
   service_offer: 'Новое предложение мастера', service_offer_accepted: 'Предложение выбрано',
   service_offer_declined: 'Предложение отклонено', service_cancelled: 'Заявка отменена',
   service_assigned: 'Мастер назначен', service_in_progress: 'Работа началась', service_completed: 'Заявка завершена',
+  shop_order_new: 'Новый заказ', shop_placed: 'Заказ оформлен', shop_confirmed: 'Заказ подтверждён',
+  shop_ready: 'Заказ готов к выдаче', shop_completed: 'Заказ выдан', shop_cancelled: 'Заказ отменён',
 };
 
 function Notifications() {

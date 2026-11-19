@@ -1198,7 +1198,7 @@ h1, h2, h3, p { margin-top: 0; }
 /* выезд на дом */
 .segmented {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
   padding: 3px;
   margin: 0 0 9px;
@@ -1321,3 +1321,52 @@ h1, h2, h3, p { margin-top: 0; }
 .partner-service .panel-title { margin-bottom: 0; }
 .partner-open { border-color: rgba(255, 214, 10, 0.13); }
 .empty-state.small { min-height: 126px; }
+
+/* витрина и самовывоз */
+.shop-products { list-style: none; margin: 0 0 11px; padding: 0; display: grid; gap: 6px; }
+.shop-products li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012)), rgba(12, 13, 17, 0.4);
+  animation: rise 0.3s ease both;
+}
+.shop-product-info { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.shop-product-info strong { font-size: 12.5px; }
+.shop-product-info .meta { display: flex; align-items: center; gap: 3px; font-size: 9.5px; color: #9aa1ab; }
+.shop-product-note { font-size: 9.5px; color: #7f8690; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepper { display: flex; align-items: center; gap: 5px; flex: none; }
+.stepper span { min-width: 17px; text-align: center; font-size: 12px; font-weight: 700; }
+.stepper button {
+  width: 29px; height: 29px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 214, 10, 0.09);
+  color: var(--yellow);
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 0.15s, background 0.2s;
+}
+.stepper button:active { transform: scale(0.9); }
+.stepper button:disabled { opacity: 0.35; color: #9aa1ab; background: rgba(255, 255, 255, 0.03); }
+.shop-bar { border-color: rgba(255, 214, 10, 0.4); }
+.shop-order-items { display: grid; gap: 2px; margin: 1px 0 0; }
+.shop-order-items span { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: #b8bec6; }
+.shop-order-items span strong { color: #eef0f3; font-weight: 600; }
+.pickup-code {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 214, 10, 0.42);
+  background: rgba(255, 214, 10, 0.06);
+  color: var(--yellow);
+  font-size: 10px; font-weight: 750; letter-spacing: 0.08em;
+}
+.shop-order-card .service-card-head strong { font-size: 15px; }
+.status.ready { color: var(--yellow); border-color: rgba(255, 214, 10, 0.32); background: rgba(255, 214, 10, 0.07); }
+.status.placed { color: var(--yellow); border-color: rgba(255, 214, 10, 0.3); background: rgba(255, 214, 10, 0.06); }
+.partner-sub { margin: 4px 0 0; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #7f8690; }
+.confirm.compact { padding: 7px; gap: 5px; }
+.confirm input[type="checkbox"], .check input[type="checkbox"] { accent-color: var(--yellow); }

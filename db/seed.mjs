@@ -28,6 +28,13 @@ const offers = [
   { place: 'glaz', title: 'Подгонка брюк', minutes: 30, price: 80000 },
 ];
 
+const products = [
+  { place: 'kuhnya', title: 'Обед дня', description: 'Суп, горячее и напиток', price: 45000, stock: 12, unit: 'порция' },
+  { place: 'kuhnya', title: 'Суп куриный', description: 'С домашней лапшой', price: 22000, stock: 8, unit: 'порция' },
+  { place: 'kuhnya', title: 'Компот', description: 'Из ягод, без сахара', price: 8000, stock: 15, unit: 'стакан' },
+  { place: 'ugol', title: 'Крем для обуви', description: 'Нейтральный, 50 мл', price: 35000, stock: 6, unit: 'шт' },
+];
+
 const demoDrivers = [
   { phone: '+79000000004', name: 'Водитель Демо', car: 'Kia Rio', plate: 'А123ВС77' },
 ];
@@ -43,6 +50,10 @@ export async function seed(pool, { reset = false } = {}) {
   try {
     await client.query('begin');
     if (reset) {
+      await client.query('delete from shop_order_events');
+      await client.query('delete from shop_order_items');
+      await client.query('delete from shop_orders');
+      await client.query('delete from products');
       await client.query('delete from service_request_events');
       await client.query('delete from service_requests');
       await client.query('delete from reviews');
@@ -113,6 +124,25 @@ export async function seed(pool, { reset = false } = {}) {
       offerIds.push({ id: rows[0].id, minutes: offer.minutes });
     }
 
+    let productCount = 0;
+    for (const product of products) {
+      const placeId = placeIds.get(product.place);
+      const found = await client.query(
+        'select id from products where place_id = $1 and title = $2 order by created_at limit 1',
+        [placeId, product.title]);
+      if (found.rows[0]) {
+        await client.query(
+          'update products set description = $2, price_cents = $3, unit = $4, is_active = true where id = $1',
+          [found.rows[0].id, product.description, product.price, product.unit]);
+      } else {
+        await client.query(
+          `insert into products (place_id, title, description, price_cents, stock_qty, unit)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [placeId, product.title, product.description, product.price, product.stock, product.unit]);
+      }
+      productCount += 1;
+    }
+
     // Окна на 10 дней вперёд: 10:00, 12:00, 14:00, 16:00, 18:00 по Москве.
     const start = new Date();
     start.setUTCHours(0, 0, 0, 0);
@@ -159,7 +189,7 @@ export async function seed(pool, { reset = false } = {}) {
     }
 
     await client.query('commit');
-    return { partners: partnerIds.size, places: placeIds.size, offers: offerIds.length, slots };
+    return { partners: partnerIds.size, places: placeIds.size, offers: offerIds.length, products: productCount, slots };
   } catch (error) {
     await client.query('rollback');
     throw error;
