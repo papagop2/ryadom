@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { demoRequest } from './demo';
 import './style.css';
@@ -19,9 +19,20 @@ type Booking = {
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
-  review: { id: string; rating: number } | null;
+  review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
 };
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
+type PartnerOffer = { id: string; title: string; description: string; durationMin: number; price: Money; isActive: boolean; slotCount: number; nextSlot: string | null };
+type PartnerPlace = {
+  id: string; name: string; category: Category; district: string; address: string; about: string;
+  phone: string | null; location: { lat: number; lng: number }; isPublished: boolean; updatedAt: string;
+  offers: PartnerOffer[];
+};
+type Notice = { id: number; kind: string; payload: Record<string, unknown>; channel: string; created_at: string; read_at: string | null; delivered_at: string | null; last_error: string | null };
+type ModerationItem = {
+  id: string; rating: number; body: string; status: string; created_at: string; moderated_at: string | null;
+  author: string; place_name: string; place_id: string; booking_id: string;
+};
 
 const categories: Record<string, string> = { all: 'Всё', salon: 'Красота', services: 'Мастера', health: 'Здоровье', food: 'Еда' };
 type Category = 'salon' | 'services' | 'health' | 'food';
@@ -105,6 +116,113 @@ function App() {
   </main>;
 }
 
+const TILE = 256;
+const CITY = { lat: 55.7558, lng: 37.6173 };
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function project(lat: number, lng: number, zoom: number) {
+  const size = TILE * 2 ** zoom;
+  const phi = clamp(lat, -85.05112878, 85.05112878) * Math.PI / 180;
+  return {
+    x: (lng + 180) / 360 * size,
+    y: (1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2 * size,
+  };
+}
+
+function unproject(x: number, y: number, zoom: number) {
+  const size = TILE * 2 ** zoom;
+  const n = Math.PI - 2 * Math.PI * y / size;
+  return { lat: 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))), lng: x / size * 360 - 180 };
+}
+
+function MapView({ items, onOpen, notify }: { items: PlaceCard[]; onOpen: (place: PlaceCard) => void; notify: (text: string) => void }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ x: number; y: number; world: { x: number; y: number } } | null>(null);
+  const centered = useRef(false);
+  const [size, setSize] = useState({ w: 360, h: 320 });
+  const [zoom, setZoom] = useState(14);
+  const [center, setCenter] = useState(CITY);
+
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setSize({ w: element.clientWidth, h: element.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (centered.current || !items.length) return;
+    setCenter({
+      lat: items.reduce((sum, item) => sum + item.location.lat, 0) / items.length,
+      lng: items.reduce((sum, item) => sum + item.location.lng, 0) / items.length,
+    });
+    centered.current = true;
+  }, [items]);
+
+  const world = project(center.lat, center.lng, zoom);
+  const left = world.x - size.w / 2;
+  const top = world.y - size.h / 2;
+  const tiles: { key: string; src: string; left: number; top: number }[] = [];
+  for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + size.w) / TILE); tx += 1) {
+    for (let ty = Math.floor(top / TILE); ty <= Math.floor((top + size.h) / TILE); ty += 1) {
+      const count = 2 ** zoom;
+      const wrapped = ((tx % count) + count) % count;
+      if (ty < 0 || ty >= count) continue;
+      tiles.push({
+        key: `${zoom}/${wrapped}/${ty}`,
+        src: `https://tile.openstreetmap.org/${zoom}/${wrapped}/${ty}.png`,
+        left: tx * TILE - left,
+        top: ty * TILE - top,
+      });
+    }
+  }
+
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button, a')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { x: event.clientX, y: event.clientY, world };
+  };
+  const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    const next = unproject(
+      drag.current.world.x - (event.clientX - drag.current.x),
+      drag.current.world.y - (event.clientY - drag.current.y), zoom);
+    setCenter({ lat: clamp(next.lat, -85, 85), lng: next.lng });
+  };
+  const endDrag = () => { drag.current = null; };
+
+  return <div className="tile-map" ref={box} aria-label="Карта заведений"
+    onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+    <div className="tile-layer">
+      {tiles.map(tile => <img key={tile.key} src={tile.src} alt="" draggable={false} loading="lazy"
+        style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
+    </div>
+    {items.map(item => {
+      const pos = project(item.location.lat, item.location.lng, zoom);
+      return <button key={item.id} type="button" className="tile-pin" title={item.name}
+        aria-label={item.name} style={{ left: `${pos.x - left}px`, top: `${pos.y - top}px` }}
+        onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(item)}>
+        <span>{item.name.slice(0, 1)}</span><em>{item.name}</em>
+      </button>;
+    })}
+    <div className="map-tools">
+      <button type="button" aria-label="Приблизить" onClick={() => setZoom(value => clamp(value + 1, 11, 18))}>+</button>
+      <button type="button" aria-label="Отдалить" onClick={() => setZoom(value => clamp(value - 1, 11, 18))}>−</button>
+      <button type="button" aria-label="Где я" onClick={() => {
+        if (!navigator.geolocation) return notify('Геолокация недоступна');
+        navigator.geolocation.getCurrentPosition(
+          position => { setCenter({ lat: position.coords.latitude, lng: position.coords.longitude }); setZoom(15); },
+          () => notify('Не удалось определить положение. Карта работает без геолокации.'),
+          { timeout: 8000, maximumAge: 60000 });
+      }}>◎</button>
+    </div>
+    <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
+  </div>;
+}
+
 function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string) => void; withMap?: boolean; onPick?: () => void }) {
   const [category, setCategory] = useState<'all' | Category>('all');
   const [district, setDistrict] = useState('all');
@@ -133,19 +251,6 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
     return () => { clearTimeout(timer); controller.abort(); };
   }, [category, district, query]);
 
-  const points = useMemo(() => {
-    if (!items?.length) return [];
-    const lats = items.map(item => item.location.lat);
-    const lngs = items.map(item => item.location.lng);
-    const [minLat, maxLat] = [Math.min(...lats), Math.max(...lats)];
-    const [minLng, maxLng] = [Math.min(...lngs), Math.max(...lngs)];
-    return items.map(item => ({
-      item,
-      x: maxLng === minLng ? 50 : 8 + ((item.location.lng - minLng) / (maxLng - minLng)) * 84,
-      y: maxLat === minLat ? 50 : 92 - ((item.location.lat - minLat) / (maxLat - minLat)) * 84,
-    }));
-  }, [items]);
-
   if (open) return <PlaceScreen place={open} onBack={() => setOpen(null)} notify={notify} />;
 
   return <>
@@ -168,11 +273,7 @@ function Catalogue({ notify, withMap = false, onPick }: { notify: (text: string)
       </select>
     </div>
 
-    {withMap && <div className="map" role="img" aria-label="Схема расположения заведений">
-      {points.map(({ item, x, y }) => <button key={item.id} type="button" className="pin" style={{ left: `${x}%`, top: `${y}%` }}
-        onClick={() => setOpen(item)} title={item.name}><span>{item.name.slice(0, 1)}</span></button>)}
-      <p className="map-hint">Схема без внешней карты. Нажмите метку, чтобы открыть карточку.</p>
-    </div>}
+    {withMap && <MapView items={items ?? []} onOpen={setOpen} notify={notify} />}
 
     <section aria-labelledby="catalogue">
       <div className="section-title"><h2 id="catalogue">{withMap ? 'Рядом с вами' : 'Выбрать услугу'}</h2>
@@ -318,7 +419,7 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
       {item.status === 'completed' && !item.review && (reviewing === item.id
         ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
         : <button type="button" onClick={() => setReviewing(item.id)}>Оставить отзыв</button>)}
-      {item.review && <p className="meta">Ваша оценка: ★ {item.review.rating}</p>}
+      {item.review && <p className="meta">{item.review.status === 'pending' ? 'Отзыв на модерации' : item.review.status === 'hidden' ? 'Отзыв скрыт модератором' : `Ваша оценка: ★ ${item.review.rating}`}</p>}
     </li>)}</ul>
   </section>;
 }
@@ -337,7 +438,7 @@ function ReviewForm({ bookingId, onDone, notify }: { bookingId: string; onDone: 
     </label>
     <button type="button" className="primary" onClick={() => {
       void api('/api/v1/reviews', { method: 'POST', body: { bookingId, rating, body } })
-        .then(() => { notify('Спасибо за отзыв'); onDone(); })
+        .then(() => { notify('Отзыв отправлен на модерацию'); onDone(); })
         .catch(() => notify('Отзыв уже оставлен'));
     }}>Отправить</button>
   </div>;
@@ -350,6 +451,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
   const [name, setName] = useState('');
   const [partner, setPartner] = useState<Booking[] | null>(null);
   const isPartner = Boolean(me?.partnerIds.length) || Boolean(me?.roles.some(role => role.role === 'operator'));
+  const isOperator = Boolean(me?.roles.some(role => role.role === 'operator'));
 
   const loadPartner = useCallback(() => {
     if (!isPartner) return;
@@ -403,7 +505,225 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
             {item.status === 'confirmed' && <button type="button" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта'); loadPartner(); })}>Завершить</button>}
           </li>)}</ul>}
     </div>}
+
+    {isPartner && <PartnerPlaces notify={notify} />}
+    {isOperator && <Moderation notify={notify} />}
+    <Notifications />
   </section>;
+}
+
+function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
+  const [items, setItems] = useState<PartnerPlace[] | null>(null);
+  const [editing, setEditing] = useState<PartnerPlace | null>(null);
+  const [openOffer, setOpenOffer] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ title: '', price: '1000', duration: '60' });
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    void api<{ items: PartnerPlace[] }>('/api/v1/partner/places')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, []);
+  useEffect(load, [load]);
+
+  async function savePlace() {
+    if (!editing) return;
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${editing.id}`, { method: 'PATCH', body: {
+        name: editing.name, category: editing.category, district: editing.district,
+        address: editing.address, about: editing.about, phone: editing.phone || null,
+        isPublished: editing.isPublished, lat: editing.location.lat, lng: editing.location.lng,
+      } });
+      notify('Карточка сохранена');
+      setEditing(null);
+      load();
+    } catch { notify('Не удалось сохранить карточку'); }
+    finally { setBusy(false); }
+  }
+
+  async function addOffer(placeId: string) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/offers`, { method: 'POST', body: {
+        title: draft.title.trim(), durationMin: Number(draft.duration),
+        priceCents: Math.round(Number(draft.price) * 100),
+      } });
+      notify('Услуга добавлена');
+      setDraft({ title: '', price: '1000', duration: '60' });
+      setAdding(null);
+      load();
+    } catch { notify('Проверьте название, цену и длительность'); }
+    finally { setBusy(false); }
+  }
+
+  if (!items) return <p className="notice">Загружаем карточки…</p>;
+  if (!items.length) return <p className="notice">Нет доступных карточек.</p>;
+
+  return <div className="partner-places">
+    <div className="section-title"><h2>Мои точки</h2><span>{items.length}</span></div>
+    {items.map(place => <div className="place-editor" key={place.id}>
+      {editing?.id === place.id ? <div className="confirm">
+        <label>Название<input value={editing.name} maxLength={120} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>
+        <label>Категория<select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as Category })}>
+          {Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select></label>
+        <label>Район<input value={editing.district} maxLength={60} onChange={event => setEditing({ ...editing, district: event.target.value })} /></label>
+        <label>Адрес<input value={editing.address} maxLength={160} onChange={event => setEditing({ ...editing, address: event.target.value })} /></label>
+        <label>Описание<textarea value={editing.about} maxLength={2000} rows={3} onChange={event => setEditing({ ...editing, about: event.target.value })} /></label>
+        <label>Телефон<input value={editing.phone ?? ''} maxLength={32} inputMode="tel" onChange={event => setEditing({ ...editing, phone: event.target.value })} /></label>
+        <label className="check"><input type="checkbox" checked={editing.isPublished} onChange={event => setEditing({ ...editing, isPublished: event.target.checked })} /> Показывать в каталоге</label>
+        <div className="row">
+          <button type="button" className="primary" disabled={busy} onClick={() => void savePlace()}>Сохранить</button>
+          <button type="button" onClick={() => setEditing(null)}>Отмена</button>
+        </div>
+      </div> : <>
+        <div className="order-head">
+          <div><strong>{place.name}</strong>
+            <p className="meta">{categories[place.category]} · {place.district} · {place.address}</p></div>
+          <button type="button" onClick={() => setEditing({ ...place })}>Изменить</button>
+        </div>
+        {!place.isPublished && <p className="meta">Скрыто из каталога</p>}
+        <ul className="partner-offers">{place.offers.map(offer => <li key={offer.id}>
+          <div className="offer-line">
+            <div><strong>{offer.title}</strong><span className="meta"> {price(offer.price)} · {offer.durationMin} мин · окон: {offer.slotCount}</span></div>
+            <button type="button" onClick={() => setOpenOffer(openOffer === offer.id ? null : offer.id)}>Изменить</button>
+          </div>
+          {openOffer === offer.id && <OfferEditor offer={offer} notify={notify} reload={load}
+            onClose={() => setOpenOffer(null)} />}
+        </li>)}</ul>
+        {adding === place.id ? <div className="confirm">
+          <label>Название услуги<input value={draft.title} maxLength={120} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
+          <div className="row">
+            <label>Цена, ₽<input value={draft.price} inputMode="decimal" onChange={event => setDraft({ ...draft, price: event.target.value })} /></label>
+            <label>Минут<input value={draft.duration} inputMode="numeric" onChange={event => setDraft({ ...draft, duration: event.target.value })} /></label>
+          </div>
+          <div className="row">
+            <button type="button" className="primary" disabled={busy || draft.title.trim().length < 2} onClick={() => void addOffer(place.id)}>Добавить</button>
+            <button type="button" onClick={() => setAdding(null)}>Отмена</button>
+          </div>
+        </div> : <button type="button" className="add-offer" onClick={() => { setAdding(place.id); setDraft({ title: '', price: '1000', duration: '60' }); }}>+ Услуга</button>}
+      </>}
+    </div>)}
+  </div>;
+}
+
+function OfferEditor({ offer, notify, reload, onClose }: {
+  offer: PartnerOffer; notify: (text: string) => void; reload: () => void; onClose: () => void;
+}) {
+  const [title, setTitle] = useState(offer.title);
+  const [priceRub, setPriceRub] = useState(String(Math.round(offer.price.cents / 100)));
+  const [duration, setDuration] = useState(String(offer.durationMin));
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/offers/${offer.id}`, { method: 'PATCH', body: {
+        title, durationMin: Number(duration), priceCents: Math.round(Number(priceRub) * 100),
+      } });
+      notify('Услуга сохранена');
+      reload();
+      onClose();
+    } catch { notify('Проверьте поля услуги'); }
+    finally { setBusy(false); }
+  }
+
+  async function toggle() {
+    try {
+      await api(`/api/v1/partner/offers/${offer.id}`, { method: 'PATCH', body: { isActive: !offer.isActive } });
+      notify(offer.isActive ? 'Услуга скрыта' : 'Услуга снова доступна');
+      reload();
+    } catch { notify('Не удалось изменить услугу'); }
+  }
+
+  async function addSlots() {
+    setBusy(true);
+    try {
+      const result = await api<{ created: number }>(`/api/v1/partner/offers/${offer.id}/slots`, { method: 'POST', body: { days: 14 } });
+      notify(`Добавлено окон: ${result.created}`);
+      reload();
+    } catch { notify('Не удалось добавить окна'); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="confirm offer-edit">
+    <label>Название<input value={title} maxLength={120} onChange={event => setTitle(event.target.value)} /></label>
+    <div className="row">
+      <label>Цена, ₽<input value={priceRub} inputMode="decimal" onChange={event => setPriceRub(event.target.value)} /></label>
+      <label>Минут<input value={duration} inputMode="numeric" onChange={event => setDuration(event.target.value)} /></label>
+    </div>
+    <div className="row">
+      <button type="button" className="primary" disabled={busy} onClick={() => void save()}>Сохранить</button>
+      <button type="button" onClick={() => void toggle()}>{offer.isActive ? 'Скрыть' : 'Вернуть'}</button>
+      <button type="button" disabled={busy} onClick={() => void addSlots()}>Окна +14 дней</button>
+    </div>
+  </div>;
+}
+
+function Moderation({ notify }: { notify: (text: string) => void }) {
+  const [items, setItems] = useState<ModerationItem[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(() => {
+    void api<{ items: ModerationItem[] }>('/api/v1/operator/reviews?status=pending')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, []);
+  useEffect(load, [load]);
+
+  async function moderate(id: string, action: 'publish' | 'hide') {
+    setBusy(id);
+    try {
+      await api(`/api/v1/operator/reviews/${id}/moderate`, { method: 'POST', body: { action } });
+      notify(action === 'publish' ? 'Отзыв опубликован' : 'Отзыв скрыт');
+      load();
+    } catch { notify('Не удалось изменить отзыв'); }
+    finally { setBusy(null); }
+  }
+
+  return <div className="moderation">
+    <div className="section-title"><h2>Модерация отзывов</h2><span>{items ? items.length : '—'}</span></div>
+    {!items ? <p className="notice">Загружаем очередь…</p>
+      : !items.length ? <p className="notice">Очередь пуста.</p>
+        : <ul className="orders">{items.map(item => <li key={item.id}>
+          <div className="order-head"><strong>{item.place_name}</strong>
+            <span className="status requested">★ {item.rating}</span></div>
+          <p className="meta">{item.author} · {new Date(item.created_at).toLocaleDateString('ru-RU')}</p>
+          <p>{item.body || 'Без комментария'}</p>
+          <div className="row">
+            <button type="button" className="primary" disabled={busy === item.id} onClick={() => void moderate(item.id, 'publish')}>Опубликовать</button>
+            <button type="button" disabled={busy === item.id} onClick={() => void moderate(item.id, 'hide')}>Скрыть</button>
+          </div>
+        </li>)}</ul>}
+  </div>;
+}
+
+const noticeLabel: Record<string, string> = {
+  booking_requested: 'Запись создана', booking_new: 'Новая заявка', booking_confirmed: 'Запись подтверждена',
+  booking_completed: 'Запись завершена', booking_cancelled: 'Запись отменена',
+  review_moderated: 'Отзыв проверен', login_code: 'Код входа',
+};
+
+function Notifications() {
+  const [items, setItems] = useState<Notice[] | null>(null);
+  const load = useCallback(() => {
+    void api<{ items: Notice[] }>('/api/v1/me/notifications').then(data => setItems(data.items)).catch(() => setItems([]));
+  }, []);
+  useEffect(load, [load]);
+  const unread = items?.filter(item => !item.read_at).length ?? 0;
+
+  return <div className="notifications">
+    <div className="section-title"><h2>Уведомления</h2><span>{unread ? `${unread} новых` : 'всё прочитано'}</span></div>
+    {!items ? <p className="notice">Загружаем…</p>
+      : !items.length ? <p className="notice">Пока нет уведомлений.</p>
+        : <>
+          <ul className="notice-list">{items.slice(0, 12).map(item => <li key={item.id} className={item.read_at ? '' : 'unread'}>
+            <div><strong>{noticeLabel[item.kind] ?? item.kind}</strong>
+              <span className="meta"> {new Date(item.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>
+            <p className="meta">{String(item.payload.place ?? item.payload.status ?? item.payload.hint ?? '')}</p>
+          </li>)}</ul>
+          {unread > 0 && <button type="button" onClick={() => void api('/api/v1/me/notifications/read', { method: 'POST' }).then(load)}>Прочитать все</button>}
+        </>}
+  </div>;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

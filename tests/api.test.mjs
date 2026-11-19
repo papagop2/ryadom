@@ -54,7 +54,7 @@ async function freeSlot(placeName) {
     `select s.id, s.starts_at from availability_slots s
      join offers o on o.id = s.offer_id
      join places p on p.id = o.place_id
-     where p.name = $1 and s.starts_at > now()
+     where p.name = $1 and o.is_active and p.is_published and s.starts_at > now()
        and not exists (select 1 from bookings b where b.slot_id = s.id and b.status in ('requested','confirmed'))
      order by s.starts_at limit 1`, [placeName]);
   return rows[0];
@@ -233,4 +233,99 @@ test('сессия хранится только хешем', async (t) => {
   assert.equal(found.rowCount, 1);
   const plain = await pool.query('select 1 from sessions where token_hash = $1', [sid]);
   assert.equal(plain.rowCount, 0);
+});
+
+async function addOperatorRole(userId) {
+  await pool.query(`insert into memberships (user_id, role) values ($1, 'operator')
+    on conflict (user_id, role) do nothing`, [userId]);
+}
+
+async function completeBooking(placeName) {
+  const slot = await freeSlot(placeName);
+  const client = await login();
+  const booking = await app.inject({ method: 'POST', url: '/api/v1/bookings', headers: client.headers, payload: { slotId: slot.id } });
+  assert.equal(booking.statusCode, 201, booking.body);
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/confirm`, headers: partner.headers });
+  await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/complete`, headers: partner.headers });
+  return { client, booking: booking.json(), placeId: (await pool.query(
+    'select o.place_id from bookings b join availability_slots s on s.id=b.slot_id join offers o on o.id=s.offer_id where b.id=$1',
+    [booking.json().id])).rows[0].place_id };
+}
+
+test('отзыв ждёт модерации и публикуется только оператором', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const { client, booking } = await completeBooking('Форма');
+  const review = await app.inject({ method: 'POST', url: '/api/v1/reviews', headers: client.headers,
+    payload: { bookingId: booking.id, rating: 5, body: 'Модерация' } });
+  assert.equal(review.statusCode, 201, review.body);
+  assert.equal(review.json().status, 'pending');
+
+  const publicBefore = await app.inject(`/api/v1/places/${(await pool.query(
+    'select place_id from reviews where id=$1', [review.json().id])).rows[0].place_id}/reviews`);
+  assert.ok(!publicBefore.json().items.some(item => item.id === review.json().id));
+
+  const operator = await login();
+  await addOperatorRole(operator.userId);
+  const queue = await app.inject({ url: '/api/v1/operator/reviews?status=pending', headers: operator.headers });
+  assert.equal(queue.statusCode, 200, queue.body);
+  assert.ok(queue.json().items.some(item => item.id === review.json().id));
+
+  assert.equal((await app.inject({ method: 'POST', url: `/api/v1/operator/reviews/${review.json().id}/moderate`, headers: client.headers, payload: { action: 'publish' } })).statusCode, 403);
+  const published = await app.inject({ method: 'POST', url: `/api/v1/operator/reviews/${review.json().id}/moderate`, headers: operator.headers, payload: { action: 'publish' } });
+  assert.equal(published.statusCode, 200, published.body);
+  assert.equal(published.json().status, 'published');
+
+  const placeId = (await pool.query('select place_id from reviews where id=$1', [review.json().id])).rows[0].place_id;
+  const publicAfter = await app.inject(`/api/v1/places/${placeId}/reviews`);
+  assert.ok(publicAfter.json().items.some(item => item.id === review.json().id));
+
+  const hidden = await app.inject({ method: 'POST', url: `/api/v1/operator/reviews/${review.json().id}/moderate`, headers: operator.headers, payload: { action: 'hide' } });
+  assert.equal(hidden.statusCode, 200);
+  const publicHidden = await app.inject(`/api/v1/places/${placeId}/reviews`);
+  assert.ok(!publicHidden.json().items.some(item => item.id === review.json().id));
+});
+
+test('партнёр редактирует только свою карточку и услуги', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  const ownList = await app.inject({ url: '/api/v1/partner/places', headers: partner.headers });
+  assert.equal(ownList.statusCode, 200, ownList.body);
+  const own = ownList.json().items.find(item => item.name === 'Форма');
+  assert.ok(own);
+  assert.ok(own.offers.length >= 1);
+
+  const original = (await pool.query('select about, phone from places where id=$1', [own.id])).rows[0];
+  let createdOfferId = null;
+  try {
+    const updated = await app.inject({ method: 'PATCH', url: `/api/v1/partner/places/${own.id}`, headers: partner.headers,
+      payload: { about: 'Обновлено тестом', phone: '+79000000099' } });
+    assert.equal(updated.statusCode, 200, updated.body);
+    assert.equal(updated.json().about, 'Обновлено тестом');
+
+    const created = await app.inject({ method: 'POST', url: `/api/v1/partner/places/${own.id}/offers`, headers: partner.headers,
+      payload: { title: `Тестовая услуга ${Date.now()}`, durationMin: 30, priceCents: 50000 } });
+    assert.equal(created.statusCode, 201, created.body);
+    createdOfferId = created.json().id;
+    const slots = await app.inject({ method: 'POST', url: `/api/v1/partner/offers/${created.json().id}/slots`, headers: partner.headers,
+      payload: { days: 2, hours: [9, 11] } });
+    assert.equal(slots.statusCode, 200, slots.body);
+    assert.equal(slots.json().created, 4);
+
+    const deactivated = await app.inject({ method: 'PATCH', url: `/api/v1/partner/offers/${created.json().id}`, headers: partner.headers,
+      payload: { isActive: false } });
+    assert.equal(deactivated.statusCode, 200);
+    assert.equal(deactivated.json().isActive, false);
+
+    const outsider = await login();
+    await addPartnerRole(outsider.userId, 'Мастерская «Линия»');
+    assert.equal((await app.inject({ method: 'PATCH', url: `/api/v1/partner/places/${own.id}`, headers: outsider.headers, payload: { about: 'Чужое' } })).statusCode, 403);
+    assert.equal((await app.inject({ method: 'PATCH', url: `/api/v1/partner/offers/${own.offers[0].id}`, headers: outsider.headers, payload: { title: 'Чужое' } })).statusCode, 403);
+    assert.equal((await app.inject({ url: '/api/v1/partner/places', headers: outsider.headers })).json().items.every(item => item.name !== 'Форма'), true);
+  } finally {
+    if (createdOfferId) await pool.query('delete from offers where id=$1', [createdOfferId]);
+    await pool.query('update places set about=$2, phone=$3 where id=$1', [own.id, original.about, original.phone]);
+  }
 });

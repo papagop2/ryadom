@@ -16,7 +16,7 @@ const places = [
   { id: 'tihiy-chas', partnerId: 'p1', name: 'Тихий час', category: 'health', district: 'Заречный', address: 'ул. Речная, 8', lat: 55.7490, lng: 37.6402, about: 'Массаж и восстановление после тренировок.', phone: null },
   { id: 'kuhnya', partnerId: 'p2', name: 'Кухня на районе', category: 'food', district: 'Южный', address: 'ул. Южная, 21', lat: 55.7402, lng: 37.6154, about: 'Домашние обеды, самовывоз с 11 до 20.', phone: '+79000000011' },
   { id: 'glaz', partnerId: 'p1', name: 'Глаз да глаз', category: 'services', district: 'Северный', address: 'ул. Северная, 15', lat: 55.7801, lng: 37.6103, about: 'Мелкий ремонт одежды, подгонка по фигуре.', phone: null },
-] as const;
+];
 
 const offers = [
   { id: 'forma-cut', placeId: 'forma', title: 'Стрижка и укладка', durationMin: 60, price: 120000 },
@@ -54,14 +54,14 @@ const seedReviews: Record<string, { author: string; rating: number; body: string
 
 type DemoRole = { role: string; partner_id: string | null };
 type DemoMe = { user: { id: string; phone: string; displayName: string }; roles: DemoRole[]; partnerIds: string[] };
-type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string };
+type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
-  review: { id: string; rating: number } | null;
+  review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
 };
 
 const read = <T,>(key: string, fallback: T): T => {
@@ -82,19 +82,25 @@ const placeById = (id: string) => places.find(item => item.id === id);
 const offerById = (id: string) => offers.find(item => item.id === id);
 const money = (cents: number): Money => ({ cents, currency: 'RUB' });
 
-function reviewsFor(placeId: string, bookings: DemoBooking[] = getBookings()): DemoReview[] {
+function reviewsFor(placeId: string, bookings: DemoBooking[] = getBookings(), includePending = false): DemoReview[] {
   const seeded = (seedReviews[placeId] ?? []).map((review, index) => ({
     id: `seed-${placeId}-${index}`, rating: review.rating, body: review.body,
     author: review.author, createdAt: new Date(Date.now() - review.daysAgo * DAY).toISOString(),
+    status: 'published' as const,
   }));
   const mine = bookings
     .filter(item => item.place.id === placeId && item.review)
-    .map(item => ({ id: item.review!.id, rating: item.review!.rating, body: 'Спасибо, всё понравилось.', author: getMe()?.user.displayName ?? 'Клиент', createdAt: item.createdAt }));
-  return [...mine, ...seeded];
+    .map(item => ({ id: item.review!.id, rating: item.review!.rating, body: 'Спасибо, всё понравилось.',
+      author: getMe()?.user.displayName ?? 'Клиент', createdAt: item.createdAt, status: item.review!.status }));
+  return [...mine, ...seeded].filter(review => includePending || review.status === 'published');
+}
+
+function activeOffers(placeId: string) {
+  return offers.filter(item => item.placeId === placeId && (item as { isActive?: boolean }).isActive !== false);
 }
 
 function card(place: typeof places[number], bookings = getBookings()) {
-  const list = offers.filter(item => item.placeId === place.id);
+  const list = activeOffers(place.id);
   const reviews = reviewsFor(place.id, bookings);
   const rating = reviews.length ? reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length : null;
   return {
@@ -109,7 +115,7 @@ function card(place: typeof places[number], bookings = getBookings()) {
 
 function slotsFor(offerId: string): { id: string; startsAt: string; endsAt: string }[] {
   const offer = offerById(offerId);
-  if (!offer) return [];
+  if (!offer || (offer as { isActive?: boolean }).isActive === false) return [];
   const busy = new Set(getBookings().filter(item => item.status === 'requested' || item.status === 'confirmed').map(item => item.slot.id));
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -129,6 +135,44 @@ function slotsFor(offerId: string): { id: string; startsAt: string; endsAt: stri
 function partnerBookings(me: DemoMe): DemoBooking[] {
   const allowed = new Set<string>(places.filter(place => me.partnerIds.includes(place.partnerId)).map(place => place.id));
   return getBookings().filter(item => allowed.has(item.place.id));
+}
+
+const READ_KEY = 'rjadom.demo.read';
+
+function partnerPlaceView(place: typeof places[number]) {
+  return {
+    id: place.id, name: place.name, category: place.category as Category, district: place.district,
+    address: place.address, about: place.about, phone: place.phone,
+    location: { lat: place.lat, lng: place.lng },
+    isPublished: (place as { isPublished?: boolean }).isPublished !== false,
+    updatedAt: new Date().toISOString(),
+    offers: offers.filter(item => item.placeId === place.id).map(item => ({
+      id: item.id, title: item.title, description: '', durationMin: item.durationMin,
+      price: money(item.price), isActive: (item as { isActive?: boolean }).isActive !== false,
+      slotCount: slotsFor(item.id).length, nextSlot: slotsFor(item.id)[0]?.startsAt ?? null,
+    })),
+  };
+}
+
+function demoNotifications(me: DemoMe) {
+  const readIds = read<number[]>(READ_KEY, []);
+  const kinds: Record<DemoBooking['status'], string> = {
+    requested: 'booking_requested', confirmed: 'booking_confirmed', completed: 'booking_completed',
+    cancelled: 'booking_cancelled', expired: 'booking_cancelled',
+  };
+  const items = getBookings().slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((item, index) => {
+      const id = 1000 + index;
+      return {
+        id, kind: item.status === 'requested' && me.partnerIds.length ? 'booking_new' : kinds[item.status],
+        payload: { bookingId: item.id, place: item.place.name, status: item.status },
+        channel: 'inapp', created_at: item.createdAt,
+        read_at: readIds.includes(id) ? new Date().toISOString() : null,
+        delivered_at: null, last_error: null,
+      };
+    });
+  return items;
 }
 
 function seedBookingsOnce(me: DemoMe) {
@@ -174,6 +218,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const district = url.searchParams.get('district');
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
     const items = places
+      .filter(place => (place as { isPublished?: boolean }).isPublished !== false)
       .filter(place => (!category || place.category === category) && (!district || place.district === district))
       .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q))
       .map(place => card(place));
@@ -185,7 +230,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const place = placeById(placeMatch[1]);
     if (!place) return fail('Заведение не найдено', 'not_found');
     const bookings = getBookings();
-    const list = offers.filter(item => item.placeId === place.id).map(item => ({
+    const list = activeOffers(place.id).map(item => ({
       ...item, price: money(item.price), nextSlot: slotsFor(item.id)[0]?.startsAt ?? null,
     }));
     const base = card(place, bookings);
@@ -285,6 +330,120 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return { ok: true } as T;
   }
 
+  if (url.pathname === '/api/v1/partner/places') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (!me.partnerIds.length && !me.roles.some(role => role.role === 'operator')) return fail('Нет кабинета партнёра', 'forbidden');
+    const visible = me.partnerIds.length
+      ? places.filter(place => me.partnerIds.includes(place.partnerId))
+      : places;
+    return { items: visible.map(partnerPlaceView) } as T;
+  }
+
+  const partnerPlaceMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)$/);
+  if (partnerPlaceMatch && method === 'PATCH') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerPlaceMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша карточка', 'forbidden');
+    if (body.name !== undefined) place.name = String(body.name).slice(0, 120);
+    if (body.category !== undefined) place.category = body.category as typeof place.category;
+    if (body.district !== undefined) place.district = String(body.district).slice(0, 60);
+    if (body.address !== undefined) place.address = String(body.address).slice(0, 160);
+    if (body.about !== undefined) place.about = String(body.about).slice(0, 2000);
+    if (body.phone !== undefined) place.phone = body.phone ? String(body.phone) : null;
+    if (body.lat !== undefined) place.lat = Number(body.lat);
+    if (body.lng !== undefined) place.lng = Number(body.lng);
+    if (body.isPublished !== undefined) (place as { isPublished?: boolean }).isPublished = Boolean(body.isPublished);
+    return partnerPlaceView(place) as T;
+  }
+
+  const partnerOffersMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/offers$/);
+  if (partnerOffersMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerOffersMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша карточка', 'forbidden');
+    const title = String(body.title ?? '').trim();
+    if (title.length < 2) return fail('Укажите название', 'invalid_title');
+    offers.push({
+      id: `demo-offer-${Date.now()}`, placeId: place.id, title,
+      durationMin: Math.max(5, Number(body.durationMin) || 60),
+      price: Math.max(0, Number(body.priceCents) || 0),
+    });
+    const created = offers[offers.length - 1];
+    return partnerPlaceView(place).offers.find(item => item.id === created.id) as T;
+  }
+
+  const partnerOfferMatch = url.pathname.match(/^\/api\/v1\/partner\/offers\/([^/]+)$/);
+  if (partnerOfferMatch && method === 'PATCH') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const offer = offerById(partnerOfferMatch[1]);
+    if (!offer) return fail('Услуга не найдена', 'not_found');
+    const place = placeById(offer.placeId)!;
+    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша услуга', 'forbidden');
+    if (body.title !== undefined) offer.title = String(body.title).slice(0, 120);
+    if (body.durationMin !== undefined) offer.durationMin = Number(body.durationMin);
+    if (body.priceCents !== undefined) offer.price = Number(body.priceCents);
+    if (body.isActive !== undefined) (offer as { isActive?: boolean }).isActive = Boolean(body.isActive);
+    return partnerPlaceView(place).offers.find(item => item.id === offer.id) as T;
+  }
+
+  const partnerSlotsMatch = url.pathname.match(/^\/api\/v1\/partner\/offers\/([^/]+)\/slots$/);
+  if (partnerSlotsMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (!offerById(partnerSlotsMatch[1])) return fail('Услуга не найдена', 'not_found');
+    return { created: 0, days: Number(body.days) || 14 } as T;
+  }
+
+  if (url.pathname === '/api/v1/operator/reviews') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const status = url.searchParams.get('status') ?? 'pending';
+    const items = getBookings()
+      .filter(item => item.review && (status === 'all' || item.review.status === status))
+      .map(item => ({
+        id: item.review!.id, rating: item.review!.rating, body: 'Спасибо, всё понравилось.',
+        status: item.review!.status, created_at: item.createdAt, moderated_at: null,
+        author: 'Клиент', place_name: item.place.name,
+        place_id: item.place.id, booking_id: item.id,
+      }));
+    return { items } as T;
+  }
+
+  const moderationMatch = url.pathname.match(/^\/api\/v1\/operator\/reviews\/([^/]+)\/moderate$/);
+  if (moderationMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const items = getBookings();
+    const target = items.find(item => item.review?.id === moderationMatch[1]);
+    if (!target) return fail('Отзыв не найден', 'not_found');
+    target.review!.status = body.action === 'publish' ? 'published' : 'hidden';
+    saveBookings(items);
+    return { id: target.review!.id, status: target.review!.status } as T;
+  }
+
+  if (url.pathname === '/api/v1/me/notifications') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    return { items: demoNotifications(me) } as T;
+  }
+
+  if (url.pathname === '/api/v1/me/notifications/read' && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const current = demoNotifications(me);
+    const readIds = read<number[]>(READ_KEY, []);
+    if (body.id) readIds.push(Number(body.id));
+    else current.forEach(item => readIds.push(item.id));
+    write(READ_KEY, [...new Set(readIds)]);
+    return { ok: true } as T;
+  }
+
   if (url.pathname === '/api/v1/partner/bookings') {
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
@@ -298,9 +457,9 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const target = items.find(item => item.id === String(body.bookingId ?? ''));
     if (!target) return fail('Запись не найдена', 'not_found');
     if (target.review) return fail('Отзыв уже оставлен', 'already_reviewed');
-    target.review = { id: `r-${Date.now()}`, rating: Number(body.rating) || 5 };
+    target.review = { id: `r-${Date.now()}`, rating: Number(body.rating) || 5, status: 'pending' };
     saveBookings(items);
-    return { ok: true } as T;
+    return { ok: true, status: 'pending' } as T;
   }
 
   return fail('Демо-метод не найден', 'not_found');

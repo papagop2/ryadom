@@ -35,6 +35,17 @@ function requireRole(request, ...roles) {
 
 const partnerIdsOf = (auth) => auth.roles.filter(r => r.role === 'partner' && r.partner_id).map(r => r.partner_id);
 const isOperator = (auth) => auth.roles.some(r => r.role === 'operator');
+const canManagePartner = (auth, partnerId) => isOperator(auth) || partnerIdsOf(auth).includes(partnerId);
+
+async function refreshPlaceRating(client, placeId) {
+  await client.query(
+    `update places p set
+       rating_avg = (select round(avg(rating)::numeric, 2) from reviews
+                     where place_id = p.id and status = 'published'),
+       rating_count = (select count(*)::int from reviews
+                       where place_id = p.id and status = 'published')
+     where p.id = $1`, [placeId]);
+}
 
 const money = (cents, currency = 'RUB') => ({ cents, currency });
 
@@ -56,7 +67,7 @@ function bookingView(row) {
     slot: { id: row.slot_id, startsAt: row.starts_at, endsAt: row.ends_at },
     offer: { id: row.offer_id, title: row.offer_title, durationMin: row.duration_min },
     place: { id: row.place_id, name: row.place_name, address: row.place_address, district: row.place_district },
-    review: row.review_id ? { id: row.review_id, rating: row.review_rating } : null,
+    review: row.review_id ? { id: row.review_id, rating: row.review_rating, status: row.review_status } : null,
   };
 }
 
@@ -65,7 +76,7 @@ const BOOKING_SELECT = `
          s.id as slot_id, s.starts_at, s.ends_at,
          o.id as offer_id, o.title as offer_title, o.duration_min,
          p.id as place_id, p.name as place_name, p.address as place_address, p.district as place_district,
-         r.id as review_id, r.rating as review_rating
+         r.id as review_id, r.rating as review_rating, r.status as review_status
   from bookings b
   join availability_slots s on s.id = b.slot_id
   join offers o on o.id = s.offer_id
@@ -537,6 +548,173 @@ export function routes(app, { pool, demoLogin = false }) {
     return { items: rows };
   });
 
+  // ---- кабинет партнёра: карточки, услуги и расписание ----
+  async function loadPlaceForManager(auth, placeId, client = pool) {
+    const { rows } = await client.query(
+      'select id, partner_id from places where id = $1', [placeId]);
+    if (!rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    if (!canManagePartner(auth, rows[0].partner_id)) fail(403, 'forbidden', 'Это не ваша карточка');
+    return rows[0];
+  }
+
+  async function loadOfferForManager(auth, offerId, client = pool) {
+    const { rows } = await client.query(
+      `select o.id, o.place_id, p.partner_id from offers o
+       join places p on p.id = o.place_id where o.id = $1`, [offerId]);
+    if (!rows[0]) fail(404, 'offer_not_found', 'Услуга не найдена');
+    if (!canManagePartner(auth, rows[0].partner_id)) fail(403, 'forbidden', 'Это не ваша услуга');
+    return rows[0];
+  }
+
+  async function partnerPlaceView(client, placeId) {
+    const place = await client.query(
+      `select id, name, category, district, address, about, phone, lat, lng, is_published, updated_at
+       from places where id = $1`, [placeId]);
+    if (!place.rows[0]) return null;
+    const p = place.rows[0];
+    const offers = await client.query(
+      `select o.id, o.title, o.description, o.duration_min, o.price_cents, o.currency, o.is_active,
+              (select count(*)::int from availability_slots s where s.offer_id = o.id and s.starts_at > now()) as slot_count,
+              (select min(s.starts_at) from availability_slots s where s.offer_id = o.id and s.starts_at > now()) as next_slot
+       from offers o where o.place_id = $1 order by o.created_at`, [p.id]);
+    return {
+      id: p.id, name: p.name, category: p.category, district: p.district, address: p.address,
+      about: p.about, phone: p.phone, location: { lat: Number(p.lat), lng: Number(p.lng) },
+      isPublished: p.is_published, updatedAt: p.updated_at,
+      offers: offers.rows.map(o => ({
+        id: o.id, title: o.title, description: o.description, durationMin: o.duration_min,
+        price: money(o.price_cents, o.currency), isActive: o.is_active,
+        slotCount: o.slot_count, nextSlot: o.next_slot,
+      })),
+    };
+  }
+
+  app.get('/api/v1/partner/places', async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const ids = isOperator(auth) ? null : partnerIdsOf(auth);
+    const { rows } = await pool.query(
+      `select id from places
+       where $1::uuid[] is null or partner_id = any($1::uuid[])
+       order by name`, [ids]);
+    const items = [];
+    for (const row of rows) items.push(await partnerPlaceView(pool, row.id));
+    reply.header('Cache-Control', 'no-store');
+    return { items };
+  });
+
+  app.patch('/api/v1/partner/places/:id', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        name: { type: 'string', minLength: 1, maxLength: 120 },
+        category: { type: 'string', enum: CATEGORIES },
+        district: { type: 'string', minLength: 1, maxLength: 60 },
+        address: { type: 'string', minLength: 1, maxLength: 160 },
+        about: { type: 'string', maxLength: 2000 },
+        phone: { anyOf: [{ type: 'string', maxLength: 32 }, { type: 'null' }] },
+        lat: { type: 'number', minimum: -90, maximum: 90 },
+        lng: { type: 'number', minimum: -180, maximum: 180 },
+        isPublished: { type: 'boolean' },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    await loadPlaceForManager(auth, uuidParam(request));
+    const columns = { name: 'name', category: 'category', district: 'district', address: 'address',
+      about: 'about', phone: 'phone', lat: 'lat', lng: 'lng', isPublished: 'is_published' };
+    const updates = [];
+    const values = [];
+    for (const [key, column] of Object.entries(columns)) {
+      if (!(key in request.body)) continue;
+      values.push(request.body[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+    if (!updates.length) fail(400, 'empty_update', 'Нет полей для изменения');
+    values.push(uuidParam(request));
+    await pool.query(
+      `update places set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
+    return partnerPlaceView(pool, uuidParam(request));
+  });
+
+  app.post('/api/v1/partner/places/:id/offers', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['title', 'durationMin', 'priceCents'],
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 120 },
+        description: { type: 'string', maxLength: 1000 },
+        durationMin: { type: 'integer', minimum: 5, maximum: 600 },
+        priceCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    await loadPlaceForManager(auth, uuidParam(request));
+    const { title, description = '', durationMin, priceCents } = request.body;
+    const { rows } = await pool.query(
+      `insert into offers (place_id, title, description, duration_min, price_cents)
+       values ($1, $2, $3, $4, $5) returning id`, [uuidParam(request), title, description, durationMin, priceCents]);
+    reply.code(201);
+    return (await partnerPlaceView(pool, uuidParam(request))).offers.find(o => o.id === rows[0].id);
+  });
+
+  app.patch('/api/v1/partner/offers/:id', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 120 },
+        description: { type: 'string', maxLength: 1000 },
+        durationMin: { type: 'integer', minimum: 5, maximum: 600 },
+        priceCents: { type: 'integer', minimum: 0, maximum: 100000000 },
+        isActive: { type: 'boolean' },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const offer = await loadOfferForManager(auth, uuidParam(request));
+    const columns = { title: 'title', description: 'description', durationMin: 'duration_min',
+      priceCents: 'price_cents', isActive: 'is_active' };
+    const updates = [];
+    const values = [];
+    for (const [key, column] of Object.entries(columns)) {
+      if (!(key in request.body)) continue;
+      values.push(request.body[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+    if (!updates.length) fail(400, 'empty_update', 'Нет полей для изменения');
+    values.push(offer.id);
+    await pool.query(
+      `update offers set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
+    return (await partnerPlaceView(pool, offer.place_id)).offers.find(o => o.id === offer.id);
+  });
+
+  app.post('/api/v1/partner/offers/:id/slots', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        days: { type: 'integer', minimum: 1, maximum: 30 },
+        hours: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'integer', minimum: 0, maximum: 23 } },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const offer = await loadOfferForManager(auth, uuidParam(request));
+    const days = request.body.days ?? 14;
+    const hours = request.body.hours ?? [10, 12, 14, 16, 18];
+    const { rows } = await pool.query(
+      `insert into availability_slots (offer_id, starts_at, ends_at)
+       select $1,
+              (d + make_interval(hours => h)) at time zone 'Europe/Moscow',
+              (d + make_interval(hours => h)) at time zone 'Europe/Moscow' + ($2::int || ' minutes')::interval
+       from generate_series(
+         (date_trunc('day', now() at time zone 'Europe/Moscow') + interval '1 day')::timestamp,
+         (date_trunc('day', now() at time zone 'Europe/Moscow') + ($3::int || ' days')::interval)::timestamp,
+         interval '1 day') d
+       cross join unnest($4::int[]) h
+       on conflict (offer_id, starts_at) do nothing
+       returning id`, [offer.id, (await pool.query('select duration_min from offers where id = $1', [offer.id])).rows[0].duration_min, days, hours]);
+    return { created: rows.length, days, hours };
+  });
+
   // ---- отзывы ----
   app.post('/api/v1/reviews', {
     schema: { body: {
@@ -562,15 +740,10 @@ export function routes(app, { pool, demoLogin = false }) {
         if (found.client_user_id !== auth.userId) fail(403, 'forbidden', 'Отзыв только по своей записи');
         if (found.status !== 'completed') fail(409, 'booking_not_completed', 'Отзыв доступен после услуги');
         const inserted = await client.query(
-          `insert into reviews (booking_id, place_id, author_user_id, rating, body)
-           values ($1, $2, $3, $4, $5) returning id, created_at`,
+          `insert into reviews (booking_id, place_id, author_user_id, rating, body, status)
+           values ($1, $2, $3, $4, $5, 'pending') returning id, created_at, status`,
           [found.id, found.place_id, auth.userId, rating, body]);
-        await client.query(
-          `update places p set rating_avg = round(r.avg::numeric, 2), rating_count = r.cnt
-           from (select avg(rating)::numeric as avg, count(*)::int as cnt from reviews
-                 where place_id = $1 and status = 'published') r
-           where p.id = $1`, [found.place_id]);
-        return { id: inserted.rows[0].id, createdAt: inserted.rows[0].created_at };
+        return { id: inserted.rows[0].id, createdAt: inserted.rows[0].created_at, status: inserted.rows[0].status };
       });
       reply.code(201);
       return review;
@@ -590,5 +763,80 @@ export function routes(app, { pool, demoLogin = false }) {
       [uuidParam(request)]);
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(r => ({ id: r.id, rating: r.rating, body: r.body, createdAt: r.created_at, author: r.display_name })) };
+  });
+
+  // ---- модерация отзывов ----
+  app.get('/api/v1/operator/reviews', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: {
+      status: { type: 'string', enum: ['pending', 'published', 'hidden', 'all'] },
+    } } },
+  }, async (request, reply) => {
+    requireRole(request, 'operator');
+    const status = request.query.status ?? 'pending';
+    const { rows } = await pool.query(
+      `select r.id, r.rating, r.body, r.status, r.created_at, r.moderated_at,
+              u.display_name as author, p.name as place_name, p.id as place_id,
+              b.id as booking_id, b.created_at as booking_created_at
+       from reviews r
+       join users u on u.id = r.author_user_id
+       join places p on p.id = r.place_id
+       join bookings b on b.id = r.booking_id
+       where ($1::text = 'all' or r.status::text = $1)
+       order by r.created_at asc limit 100`, [status]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows };
+  });
+
+  app.post('/api/v1/operator/reviews/:id/moderate', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['action'],
+      properties: { action: { type: 'string', enum: ['publish', 'hide'] } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'operator');
+    const reviewId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const found = await client.query(
+        `select id, place_id, author_user_id, status from reviews where id = $1 for update`, [reviewId]);
+      if (!found.rows[0]) fail(404, 'review_not_found', 'Отзыв не найден');
+      const review = found.rows[0];
+      const status = request.body.action === 'publish' ? 'published' : 'hidden';
+      await client.query(
+        `update reviews set status = $2, moderated_by = $3, moderated_at = now()
+         where id = $1`, [review.id, status, auth.userId]);
+      await refreshPlaceRating(client, review.place_id);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'review_moderated', $2)`,
+        [review.author_user_id, JSON.stringify({ reviewId: review.id, status })]);
+      return { id: review.id, status };
+    });
+  });
+
+  // ---- уведомления ----
+  app.get('/api/v1/me/notifications', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `select id, kind, payload, channel, created_at, read_at, delivered_at, last_error
+       from notifications where user_id = $1 order by created_at desc limit 50`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows };
+  });
+
+  app.post('/api/v1/me/notifications/read', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: { id: { type: 'integer', minimum: 1 } },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    if (request.body.id) {
+      await pool.query(
+        'update notifications set read_at = now() where id = $1 and user_id = $2 and read_at is null',
+        [request.body.id, auth.userId]);
+    } else {
+      await pool.query(
+        'update notifications set read_at = now() where user_id = $1 and read_at is null', [auth.userId]);
+    }
+    return { ok: true };
   });
 }
