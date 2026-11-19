@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node web/generate-icons.mjs && vite --config vite.config.ts",
     "api": "node api/server.mjs",
+    "serve": "node api/host.mjs",
     "build": "node web/generate-icons.mjs && tsc --noEmit && vite build --config vite.config.ts && node web/build-pwa.mjs",
     "test": "node --test tests/*.test.mjs",
     "migrate": "node db/migrate.mjs",

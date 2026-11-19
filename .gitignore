@@ -1,5 +1,10 @@
 node_modules/
 dist/
+deploy/bin/
+deploy/*.log
+deploy/service-install.*
+deploy/iis-state.txt
+backups/
 web/public/icon-*.png
 .env
 .env.*
