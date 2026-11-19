@@ -28,6 +28,10 @@ const offers = [
   { place: 'glaz', title: 'Подгонка брюк', minutes: 30, price: 80000 },
 ];
 
+const demoDrivers = [
+  { phone: '+79000000004', name: 'Водитель Демо', car: 'Kia Rio', plate: 'А123ВС77' },
+];
+
 const demoUsers = [
   { phone: '+79000000001', name: 'Клиент Демо', roles: [['client', null]] },
   { phone: '+79000000002', name: 'Партнёр Демо', roles: [['partner', 'p1'], ['client', null]] },
@@ -136,6 +140,20 @@ export async function seed(pool, { reset = false } = {}) {
            on conflict (user_id, role) do nothing`,
           [rows[0].id, role, partnerKey ? partnerIds.get(partnerKey) : null]);
       }
+    }
+
+    for (const driver of demoDrivers) {
+      const { rows } = await client.query(
+        `insert into users (phone, display_name) values ($1, $2)
+         on conflict (phone) do update set display_name = excluded.display_name returning id`,
+        [driver.phone, driver.name]);
+      await client.query(
+        `insert into memberships (user_id, role) values ($1, 'driver') on conflict (user_id, role) do nothing`,
+        [rows[0].id]);
+      await client.query(
+        `insert into driver_profiles (user_id, car_model, plate) values ($1, $2, $3)
+         on conflict (user_id) do update set car_model = excluded.car_model, plate = excluded.plate`,
+        [rows[0].id, driver.car, driver.plate]);
     }
 
     await client.query('commit');

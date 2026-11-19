@@ -83,6 +83,59 @@ const BOOKING_SELECT = `
   join places p on p.id = o.place_id
   left join reviews r on r.booking_id = b.id`;
 
+const TRIP_ACTIVE = ['requested', 'assigned', 'arrived', 'in_progress'];
+const TRIP_SELECT = `
+  select t.*, c.display_name as client_name,
+         d.display_name as driver_name, dp.car_model, dp.plate
+  from trips t
+  join users c on c.id = t.client_user_id
+  left join users d on d.id = t.driver_user_id
+  left join driver_profiles dp on dp.user_id = t.driver_user_id`;
+
+function tripView(row) {
+  return {
+    id: row.id,
+    status: row.status,
+    from: { label: row.from_label, lat: Number(row.from_lat), lng: Number(row.from_lng) },
+    to: { label: row.to_label, lat: Number(row.to_lat), lng: Number(row.to_lng) },
+    distanceKm: Number(row.distance_km),
+    durationMin: row.duration_min,
+    price: money(row.price_cents, row.currency),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    client: { id: row.client_user_id, name: row.client_name },
+    driver: row.driver_user_id ? { id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate } : null,
+  };
+}
+
+const POINT_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['label', 'lat', 'lng'],
+  properties: {
+    label: { type: 'string', minLength: 1, maxLength: 160 },
+    lat: { type: 'number', minimum: -90, maximum: 90 },
+    lng: { type: 'number', minimum: -180, maximum: 180 },
+  },
+};
+
+function distanceKm(from, to) {
+  const radius = 6371;
+  const rad = (value) => value * Math.PI / 180;
+  const dLat = rad(to.lat - from.lat);
+  const dLng = rad(to.lng - from.lng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(from.lat)) * Math.cos(rad(to.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * radius * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Тариф закрытого пилота: посадка + километры + минуты, минимум 149 ₽.
+function quoteTrip(from, to) {
+  const straight = distanceKm(from, to);
+  const km = Math.max(0.3, Math.round(straight * 1.35 * 10) / 10);
+  const minutes = Math.max(4, Math.round(km / 24 * 60 + 3));
+  const raw = 9900 + km * 2500 + minutes * 500;
+  const cents = Math.max(14900, Math.round(raw / 1000) * 1000);
+  return { distanceKm: km, durationMin: minutes, price: money(cents), currency: 'RUB' };
+}
+
 export function routes(app, { pool, demoLogin = false }) {
   // ---- сессия и CSRF ----
   app.decorateRequest('auth', null);
@@ -839,4 +892,248 @@ export function routes(app, { pool, demoLogin = false }) {
     }
     return { ok: true };
   });
+  // ---- такси ----
+  app.post('/api/v1/trips/estimate', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['from', 'to'],
+      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA },
+    } },
+  }, async (request) => quoteTrip(request.body.from, request.body.to));
+
+  app.post('/api/v1/trips', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['from', 'to'],
+      properties: {
+        from: POINT_SCHEMA,
+        to: POINT_SCHEMA,
+        idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const { from, to, idempotencyKey = null } = request.body;
+    const quote = quoteTrip(from, to);
+    const attempt = async () => withTransaction(pool, async (client) => {
+      if (idempotencyKey) {
+        const existing = await client.query(
+          `${TRIP_SELECT} where t.client_user_id = $1 and t.idempotency_key = $2`, [auth.userId, idempotencyKey]);
+        if (existing.rows[0]) return { trip: tripView(existing.rows[0]), created: false };
+      }
+      const inserted = await client.query(
+        `insert into trips (client_user_id, from_label, from_lat, from_lng, to_label, to_lat, to_lng,
+                            distance_km, duration_min, price_cents, currency, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
+        [auth.userId, from.label, from.lat, from.lng, to.label, to.lat, to.lng,
+          quote.distanceKm, quote.durationMin, quote.price.cents, quote.currency, idempotencyKey]);
+      const tripId = inserted.rows[0].id;
+      await client.query(
+        `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'requested', $2)`, [tripId, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'trip_requested', $2)`,
+        [auth.userId, JSON.stringify({ tripId, from: from.label, to: to.label, price: quote.price.cents })]);
+      const drivers = await client.query(
+        `select m.user_id from memberships m join driver_profiles dp on dp.user_id = m.user_id
+         where m.role = 'driver' and dp.is_online`);
+      for (const driver of drivers.rows) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'trip_new', $2)`,
+          [driver.user_id, JSON.stringify({ tripId, from: from.label, to: to.label, price: quote.price.cents })]);
+      }
+      const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [tripId]);
+      return { trip: tripView(view.rows[0]), created: true };
+    });
+    try {
+      const result = await attempt();
+      reply.code(result.created ? 201 : 200);
+      return result.trip;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        if (error.constraint === 'trips_client_active_uq') fail(409, 'active_trip', 'У вас уже есть активная поездка');
+        if (error.constraint === 'trips_client_idem_uq') fail(409, 'duplicate_request', 'Повтор запроса');
+      }
+      throw error;
+    }
+  });
+
+  app.get('/api/v1/me/trips', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `${TRIP_SELECT} where t.client_user_id = $1 order by t.created_at desc limit 50`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(tripView) };
+  });
+
+  app.get('/api/v1/trips/:id', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(`${TRIP_SELECT} where t.id = $1`, [uuidParam(request)]);
+    if (!rows[0]) fail(404, 'trip_not_found', 'Поездка не найдена');
+    const trip = rows[0];
+    if (trip.client_user_id !== auth.userId && trip.driver_user_id !== auth.userId && !isOperator(auth)) {
+      fail(403, 'forbidden', 'Нет доступа к поездке');
+    }
+    reply.header('Cache-Control', 'no-store');
+    return tripView(trip);
+  });
+
+  app.post('/api/v1/trips/:id/cancel', async (request) => {
+    const auth = requireUser(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+      const trip = rows[0];
+      if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+      const isClient = trip.client_user_id === auth.userId;
+      const isDriver = trip.driver_user_id === auth.userId;
+      const clientCan = isClient && ['requested', 'assigned', 'arrived'].includes(trip.status);
+      const driverCan = isDriver && ['assigned', 'arrived'].includes(trip.status);
+      if (!clientCan && !driverCan && !isOperator(auth)) fail(403, 'forbidden', 'Отменить поездку нельзя');
+      await client.query(
+        `update trips set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`, [trip.id]);
+      await client.query(
+        `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'cancelled', $2)`, [trip.id, auth.userId]);
+      const target = isClient ? trip.driver_user_id : trip.client_user_id;
+      if (target) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'trip_cancelled', $2)`,
+          [target, JSON.stringify({ tripId: trip.id })]);
+      }
+      const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
+      return tripView(view.rows[0]);
+    });
+  });
+
+  async function driverTransition(request, fromStatuses, toStatus, stampColumn) {
+    const auth = requireRole(request, 'driver', 'operator');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+      const trip = rows[0];
+      if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+      if (trip.driver_user_id !== auth.userId && !isOperator(auth)) fail(403, 'forbidden', 'Это не ваша поездка');
+      if (!fromStatuses.includes(trip.status)) fail(409, 'invalid_transition', 'Поездка уже в другом состоянии');
+      const stamp = stampColumn === 'updated_at' ? '' : `, ${stampColumn} = now()`;
+      await client.query(
+        `update trips set status = $2${stamp}, updated_at = now() where id = $1`,
+        [trip.id, toStatus]);
+      await client.query(
+        `insert into trip_events (trip_id, status, actor_user_id) values ($1, $2, $3)`, [trip.id, toStatus, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, $2, $3)`,
+        [trip.client_user_id, `trip_${toStatus}`, JSON.stringify({ tripId: trip.id, status: toStatus })]);
+      if (toStatus === 'completed' && trip.driver_user_id) {
+        await client.query(
+          'update driver_profiles set rides_count = rides_count + 1 where user_id = $1', [trip.driver_user_id]);
+      }
+      const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
+      return tripView(view.rows[0]);
+    });
+  }
+
+  app.get('/api/v1/driver/trips', async (request, reply) => {
+    const auth = requireRole(request, 'driver', 'operator');
+    const available = await pool.query(
+      `${TRIP_SELECT} where t.status = 'requested' order by t.created_at asc limit 50`);
+    const mine = await pool.query(
+      `${TRIP_SELECT} where t.driver_user_id = $1 and t.status in ('assigned', 'arrived', 'in_progress')
+       order by t.created_at desc limit 50`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { available: available.rows.map(tripView), mine: mine.rows.map(tripView) };
+  });
+
+  app.post('/api/v1/trips/:id/accept', async (request) => {
+    const auth = requireRole(request, 'driver', 'operator');
+    try {
+      return await withTransaction(pool, async (client) => {
+        const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+        const trip = rows[0];
+        if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+        if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездку уже приняли');
+        await client.query(
+          `update trips set status = 'assigned', driver_user_id = $2, accepted_at = now(), updated_at = now()
+           where id = $1`, [trip.id, auth.userId]);
+        await client.query(
+          `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'assigned', $2)`, [trip.id, auth.userId]);
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'trip_assigned', $2)`,
+          [trip.client_user_id, JSON.stringify({ tripId: trip.id, status: 'assigned' })]);
+        const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
+        return tripView(view.rows[0]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'trips_driver_active_uq') {
+        fail(409, 'driver_busy', 'У водителя уже есть активная поездка');
+      }
+      throw error;
+    }
+  });
+
+  app.post('/api/v1/trips/:id/arrive', async (request) =>
+    driverTransition(request, ['assigned'], 'arrived', 'updated_at'));
+  app.post('/api/v1/trips/:id/start', async (request) =>
+    driverTransition(request, ['arrived'], 'in_progress', 'started_at'));
+  app.post('/api/v1/trips/:id/complete', async (request) =>
+    driverTransition(request, ['in_progress'], 'completed', 'completed_at'));
+
+  app.get('/api/v1/operator/trips', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `${TRIP_SELECT} where t.status in ('requested', 'assigned', 'arrived', 'in_progress')
+       order by t.created_at asc limit 100`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(tripView) };
+  });
+
+  app.get('/api/v1/operator/drivers', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `select u.id, u.display_name, dp.car_model, dp.plate, dp.is_online,
+              (select count(*)::int from trips t where t.driver_user_id = u.id
+                and t.status in ('assigned', 'arrived', 'in_progress')) as active_trips
+       from memberships m
+       join users u on u.id = m.user_id
+       left join driver_profiles dp on dp.user_id = u.id
+       where m.role = 'driver' order by u.display_name`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows };
+  });
+
+  app.post('/api/v1/operator/trips/:id/assign', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['driverUserId'],
+      properties: { driverUserId: { type: 'string', format: 'uuid' } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'operator');
+    try {
+    return await withTransaction(pool, async (client) => {
+      const driver = await client.query(
+        `select u.id from memberships m join users u on u.id = m.user_id
+         join driver_profiles dp on dp.user_id = u.id
+         where m.role = 'driver' and u.id = $1`, [request.body.driverUserId]);
+      if (!driver.rows[0]) fail(404, 'driver_not_found', 'Водитель не найден');
+      const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+      const trip = rows[0];
+      if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+      if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездка уже назначена');
+      await client.query(
+        `update trips set status = 'assigned', driver_user_id = $2, accepted_at = now(), updated_at = now()
+         where id = $1`, [trip.id, request.body.driverUserId]);
+      await client.query(
+        `insert into trip_events (trip_id, status, actor_user_id, note) values ($1, 'assigned', $2, 'operator')`,
+        [trip.id, auth.userId]);
+      for (const userId of [trip.client_user_id, request.body.driverUserId]) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'trip_assigned', $2)`,
+          [userId, JSON.stringify({ tripId: trip.id, status: 'assigned' })]);
+      }
+      const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
+      return tripView(view.rows[0]);
+    });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'trips_driver_active_uq') {
+        fail(409, 'driver_busy', 'У водителя уже есть активная поездка');
+      }
+      throw error;
+    }
+  });
+
+
 }

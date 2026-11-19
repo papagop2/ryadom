@@ -7,6 +7,7 @@ type Money = { cents: number; currency: string };
 const ME_KEY = 'rjadom.demo.me';
 const BOOKINGS_KEY = 'rjadom.demo.bookings';
 const CODE_KEY = 'rjadom.demo.code';
+const TRIPS_KEY = 'rjadom.demo.trips';
 const DAY = 86400000;
 
 const places = [
@@ -54,6 +55,13 @@ const seedReviews: Record<string, { author: string; rating: number; body: string
 
 type DemoRole = { role: string; partner_id: string | null };
 type DemoMe = { user: { id: string; phone: string; displayName: string }; roles: DemoRole[]; partnerIds: string[] };
+type DemoTripPoint = { label: string; lat: number; lng: number };
+type DemoTripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+type DemoTrip = {
+  id: string; status: DemoTripStatus; from: DemoTripPoint; to: DemoTripPoint; distanceKm: number; durationMin: number;
+  price: Money; createdAt: string; client: { id: string; name: string };
+  driver: { id: string; name: string; car: string; plate: string } | null;
+};
 type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
@@ -77,6 +85,21 @@ const fail = (message: string, code?: string) => Promise.reject(Object.assign(ne
 const getMe = () => read<DemoMe | null>(ME_KEY, null);
 const getBookings = () => read<DemoBooking[]>(BOOKINGS_KEY, []);
 const saveBookings = (items: DemoBooking[]) => write(BOOKINGS_KEY, items);
+const getTrips = () => read<DemoTrip[]>(TRIPS_KEY, []);
+const saveTrips = (items: DemoTrip[]) => write(TRIPS_KEY, items);
+const TRIP_ACTIVE: DemoTripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
+
+function tripQuote(from: DemoTripPoint, to: DemoTripPoint) {
+  const rad = (value: number) => value * Math.PI / 180;
+  const dLat = rad(to.lat - from.lat);
+  const dLng = rad(to.lng - from.lng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(from.lat)) * Math.cos(rad(to.lat)) * Math.sin(dLng / 2) ** 2;
+  const straight = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)));
+  const distanceKm = Math.max(0.3, Math.round(straight * 1.35 * 10) / 10);
+  const durationMin = Math.max(4, Math.round(distanceKm / 24 * 60 + 3));
+  const cents = Math.max(14900, Math.round((9900 + distanceKm * 2500 + durationMin * 500) / 1000) * 1000);
+  return { distanceKm, durationMin, price: money(cents) };
+}
 
 const placeById = (id: string) => places.find(item => item.id === id);
 const offerById = (id: string) => offers.find(item => item.id === id);
@@ -268,12 +291,14 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me || me.user.phone.replace(/\D/g, '') !== digits) {
       const partner = digits.endsWith('79000000002');
       const operator = digits.endsWith('79000000003');
+      const driver = digits.endsWith('79000000004');
       const roles: DemoRole[] = [];
       if (partner) roles.push({ role: 'partner', partner_id: 'p1' });
       if (operator) roles.push({ role: 'operator', partner_id: null });
+      if (driver) roles.push({ role: 'driver', partner_id: null });
       roles.push({ role: 'client', partner_id: null });
       me = {
-        user: { id: `u-${digits.slice(-6)}`, phone: `+${digits}`, displayName: String(body.displayName || '').trim() || (partner ? 'Партнёр Демо' : operator ? 'Оператор Демо' : 'Клиент Демо') },
+        user: { id: `u-${digits.slice(-6)}`, phone: `+${digits}`, displayName: String(body.displayName || '').trim() || (partner ? 'Партнёр Демо' : operator ? 'Оператор Демо' : driver ? 'Водитель Демо' : 'Клиент Демо') },
         roles, partnerIds: partner ? ['p1'] : [],
       };
       write(ME_KEY, me);
@@ -442,6 +467,108 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     else current.forEach(item => readIds.push(item.id));
     write(READ_KEY, [...new Set(readIds)]);
     return { ok: true } as T;
+  }
+
+  if (url.pathname === '/api/v1/trips/estimate' && method === 'POST') {
+    const from = body.from as unknown as DemoTripPoint;
+    const to = body.to as unknown as DemoTripPoint;
+    if (!from || !to) return fail('Укажите маршрут', 'invalid_route');
+    return tripQuote(from, to) as T;
+  }
+
+  if (url.pathname === '/api/v1/trips' && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const from = body.from as unknown as DemoTripPoint;
+    const to = body.to as unknown as DemoTripPoint;
+    if (!from || !to) return fail('Укажите маршрут', 'invalid_route');
+    const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : null;
+    const trips = getTrips();
+    if (key) {
+      const existing = trips.find(item => item.client.id === me.user.id && (item as { key?: string }).key === key);
+      if (existing) return existing as T;
+    }
+    if (trips.some(item => item.client.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
+      return fail('У вас уже есть активная поездка', 'active_trip');
+    }
+    const quote = tripQuote(from, to);
+    const trip: DemoTrip & { key?: string | null } = {
+      id: `t-${Date.now()}`, status: 'requested', from, to, ...quote,
+      createdAt: new Date().toISOString(), client: { id: me.user.id, name: me.user.displayName }, driver: null, key,
+    };
+    saveTrips([trip, ...trips]);
+    return trip as T;
+  }
+
+  if (url.pathname === '/api/v1/me/trips') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getTrips().filter(item => item.client.id === me.user.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { items } as T;
+  }
+
+  if (url.pathname === '/api/v1/driver/trips') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'driver' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const trips = getTrips();
+    return {
+      available: trips.filter(item => item.status === 'requested' && item.client.id !== me.user.id),
+      mine: trips.filter(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status)),
+    } as T;
+  }
+
+  if (url.pathname === '/api/v1/operator/trips') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    return { items: getTrips().filter(item => TRIP_ACTIVE.includes(item.status)) } as T;
+  }
+
+  const tripActionMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/(accept|arrive|start|complete|cancel)$/);
+  if (tripActionMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const trips = getTrips();
+    const trip = trips.find(item => item.id === tripActionMatch[1]);
+    if (!trip) return fail('Поездка не найдена', 'not_found');
+    const action = tripActionMatch[2];
+    if (action === 'cancel') {
+      const isClient = trip.client.id === me.user.id;
+      const isDriver = trip.driver?.id === me.user.id;
+      const clientCan = isClient && ['requested', 'assigned', 'arrived'].includes(trip.status);
+      const driverCan = isDriver && ['assigned', 'arrived'].includes(trip.status);
+      if (!clientCan && !driverCan) return fail('Отменить поездку нельзя', 'forbidden');
+      trip.status = 'cancelled';
+    } else {
+      if (!me.roles.some(role => role.role === 'driver' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+      if (action === 'accept') {
+        if (trip.status !== 'requested') return fail('Поездку уже приняли', 'trip_taken');
+        if (getTrips().some(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
+          return fail('У вас уже есть активная поездка', 'driver_busy');
+        }
+        trip.status = 'assigned';
+        trip.driver = { id: me.user.id, name: me.user.displayName, car: 'Kia Rio', plate: 'A123ВС77' };
+      } else {
+        if (trip.driver?.id !== me.user.id) return fail('Это не ваша поездка', 'forbidden');
+        const next: Record<string, DemoTripStatus> = { arrive: 'arrived', start: 'in_progress', complete: 'completed' };
+        const allowed: Record<string, DemoTripStatus> = { arrive: 'assigned', start: 'arrived', complete: 'in_progress' };
+        if (trip.status !== allowed[action]) return fail('Поездка уже в другом состоянии', 'invalid_transition');
+        trip.status = next[action];
+      }
+    }
+    saveTrips(trips);
+    return trip as T;
+  }
+
+  const tripMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)$/);
+  if (tripMatch) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const trip = getTrips().find(item => item.id === tripMatch[1]);
+    if (!trip) return fail('Поездка не найдена', 'not_found');
+    if (trip.client.id !== me.user.id && trip.driver?.id !== me.user.id
+      && !me.roles.some(role => role.role === 'operator')) return fail('Нет доступа к поездке', 'forbidden');
+    return trip as T;
   }
 
   if (url.pathname === '/api/v1/partner/bookings') {

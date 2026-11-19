@@ -329,3 +329,123 @@ test('партнёр редактирует только свою карточк
     await pool.query('update places set about=$2, phone=$3 where id=$1', [own.id, original.about, original.phone]);
   }
 });
+
+async function loginPhone(number) {
+  const code = await app.inject({ method: 'POST', url: '/api/v1/auth/code', payload: { phone: number } });
+  assert.equal(code.statusCode, 200, code.body);
+  const session = await app.inject({ method: 'POST', url: '/api/v1/auth/session',
+    payload: { phone: number, code: code.json().demoCode } });
+  assert.equal(session.statusCode, 200, session.body);
+  const jar = cookiesOf(session);
+  return { headers: { cookie: `rjadom_sid=${jar.rjadom_sid}`, 'x-csrf-token': jar.rjadom_csrf }, userId: session.json().user.id };
+}
+
+async function makeDriver() {
+  const user = await login();
+  await pool.query("insert into memberships (user_id, role) values ($1, 'driver') on conflict (user_id, role) do nothing", [user.userId]);
+  await pool.query("insert into driver_profiles (user_id, car_model, plate) values ($1, 'Test', 'T000TT') on conflict (user_id) do nothing", [user.userId]);
+  return user;
+}
+
+test('такси: оценка, заказ, принятие водителем и завершение', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const from = { label: 'Центр', lat: 55.7601, lng: 37.6186 };
+  const to = { label: 'Аэропорт', lat: 55.9726, lng: 37.4146 };
+  const estimate = await app.inject({ method: 'POST', url: '/api/v1/trips/estimate', payload: { from, to } });
+  assert.equal(estimate.statusCode, 200, estimate.body);
+  assert.ok(estimate.json().distanceKm > 10);
+  assert.ok(estimate.json().price.cents >= 14900);
+
+  const key = `trip-${Date.now()}`;
+  const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
+    payload: { from, to, idempotencyKey: key } });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().status, 'requested');
+  const tripId = created.json().id;
+
+  const again = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
+    payload: { from, to, idempotencyKey: key } });
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.json().id, tripId);
+
+  const second = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
+    payload: { from, to, idempotencyKey: `trip2-${Date.now()}` } });
+  assert.equal(second.statusCode, 409);
+  assert.equal(second.json().error, 'active_trip');
+
+  const driver = await makeDriver();
+  const list = await app.inject({ url: '/api/v1/driver/trips', headers: driver.headers });
+  assert.ok(list.json().available.some(item => item.id === tripId));
+  const accepted = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/accept`, headers: driver.headers });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  assert.equal(accepted.json().status, 'assigned');
+  assert.equal(accepted.json().driver.id, driver.userId);
+
+  assert.equal((await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/arrive`, headers: driver.headers })).statusCode, 200);
+  assert.equal((await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/start`, headers: driver.headers })).statusCode, 200);
+  const completed = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/complete`, headers: driver.headers });
+  assert.equal(completed.statusCode, 200, completed.body);
+  assert.equal(completed.json().status, 'completed');
+
+  const mine = await app.inject({ url: '/api/v1/me/trips', headers: client.headers });
+  const seen = mine.json().items.find(item => item.id === tripId);
+  assert.equal(seen.status, 'completed');
+  assert.ok(seen.price.cents >= 14900);
+});
+
+test('такси: чужая поездка недоступна, отмена освобождает клиента', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const from = { label: 'Дом', lat: 55.749, lng: 37.64 };
+  const to = { label: 'Вокзал', lat: 55.776, lng: 37.655 };
+  const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers, payload: { from, to } });
+  assert.equal(created.statusCode, 201, created.body);
+  const tripId = created.json().id;
+
+  const stranger = await login();
+  assert.equal((await app.inject({ url: `/api/v1/trips/${tripId}`, headers: stranger.headers })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/accept`, headers: stranger.headers })).statusCode, 403);
+
+  const cancelled = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/cancel`, headers: client.headers });
+  assert.equal(cancelled.statusCode, 200, cancelled.body);
+  assert.equal(cancelled.json().status, 'cancelled');
+
+  const next = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
+    payload: { from, to, idempotencyKey: `next-${Date.now()}` } });
+  assert.equal(next.statusCode, 201, next.body);
+});
+
+test('такси: оператор назначает водителя и не даёт два активных заказа', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const operator = await login();
+  await pool.query("insert into memberships (user_id, role) values ($1, 'operator') on conflict do nothing", [operator.userId]);
+  const driver = await makeDriver();
+  const firstClient = await login();
+  const secondClient = await login();
+  const from = { label: 'Офис', lat: 55.755, lng: 37.617 };
+  const to = { label: 'Дом', lat: 55.741, lng: 37.632 };
+  const first = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: firstClient.headers, payload: { from, to } });
+  const second = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: secondClient.headers, payload: { from, to } });
+  assert.equal(first.statusCode, 201, first.body);
+  assert.equal(second.statusCode, 201, second.body);
+
+  const assigned = await app.inject({ method: 'POST', url: `/api/v1/operator/trips/${first.json().id}/assign`,
+    headers: operator.headers, payload: { driverUserId: driver.userId } });
+  assert.equal(assigned.statusCode, 200, assigned.body);
+  assert.equal(assigned.json().status, 'assigned');
+  assert.equal(assigned.json().driver.id, driver.userId);
+
+  const busy = await app.inject({ method: 'POST', url: `/api/v1/operator/trips/${second.json().id}/assign`,
+    headers: operator.headers, payload: { driverUserId: driver.userId } });
+  assert.equal(busy.statusCode, 409, busy.body);
+  assert.equal(busy.json().error, 'driver_busy');
+
+  for (const action of ['arrive', 'start', 'complete']) {
+    const moved = await app.inject({ method: 'POST', url: `/api/v1/trips/${first.json().id}/${action}`, headers: driver.headers });
+    assert.equal(moved.statusCode, 200, moved.body);
+  }
+  const nowFree = await app.inject({ method: 'POST', url: `/api/v1/operator/trips/${second.json().id}/assign`,
+    headers: operator.headers, payload: { driverUserId: driver.userId } });
+  assert.equal(nowFree.statusCode, 200, nowFree.body);
+});

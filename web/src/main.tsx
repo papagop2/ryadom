@@ -22,6 +22,14 @@ type Booking = {
   review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
 };
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
+type TripPoint = { label: string; lat: number; lng: number };
+type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+type Trip = {
+  id: string; status: TripStatus; from: TripPoint; to: TripPoint; distanceKm: number; durationMin: number;
+  price: Money; createdAt: string; client: { id: string; name: string };
+  driver: { id: string; name: string; car: string; plate: string } | null;
+};
+type Estimate = { distanceKm: number; durationMin: number; price: Money };
 type PartnerOffer = { id: string; title: string; description: string; durationMin: number; price: Money; isActive: boolean; slotCount: number; nextSlot: string | null };
 type PartnerPlace = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
@@ -40,7 +48,7 @@ const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB
 const price = (value: Money | null) => value ? money.format(value.cents / 100) : '—';
 const dayTime = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор' };
+const roleLabel: Record<string, string> = { client: 'клиент', partner: 'партнёр', operator: 'оператор', driver: 'водитель' };
 const plural = (n: number, one: string, few: string, many: string) =>
   n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many;
 const statusLabel: Record<Booking['status'], string> = {
@@ -72,7 +80,7 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
 type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
   | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
   | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
-  | 'send' | 'heart' | 'bolt' | 'dots';
+  | 'send' | 'heart' | 'bolt' | 'dots' | 'car';
 
 const iconPaths: Record<IconName, ReactNode> = {
   home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
@@ -106,6 +114,7 @@ const iconPaths: Record<IconName, ReactNode> = {
   heart: <><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 4.6-7 9-7 9z" /></>,
   bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></>,
   dots: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>,
+  car: <><path d="M5 15.5 6.6 10A3 3 0 0 1 9.5 8h5a3 3 0 0 1 2.9 2l1.6 5.5" /><path d="M4 15.5h16V19H4z" /><circle cx="7.5" cy="19" r="1.6" /><circle cx="16.5" cy="19" r="1.6" /></>,
 };
 
 function Icon({ name, size = 20, stroke = 1.8, className = '' }: {
@@ -120,11 +129,11 @@ const categoryIcon: Record<string, IconName> = {
   all: 'sparkles', salon: 'scissors', services: 'wrench', health: 'spa', food: 'food',
 };
 
-const tabIcon: Record<Tab, IconName> = { home: 'home', map: 'map', orders: 'receipt', profile: 'user' };
+const tabIcon: Record<Tab, IconName> = { home: 'home', map: 'map', taxi: 'car', orders: 'receipt', profile: 'user' };
 
-type Tab = 'home' | 'map' | 'orders' | 'profile';
+type Tab = 'home' | 'map' | 'taxi' | 'orders' | 'profile';
 const tabs: { key: Tab; label: string }[] = [
-  { key: 'home', label: 'Главная' }, { key: 'map', label: 'Карта' },
+  { key: 'home', label: 'Главная' }, { key: 'map', label: 'Карта' }, { key: 'taxi', label: 'Такси' },
   { key: 'orders', label: 'Заказы' }, { key: 'profile', label: 'Профиль' },
 ];
 
@@ -173,6 +182,7 @@ function App() {
     <div className="screen" key={tab}>
       {tab === 'home' && <Catalogue me={me} onPick={() => setTab('map')} notify={setToast} />}
       {tab === 'map' && <Catalogue me={me} withMap notify={setToast} />}
+      {tab === 'taxi' && <TaxiScreen me={me} notify={setToast} onLogin={() => setTab('profile')} />}
       {tab === 'orders' && <Orders me={me} notify={setToast} />}
       {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
     </div>
@@ -293,6 +303,276 @@ function MapView({ items, onOpen, notify }: { items: PlaceCard[]; onOpen: (place
     <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
   </div>;
 }
+
+const DESTINATIONS: TripPoint[] = [
+  { label: 'Аэропорт', lat: 55.9726, lng: 37.4146 },
+  { label: 'Вокзал', lat: 55.7761, lng: 37.6556 },
+  { label: 'Сити', lat: 55.7495, lng: 37.5390 },
+  { label: 'Парк', lat: 55.7310, lng: 37.6010 },
+];
+
+const tripStatusLabel: Record<TripStatus, string> = {
+  requested: 'Ищем водителя', assigned: 'Водитель едет', arrived: 'Водитель на месте',
+  in_progress: 'В пути', completed: 'Завершена', cancelled: 'Отменена',
+};
+const TRIP_ACTIVE: TripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
+
+function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: TripPoint | null; onPick: (point: TripPoint) => void; readOnly?: boolean }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 360, h: 220 });
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setSize({ w: element.clientWidth, h: element.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const center = to ? { lat: (from.lat + to.lat) / 2, lng: (from.lng + to.lng) / 2 } : from;
+  let zoom = 14;
+  if (to) {
+    const latSpan = Math.max(Math.abs(from.lat - to.lat), 0.002);
+    const lngSpan = Math.max(Math.abs(from.lng - to.lng), 0.002);
+    const fitX = Math.log2((size.w * 0.82) * 360 / lngSpan / TILE);
+    const mercator = 1 / Math.cos(center.lat * Math.PI / 180);
+    const fitY = Math.log2((size.h * 0.72) * 360 / latSpan / mercator / TILE);
+    zoom = clamp(Math.floor(Math.min(fitX, fitY)), 9, 15);
+  }
+  const world = project(center.lat, center.lng, zoom);
+  const left = world.x - size.w / 2;
+  const top = world.y - size.h / 2;
+  const tiles: { key: string; src: string; left: number; top: number }[] = [];
+  for (let tx = Math.floor(left / TILE); tx <= Math.floor((left + size.w) / TILE); tx += 1) {
+    for (let ty = Math.floor(top / TILE); ty <= Math.floor((top + size.h) / TILE); ty += 1) {
+      const count = 2 ** zoom;
+      const wrapped = ((tx % count) + count) % count;
+      if (ty < 0 || ty >= count) continue;
+      tiles.push({ key: `${zoom}/${wrapped}/${ty}`, src: `https://tile.openstreetmap.org/${zoom}/${wrapped}/${ty}.png`,
+        left: tx * TILE - left, top: ty * TILE - top });
+    }
+  }
+  const start = project(from.lat, from.lng, zoom);
+  const end = to ? project(to.lat, to.lng, zoom) : null;
+
+  return <div className={`tile-map trip-map${readOnly ? ' readonly' : ''}`} ref={box} aria-label="Карта маршрута"
+    onClick={event => {
+      if (readOnly) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const point = unproject(left + event.clientX - rect.left, top + event.clientY - rect.top, zoom);
+      onPick({ label: 'Точка на карте', lat: point.lat, lng: point.lng });
+    }}>
+    <div className="tile-layer">
+      {tiles.map(tile => <img key={tile.key} src={tile.src} alt="" draggable={false} loading="lazy"
+        style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
+    </div>
+    {end && <svg className="route-line" width={size.w} height={size.h} aria-hidden="true">
+      <line x1={start.x - left} y1={start.y - top} x2={end.x - left} y2={end.y - top} />
+    </svg>}
+    <span className="trip-pin from" style={{ left: `${start.x - left}px`, top: `${start.y - top}px` }}><span /></span>
+    {end && <span className="trip-pin to" style={{ left: `${end.x - left}px`, top: `${end.y - top}px` }}><span /></span>}
+    <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
+    {!readOnly && <span className="trip-map-hint">{to ? 'Ткните карту, чтобы изменить точку' : 'Ткните карту, чтобы выбрать куда'}</span>}
+  </div>;
+}
+
+function TripProgress({ status }: { status: TripStatus }) {
+  const steps: { key: TripStatus[]; label: string }[] = [
+    { key: ['requested'], label: 'Заказ' },
+    { key: ['assigned', 'arrived'], label: 'Водитель' },
+    { key: ['in_progress'], label: 'В пути' },
+    { key: ['completed'], label: 'Финиш' },
+  ];
+  const index = status === 'completed' ? 3 : steps.findIndex(step => step.key.includes(status));
+  return <div className="trip-progress" aria-label="Этапы поездки">
+    {steps.map((step, position) => <div key={step.label}
+      className={`trip-step${position < index ? ' done' : ''}${position === index ? ' current' : ''}`}>
+      <span className="trip-step-dot" />
+      <span className="trip-step-label">{step.label}</span>
+    </div>)}
+  </div>;
+}
+
+function TripSummary({ trip, children, showClient = false }: { trip: Trip; children?: ReactNode; showClient?: boolean }) {
+  return <div className="trip-card">
+    <div className="trip-card-head">
+      <span className={`status ${trip.status}`}><span className="dot" />{tripStatusLabel[trip.status]}</span>
+      <strong>{price(trip.price)}</strong>
+    </div>
+    <div className="trip-route">
+      <span className="route-dot from" />
+      <p>{trip.from.label}</p>
+      <span className="route-dot to" />
+      <p>{trip.to.label}</p>
+    </div>
+    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин</p>
+    {showClient && <p className="meta trip-client"><Icon name="user" size={13} />{trip.client.name}</p>}
+    {trip.driver && <div className="driver-line">
+      <span className="mini-avatar">{trip.driver.name.slice(0, 1)}</span>
+      <strong>{trip.driver.name}</strong>
+      <span className="meta">{trip.driver.car} · {trip.driver.plate}</span>
+    </div>}
+    {children && <div className="trip-actions">{children}</div>}
+  </div>;
+}
+
+function TaxiScreen({ me, notify, onLogin }: { me: Me | null; notify: (text: string) => void; onLogin: () => void }) {
+  const [from, setFrom] = useState<TripPoint>({ label: 'Центр', lat: CITY.lat, lng: CITY.lng });
+  const [to, setTo] = useState<TripPoint | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [trips, setTrips] = useState<Trip[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    if (!me) { setTrips([]); return; }
+    void api<{ items: Trip[] }>('/api/v1/me/trips').then(data => setTrips(data.items)).catch(() => setTrips([]));
+  }, [me]);
+  useEffect(load, [load]);
+
+  const active = trips?.find(trip => TRIP_ACTIVE.includes(trip.status)) ?? null;
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(load, 10000);
+    return () => clearInterval(timer);
+  }, [active?.id, load]);
+
+  useEffect(() => {
+    if (!to) { setEstimate(null); return; }
+    let cancelled = false;
+    void api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to } })
+      .then(data => { if (!cancelled) setEstimate(data); })
+      .catch(() => { if (!cancelled) setEstimate(null); });
+    return () => { cancelled = true; };
+  }, [from, to]);
+
+  async function order() {
+    if (!me) { onLogin(); return; }
+    if (!to) return;
+    setBusy(true);
+    try {
+      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, idempotencyKey: `taxi-${Date.now()}` } });
+      notify('Заказ создан, ищем водителя');
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'active_trip' ? 'У вас уже есть активная поездка' : 'Не удалось заказать такси');
+    } finally { setBusy(false); }
+  }
+
+  async function cancel(id: string) {
+    try {
+      await api(`/api/v1/trips/${id}/cancel`, { method: 'POST' });
+      notify('Поездка отменена');
+      load();
+    } catch { notify('Не удалось отменить'); }
+  }
+
+  const history = (trips ?? []).filter(trip => !TRIP_ACTIVE.includes(trip.status)).slice(0, 3);
+
+  return <section className="taxi">
+    <div className="taxi-head">
+      <span className="taxi-badge"><Icon name="car" size={24} /></span>
+      <div><h1>Такси</h1><span className="meta">по городу · оплата на месте</span></div>
+    </div>
+
+    {active ? <>
+      <TripSummary trip={active}>
+        {(active.status === 'requested' || active.status === 'assigned' || active.status === 'arrived') &&
+          <button type="button" className="ghost-mini" onClick={() => void cancel(active.id)}>Отменить поездку</button>}
+        {active.status === 'in_progress' && <span className="meta"><Icon name="shield" size={13} /> В пути, отмена через поддержку</span>}
+      </TripSummary>
+      <TripMap from={active.from} to={active.to} onPick={() => {}} readOnly />
+      <TripProgress status={active.status} />
+      <p className="hint">Статус обновляется автоматически. Водитель подтвердит посадку.</p>
+    </> : <>
+      <div className="route-card">
+        <span className="route-dot from" />
+        <div className="route-field">
+          <span className="meta">Откуда</span>
+          <input value={from.label} onChange={event => setFrom({ ...from, label: event.target.value })} maxLength={120} />
+        </div>
+        <button type="button" className="round-btn locate" aria-label="Моё место" onClick={() => {
+          if (!navigator.geolocation) return notify('Геолокация недоступна');
+          navigator.geolocation.getCurrentPosition(
+            position => setFrom({ label: 'Моё место', lat: position.coords.latitude, lng: position.coords.longitude }),
+            () => notify('Не удалось определить положение'), { timeout: 8000, maximumAge: 60000 });
+        }}><Icon name="pin" size={17} /></button>
+        <span className="route-dot to" />
+        <div className="route-field to">
+          <span className="meta">Куда</span>
+          <input value={to?.label ?? ''} readOnly placeholder="Выберите точку" />
+        </div>
+      </div>
+
+      <div className="dest-chips">
+        {DESTINATIONS.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
+          onClick={() => setTo(point)}><Icon name="pin" size={13} />{point.label}</button>)}
+      </div>
+
+      <TripMap from={from} to={to} onPick={setTo} />
+
+      {estimate && <div className="estimate-card">
+        <div><span className="meta"><Icon name="car" size={13} />{estimate.distanceKm.toFixed(1)} км · {estimate.durationMin} мин</span>
+          <strong>{price(estimate.price)}</strong></div>
+        <button type="button" className="primary" disabled={busy || !to} onClick={() => void order()}>
+          {busy ? 'Заказываем…' : me ? 'Заказать' : 'Войти и заказать'}<Icon name="chevron" size={16} />
+        </button>
+      </div>}
+    </>}
+
+    {history.length > 0 && <>
+      <div className="section-title"><h2>История</h2><span className="count-chip">{history.length}</span></div>
+      <div className="trip-history">{history.map(trip => <TripSummary key={trip.id} trip={trip} />)}</div>
+    </>}
+  </section>;
+}
+
+function DriverPanel({ notify }: { notify: (text: string) => void }) {
+  const [data, setData] = useState<{ available: Trip[]; mine: Trip[] } | null>(null);
+  const load = useCallback(() => {
+    void api<{ available: Trip[]; mine: Trip[] }>('/api/v1/driver/trips')
+      .then(setData).catch(() => setData({ available: [], mine: [] }));
+  }, []);
+  useEffect(load, [load]);
+  useEffect(() => {
+    const timer = setInterval(load, 8000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  async function act(id: string, action: 'accept' | 'arrive' | 'start' | 'complete') {
+    try {
+      await api(`/api/v1/trips/${id}/${action}`, { method: 'POST' });
+      const text = { accept: 'Поездка принята', arrive: 'Отмечено: на месте', start: 'Поездка начата', complete: 'Поездка завершена' };
+      notify(text[action]);
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'driver_busy' ? 'У вас уже есть активная поездка' : 'Не удалось обновить поездку');
+    }
+  }
+
+  function actions(trip: Trip) {
+    if (trip.status === 'assigned') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'arrive')}>Я на месте</button>;
+    if (trip.status === 'arrived') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'start')}>В путь</button>;
+    if (trip.status === 'in_progress') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'complete')}>Завершить</button>;
+    return null;
+  }
+
+  return <div className="driver-panel">
+    <div className="panel-title"><h2>Кабинет водителя</h2><span className="count-chip">{data ? data.mine.length : '—'}</span></div>
+    {!data ? <div className="skeleton-card" />
+      : !data.mine.length ? <p className="notice">Нет назначенных поездок</p>
+        : data.mine.map(trip => <TripSummary key={trip.id} trip={trip} showClient>{actions(trip)}</TripSummary>)}
+    {data && data.available.length > 0 && <>
+      <h3 className="sub-title">Свободные заказы</h3>
+      {data.available.map(trip => <TripSummary key={trip.id} trip={trip} showClient>
+        <button type="button" className="primary mini" onClick={() => void act(trip.id, 'accept')}>Принять</button>
+      </TripSummary>)}
+    </>}
+  </div>;
+}
+
 
 function Catalogue({ me, notify, withMap = false, onPick }: {
   me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void;
@@ -616,6 +896,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
   const [partner, setPartner] = useState<Booking[] | null>(null);
   const isPartner = Boolean(me?.partnerIds.length) || Boolean(me?.roles.some(role => role.role === 'operator'));
   const isOperator = Boolean(me?.roles.some(role => role.role === 'operator'));
+  const isDriver = Boolean(me?.roles.some(role => role.role === 'driver'));
 
   const loadPartner = useCallback(() => {
     if (!isPartner) return;
@@ -684,6 +965,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     </div>}
 
     {isPartner && <PartnerPlaces notify={notify} />}
+    {isDriver && <DriverPanel notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
     <Notifications />
   </section>;
