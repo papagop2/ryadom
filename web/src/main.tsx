@@ -228,6 +228,7 @@ function useModalHistory(open: boolean, onClose: () => void) {
     pushed.current = true;
     const onPop = () => {
       if (!pushed.current) return;
+      if (history.state?.rjadomModal === marker) return;
       pushed.current = false;
       closeRef.current();
     };
