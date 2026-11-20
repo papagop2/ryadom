@@ -41,13 +41,36 @@ async function refreshPlaceRating(client, placeId) {
   await client.query(
     `update places p set
        rating_avg = (select round(avg(rating)::numeric, 2) from reviews
-                     where place_id = p.id and status = 'published'),
+                     where place_id = p.id and status = 'published'
+                       and source = 'own' and rating is not null),
        rating_count = (select count(*)::int from reviews
-                       where place_id = p.id and status = 'published')
+                       where place_id = p.id and status = 'published'
+                         and source = 'own' and rating is not null)
      where p.id = $1`, [placeId]);
 }
 
 const money = (cents, currency = 'RUB') => ({ cents, currency });
+
+const WEEK = [['Mon', 'Пн'], ['Tue', 'Вт'], ['Wed', 'Ср'], ['Thu', 'Чт'],
+  ['Fri', 'Пт'], ['Sat', 'Сб'], ['Sun', 'Вс']];
+
+function dayHours(day) {
+  if (!day) return 'выходной';
+  if (day.is_24_hours) return 'круглосуточно';
+  const hours = (day.working_hours ?? [])
+    .map(item => `${item.from}–${item.to}`).filter(Boolean);
+  return hours.join(', ') || 'выходной';
+}
+
+function scheduleText(schedule) {
+  if (!schedule || typeof schedule !== 'object') return null;
+  const values = WEEK.map(([key]) => dayHours(schedule[key]));
+  if (values.every(value => value === values[0])) return `Ежедневно ${values[0]}`;
+  if (values.slice(0, 5).every(value => value === values[0]) && values[5] === values[6]) {
+    return `Пн–Пт ${values[0]} · Сб–Вс ${values[5]}`;
+  }
+  return WEEK.map(([, label], index) => `${label} ${values[index]}`).join(' · ');
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function uuidParam(request) {
@@ -491,6 +514,7 @@ export function routes(app, { pool, demoLogin = false }) {
     schema: { querystring: {
       type: 'object', additionalProperties: false,
       properties: {
+        city: { type: 'string', maxLength: 40 },
         category: { type: 'string', enum: CATEGORIES },
         district: { type: 'string', maxLength: 60 },
         q: { type: 'string', maxLength: 80 },
@@ -503,10 +527,12 @@ export function routes(app, { pool, demoLogin = false }) {
       },
     } },
   }, async (request, reply) => {
-    const { category, district, q, maxPrice, minRating, limit = 20, offset = 0 } = request.query;
+    const { city, category, district, q, maxPrice, minRating, limit = 20, offset = 0 } = request.query;
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.lat, p.lng, p.about,
-              p.rating_avg, p.rating_count, oo.min_price_cents, oo.offer_count,
+              p.rating_avg, p.rating_count, p.source, p.source_url, p.source_rating,
+              p.source_rating_count, p.city_slug, oo.min_price_cents, oo.offer_count,
+              count(*) over()::int as total,
               case when $7::numeric is null or $8::numeric is null
                    then null else round((point(p.lng, p.lat) <-> point($7, $8))::numeric * 111.32, 2) end as distance_km
        from places p
@@ -515,16 +541,17 @@ export function routes(app, { pool, demoLogin = false }) {
          from offers o where o.place_id = p.id and o.is_active
        ) oo on true
        where p.is_published
+         and ($10::text is null or p.city_slug = $10)
          and ($1::text is null or p.category::text = $1)
          and ($2::text is null or p.district = $2)
          and ($3::text is null or p.name ilike '%' || $3 || '%' or p.about ilike '%' || $3 || '%')
          and ($4::int is null or oo.min_price_cents <= $4)
-         and ($5::numeric is null or coalesce(p.rating_avg, 0) >= $5)
-         and oo.offer_count > 0
-       order by distance_km asc nulls last, p.rating_avg desc nulls last, p.name asc
+         and ($5::numeric is null or coalesce(p.rating_avg, p.source_rating, 0) >= $5)
+       order by distance_km asc nulls last,
+         coalesce(p.rating_avg, p.source_rating) desc nulls last, p.name asc
        limit $6 offset $9`,
       [category ?? null, district ?? null, q ?? null, maxPrice ?? null, minRating ?? null, limit,
-        request.query.lng ?? null, request.query.lat ?? null, offset]);
+        request.query.lng ?? null, request.query.lat ?? null, offset, city ?? null]);
     reply.header('Cache-Control', 'no-store');
     return {
       items: rows.map(row => ({
@@ -535,19 +562,46 @@ export function routes(app, { pool, demoLogin = false }) {
         address: row.address,
         about: row.about,
         location: { lat: Number(row.lat), lng: Number(row.lng) },
+        city: row.city_slug,
         rating: row.rating_avg === null ? null : Number(row.rating_avg),
         ratingCount: row.rating_count,
+        source: row.source === '2gis' ? {
+          name: '2ГИС', url: row.source_url,
+          rating: row.source_rating === null ? null : Number(row.source_rating),
+          ratingCount: row.source_rating_count,
+        } : null,
         priceFrom: row.min_price_cents === null ? null : money(row.min_price_cents),
         offerCount: row.offer_count,
         distanceKm: row.distance_km === null ? null : Number(row.distance_km),
       })),
+      total: rows[0]?.total ?? 0,
       limit,
       offset,
     };
   });
 
-  app.get('/api/v1/districts', async (_request, reply) => {
-    const { rows } = await pool.query('select distinct district from places where is_published order by district');
+  app.get('/api/v1/cities', async (_request, reply) => {
+    const { rows } = await pool.query(
+      `select c.slug, c.name, c.region, c.lat, c.lng,
+              count(p.id) filter (where p.is_published)::int as places
+       from cities c left join places p on p.city_slug = c.slug
+       where c.is_active group by c.slug order by places desc, c.name`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      slug: row.slug, name: row.name, region: row.region,
+      center: { lat: Number(row.lat), lng: Number(row.lng) }, places: row.places,
+    })) };
+  });
+
+  app.get('/api/v1/districts', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: {
+      city: { type: 'string', maxLength: 40 },
+    } } },
+  }, async (request, reply) => {
+    const { rows } = await pool.query(
+      `select distinct district from places
+       where is_published and ($1::text is null or city_slug = $1) order by district`,
+      [request.query.city ?? null]);
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(r => r.district) };
   });
@@ -555,7 +609,9 @@ export function routes(app, { pool, demoLogin = false }) {
   app.get('/api/v1/places/:id', async (request, reply) => {
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.about, p.phone,
-              p.lat, p.lng, p.rating_avg, p.rating_count
+              p.lat, p.lng, p.rating_avg, p.rating_count, p.city_slug, p.source,
+              p.source_url, p.source_reviews_url, p.source_rating, p.source_rating_count,
+              p.metadata, (p.partner_id is not null) as bookable
        from places p where p.id = $1 and p.is_published`, [uuidParam(request)]);
     if (!rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
     const place = rows[0];
@@ -565,10 +621,11 @@ export function routes(app, { pool, demoLogin = false }) {
                 where s.offer_id = o.id and s.starts_at > now()) as next_slot
        from offers o where o.place_id = $1 and o.is_active order by o.price_cents`, [place.id]);
     const reviews = await pool.query(
-      `select r.id, r.rating, r.body, r.created_at, u.display_name
-       from reviews r join users u on u.id = r.author_user_id
+      `select r.id, r.rating, r.body, r.created_at, r.source, r.author_name,
+              r.external_url, r.published_at, u.display_name
+       from reviews r left join users u on u.id = r.author_user_id
        where r.place_id = $1 and r.status = 'published'
-       order by r.created_at desc limit 5`, [place.id]);
+       order by (r.source = 'own') desc, r.created_at desc limit 50`, [place.id]);
     const products = await pool.query(
       `select id, title, description, price_cents, currency, stock_qty, unit, is_active
        from products where place_id = $1 and is_active order by price_cents`, [place.id]);
@@ -586,8 +643,19 @@ export function routes(app, { pool, demoLogin = false }) {
         about: place.about,
         phone: place.phone,
         location: { lat: Number(place.lat), lng: Number(place.lng) },
+        city: place.city_slug,
+        bookable: place.bookable,
         rating: place.rating_avg === null ? null : Number(place.rating_avg),
         ratingCount: place.rating_count,
+        source: place.source === '2gis' ? {
+          name: '2ГИС', url: place.source_url, reviewsUrl: place.source_reviews_url,
+          rating: place.source_rating === null ? null : Number(place.source_rating),
+          ratingCount: place.source_rating_count,
+        } : null,
+        info: {
+          schedule: scheduleText(place.metadata?.schedule),
+          sites: Array.isArray(place.metadata?.sites) ? place.metadata.sites.filter(Boolean).slice(0, 3) : [],
+        },
       },
       offers: offers.rows.map(o => ({
         id: o.id,
@@ -600,7 +668,10 @@ export function routes(app, { pool, demoLogin = false }) {
       products: products.rows.map(shopProductView),
       delivery: { available: zones.rows.length > 0, zones: zones.rows.map(deliveryZoneView) },
       reviews: reviews.rows.map(r => ({
-        id: r.id, rating: r.rating, body: r.body, createdAt: r.created_at, author: r.display_name,
+        id: r.id, source: r.source, rating: r.rating, body: r.body,
+        createdAt: r.published_at ?? r.created_at,
+        author: r.source === '2gis' ? (r.author_name || 'Гость 2ГИС') : r.display_name,
+        externalUrl: r.external_url,
       })),
     };
   });
@@ -1072,8 +1143,9 @@ export function routes(app, { pool, demoLogin = false }) {
       reply.code(201);
       return review;
     } catch (error) {
-      if (isUniqueViolation(error) && error.constraint === 'reviews_booking_id_key') {
-        fail(409, 'review_exists', 'Отзыв по этой записи уже есть');
+      if (isUniqueViolation(error) && (error.constraint === 'reviews_booking_id_key'
+        || error.constraint === 'reviews_own_place_user_uq')) {
+        fail(409, 'review_exists', 'Отзыв об этом месте уже есть');
       }
       throw error;
     }
@@ -1081,12 +1153,49 @@ export function routes(app, { pool, demoLogin = false }) {
 
   app.get('/api/v1/places/:id/reviews', async (request, reply) => {
     const { rows } = await pool.query(
-      `select r.id, r.rating, r.body, r.created_at, u.display_name
-       from reviews r join users u on u.id = r.author_user_id
-       where r.place_id = $1 and r.status = 'published' order by r.created_at desc limit 50`,
+      `select r.id, r.rating, r.body, r.created_at, r.source, r.author_name, r.external_url,
+              r.published_at, u.display_name
+       from reviews r left join users u on u.id = r.author_user_id
+       where r.place_id = $1 and r.status = 'published'
+       order by (r.source = 'own') desc, r.created_at desc limit 100`,
       [uuidParam(request)]);
     reply.header('Cache-Control', 'no-store');
-    return { items: rows.map(r => ({ id: r.id, rating: r.rating, body: r.body, createdAt: r.created_at, author: r.display_name })) };
+    return { items: rows.map(r => ({
+      id: r.id, source: r.source, rating: r.rating, body: r.body,
+      createdAt: r.published_at ?? r.created_at,
+      author: r.source === '2gis' ? (r.author_name || 'Гость 2ГИС') : r.display_name,
+      externalUrl: r.external_url,
+    })) };
+  });
+
+  app.post('/api/v1/places/:id/reviews', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['rating'],
+      properties: {
+        rating: { type: 'integer', minimum: 1, maximum: 5 },
+        body: { type: 'string', maxLength: 1000 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const placeId = uuidParam(request);
+    const { rating, body = '' } = request.body;
+    const place = await pool.query('select id from places where id = $1 and is_published', [placeId]);
+    if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    try {
+      const inserted = await pool.query(
+        `insert into reviews (booking_id, place_id, author_user_id, rating, body, status, source)
+         values (null, $1, $2, $3, $4, 'pending', 'own')
+         returning id, created_at, status`,
+        [placeId, auth.userId, rating, body]);
+      reply.code(201);
+      return { id: inserted.rows[0].id, createdAt: inserted.rows[0].created_at, status: inserted.rows[0].status };
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'reviews_own_place_user_uq') {
+        fail(409, 'review_exists', 'Вы уже оставляли отзыв об этом месте');
+      }
+      throw error;
+    }
   });
 
   // ---- модерация отзывов ----
@@ -1102,10 +1211,10 @@ export function routes(app, { pool, demoLogin = false }) {
               u.display_name as author, p.name as place_name, p.id as place_id,
               b.id as booking_id, b.created_at as booking_created_at
        from reviews r
-       join users u on u.id = r.author_user_id
+       left join users u on u.id = r.author_user_id
        join places p on p.id = r.place_id
-       join bookings b on b.id = r.booking_id
-       where ($1::text = 'all' or r.status::text = $1)
+       left join bookings b on b.id = r.booking_id
+       where r.source = 'own' and ($1::text = 'all' or r.status::text = $1)
        order by r.created_at asc limit 100`, [status]);
     reply.header('Cache-Control', 'no-store');
     return { items: rows };
@@ -1129,9 +1238,11 @@ export function routes(app, { pool, demoLogin = false }) {
         `update reviews set status = $2, moderated_by = $3, moderated_at = now()
          where id = $1`, [review.id, status, auth.userId]);
       await refreshPlaceRating(client, review.place_id);
-      await client.query(
-        `insert into notifications (user_id, kind, payload) values ($1, 'review_moderated', $2)`,
-        [review.author_user_id, JSON.stringify({ reviewId: review.id, status })]);
+      if (review.author_user_id) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'review_moderated', $2)`,
+          [review.author_user_id, JSON.stringify({ reviewId: review.id, status })]);
+      }
       return { id: review.id, status };
     });
   });

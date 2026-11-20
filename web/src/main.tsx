@@ -5,11 +5,14 @@ import { demoRequest } from './demo';
 import './style.css';
 
 type Money = { cents: number; currency: string };
+type PlaceSource = { name: string; url: string | null; reviewsUrl?: string | null; rating: number | null; ratingCount: number };
 type PlaceCard = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
-  location: { lat: number; lng: number }; rating: number | null; ratingCount: number;
+  location: { lat: number; lng: number }; city: string; rating: number | null; ratingCount: number;
+  source: PlaceSource | null;
   priceFrom: Money | null; offerCount: number; distanceKm: number | null;
 };
+type City = { slug: string; name: string; region: string; center: { lat: number; lng: number }; places: number };
 type Offer = { id: string; title: string; description: string; durationMin: number; price: Money; nextSlot: string | null };
 type ShopProduct = { id: string; title: string; description: string; price: Money; stockQty: number; unit: string; isActive: boolean };
 type ShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
@@ -37,10 +40,12 @@ type DeliveryJob = {
   };
 };
 type CourierInfo = { id: string; display_name: string; transport: string; is_online: boolean; deliveries_count: number; active_jobs: number };
-type PlaceDetail = { place: PlaceCard & { phone: string | null }; offers: Offer[]; products: ShopProduct[];
+type PlaceDetail = { place: PlaceCard & { phone: string | null; bookable: boolean;
+  info?: { schedule: string | null; sites: string[] } }; offers: Offer[]; products: ShopProduct[];
   delivery: { available: boolean; zones: DeliveryZone[] }; reviews: Review[] };
 type Slot = { id: string; startsAt: string; endsAt: string };
-type Review = { id: string; rating: number; body: string; createdAt: string; author: string };
+type Review = { id: string; source: 'own' | '2gis'; rating: number | null; body: string;
+  createdAt: string; author: string; externalUrl: string | null };
 type Booking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
@@ -359,8 +364,23 @@ function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [toast, setToast] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [citySlug, setCitySlug] = useState(() => localStorage.getItem('rjadom.city') || '');
+  const [cityOpen, setCityOpen] = useState(false);
   const [installed, setInstalled] = useState(() =>
     window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+  const city = cities.find(item => item.slug === citySlug) ?? null;
+
+  useEffect(() => {
+    void api<{ items: City[] }>('/api/v1/cities').then(data => {
+      setCities(data.items);
+      setCitySlug(current => data.items.some(item => item.slug === current) ? current : data.items[0]?.slug ?? '');
+    }).catch(() => setCities([]));
+  }, []);
+
+  useEffect(() => {
+    if (citySlug) localStorage.setItem('rjadom.city', citySlug);
+  }, [citySlug]);
 
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tab')) return;
@@ -442,9 +462,9 @@ function App() {
         <span className="brand-name">рядом<i>.</i></span>
       </a>
       <div className="appbar-right">
-        <span className="status-pill" title={DEMO ? 'Демо-режим' : 'Рядом'}>
-          <span className="pulse" aria-hidden="true" />Демоград
-        </span>
+        <button type="button" className="status-pill city-pill" title="Выбрать город" onClick={() => { haptic(); setCityOpen(true); }}>
+          <span className="pulse" aria-hidden="true" />{city?.name ?? 'Город'}<Icon name="chevronDown" size={11} />
+        </button>
         {installPrompt && !installed && <button type="button" className="icon-btn install" onClick={() => void installApp()} aria-label="Установить приложение">
           <Icon name="download" size={17} />
         </button>}
@@ -458,8 +478,8 @@ function App() {
     <PwaUpdate />
 
     <div className="screen" key={tab}>
-      {tab === 'home' && <Catalogue me={me} onPick={() => goTab('map')} notify={setToast} />}
-      {tab === 'map' && <Catalogue me={me} withMap notify={setToast} />}
+      {tab === 'home' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} onPick={() => goTab('map')} notify={setToast} />}
+      {tab === 'map' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} withMap notify={setToast} />}
       {tab === 'taxi' && <TaxiScreen me={me} notify={setToast} onLogin={() => goTab('profile')} />}
       {tab === 'orders' && <Orders me={me} notify={setToast} />}
       {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
@@ -472,6 +492,19 @@ function App() {
         <span className="dock-label">{item.label}</span>
       </button>)}
     </nav>
+
+    <Sheet open={cityOpen} onClose={() => setCityOpen(false)} title="Город">
+      <p className="sheet-hint">Сейчас пилот — Слюдянка. Новый город добавляется импортом каталога.</p>
+      <div className="sheet-options city-options">
+        {cities.map(item => <button key={item.slug} type="button"
+          className={citySlug === item.slug ? 'selected' : ''}
+          onClick={() => { haptic(); setCitySlug(item.slug); setCityOpen(false); }}>
+          <span className="city-option"><strong>{item.name}</strong><small>{item.region} · {item.places} {plural(item.places, 'место', 'места', 'мест')}</small></span>
+          {citySlug === item.slug && <Icon name="check" size={17} />}
+        </button>)}
+        {!cities.length && <p className="hint">Города загружаются…</p>}
+      </div>
+    </Sheet>
   </main>;
 }
 
@@ -494,13 +527,22 @@ function unproject(x: number, y: number, zoom: number) {
   return { lat: 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))), lng: x / size * 360 - 180 };
 }
 
-function MapView({ items, onOpen, notify }: { items: PlaceCard[]; onOpen: (place: PlaceCard) => void; notify: (text: string) => void }) {
+function MapView({ items, center: cityCenter, onOpen, notify }: {
+  items: PlaceCard[]; center: { lat: number; lng: number };
+  onOpen: (place: PlaceCard) => void; notify: (text: string) => void;
+}) {
   const box = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number; world: { x: number; y: number } } | null>(null);
   const centered = useRef(false);
   const [size, setSize] = useState({ w: 360, h: 320 });
   const [zoom, setZoom] = useState(14);
-  const [center, setCenter] = useState(CITY);
+  const [center, setCenter] = useState(cityCenter);
+
+  useEffect(() => {
+    centered.current = false;
+    setCenter(cityCenter);
+    setZoom(14);
+  }, [cityCenter.lat, cityCenter.lng]);
 
   useEffect(() => {
     const element = box.current;
@@ -964,8 +1006,8 @@ function OperatorDeliveries({ notify }: { notify: (text: string) => void }) {
   </div>;
 }
 
-function Catalogue({ me, notify, withMap = false, onPick }: {
-  me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void;
+function Catalogue({ me, notify, withMap = false, onPick, city }: {
+  me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void; city: City | null;
 }) {
   const [category, setCategory] = useState<'all' | Category>('all');
   const [district, setDistrict] = useState('all');
@@ -978,25 +1020,35 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
   const [refreshKey, setRefreshKey] = useState(0);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const pullRef = useRef(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    void api<{ items: string[] }>('/api/v1/districts').then(d => setDistricts(d.items)).catch(() => setDistricts([]));
-  }, []);
+    void api<{ items: string[] }>(`/api/v1/districts?city=${encodeURIComponent(city?.slug ?? '')}`)
+      .then(d => setDistricts(d.items)).catch(() => setDistricts([]));
+  }, [city?.slug]);
 
   useEffect(() => {
+    if (!city) return;
+    if (district !== 'all') setDistrict('all');
+  }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!city) return;
     const controller = new AbortController();
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ city: city.slug, limit: '50' });
     if (category !== 'all') params.set('category', category);
     if (district !== 'all') params.set('district', district);
     if (query.trim()) params.set('q', query.trim());
     setError(false);
     const timer = setTimeout(() => {
-      void api<{ items: PlaceCard[] }>(`/api/v1/places?${params}`, { signal: controller.signal })
+      void api<{ items: PlaceCard[]; total: number }>(`/api/v1/places?${params}`, { signal: controller.signal })
         .then(data => {
           if (controller.signal.aborted) return;
           setItems(data.items);
+          setTotal(data.total ?? data.items.length);
           setRefreshing(false);
           setPull(0);
           pullRef.current = 0;
@@ -1011,7 +1063,7 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
         });
     }, 220);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [category, district, query, refreshKey]);
+  }, [category, district, query, refreshKey, city?.slug]);
 
   useEffect(() => {
     if (open || filterOpen || refreshing) return;
@@ -1059,6 +1111,23 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
     };
   }, [open, filterOpen, refreshing]);
 
+  async function loadMore() {
+    if (!city || !items || loadingMore || items.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ city: city.slug, limit: '50', offset: String(items.length) });
+      if (category !== 'all') params.set('category', category);
+      if (district !== 'all') params.set('district', district);
+      if (query.trim()) params.set('q', query.trim());
+      const data = await api<{ items: PlaceCard[]; total: number }>(`/api/v1/places?${params}`);
+      setItems(current => current ? [...current, ...data.items] : data.items);
+      setTotal(data.total ?? data.items.length);
+      haptic(4);
+    } catch {
+      notify('Не удалось загрузить ещё');
+    } finally { setLoadingMore(false); }
+  }
+
   useModalHistory(Boolean(open), () => setOpen(null));
   if (open) return <PlaceScreen place={open} me={me} onBack={() => setOpen(null)} notify={notify} />;
 
@@ -1071,14 +1140,14 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
       <span>{refreshing ? 'Обновляем…' : pull > 56 ? 'Отпустите' : 'Потяните вниз'}</span>
     </div>
     {withMap ? <div className="map-head">
-      <span className="eyebrow"><Icon name="pin" size={14} /> Демоград</span>
-      <span className="map-count">{items ? `${items.length} мест` : '…'}</span>
+      <span className="eyebrow"><Icon name="pin" size={14} /> {city?.name ?? 'Город'}</span>
+      <span className="map-count">{total ? `${total} мест` : '…'}</span>
     </div> : <section className="spotlight">
       <div className="spotlight-copy">
-        <span className="eyebrow"><span className="pulse" aria-hidden="true" />{firstName ? `${firstName}, вы рядом` : 'Демоград · онлайн'}</span>
+        <span className="eyebrow"><span className="pulse" aria-hidden="true" />{firstName ? `${firstName}, вы рядом` : `${city?.name ?? 'Город'} · онлайн`}</span>
         <h1>Что делаем <em>сегодня?</em></h1>
         <div className="spotlight-tags">
-          <span><Icon name="bolt" size={13} /> {items ? `${items.length} рядом` : 'ищем…'}</span>
+          <span><Icon name="bolt" size={13} /> {total ? `${total} рядом` : 'ищем…'}</span>
           <span><Icon name="clock" size={13} /> свободно сейчас</span>
         </div>
       </div>
@@ -1117,12 +1186,12 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
         </button>)}
     </div>
 
-    {withMap && <MapView items={items ?? []} onOpen={setOpen} notify={notify} />}
+    {withMap && <MapView key={city?.slug} items={items ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify} />}
 
     <section aria-labelledby="catalogue">
       <div className="section-title">
         <h2 id="catalogue">{withMap ? 'На карте' : 'Рядом с вами'}</h2>
-        <span className="count-chip">{items ? items.length : '—'}</span>
+        <span className="count-chip">{total || (items ? items.length : '—')}</span>
       </div>
 
       {error ? <div className="notice" role="status">
@@ -1137,28 +1206,39 @@ function Catalogue({ me, notify, withMap = false, onPick }: {
             <p>Ничего не нашлось</p>
             <button type="button" className="ghost-mini" onClick={() => { setQuery(''); setDistrict('all'); setCategory('all'); }}>Сбросить</button>
           </div>
-            : <ul className="places">{items.map((place, index) => <li key={place.id} style={{ animationDelay: `${index * 45}ms` }}>
-              <button type="button" className="place-button" onClick={() => setOpen(place)}>
-                <span className={`cat-avatar ${place.category}`} aria-hidden="true">
-                  <Icon name={categoryIcon[place.category]} size={21} />
-                </span>
-                <span className="details">
-                  <span className="title-row">
-                    <strong className="title">{place.name}</strong>
-                    {place.rating !== null && <span className="rating"><Icon name="star" size={11} stroke={0} />{place.rating.toFixed(1)}</span>}
+            : <ul className="places">{items.map((place, index) => {
+              const rating = place.rating ?? place.source?.rating ?? null;
+              return <li key={place.id} style={{ animationDelay: `${index * 45}ms` }}>
+                <button type="button" className="place-button" onClick={() => setOpen(place)}>
+                  <span className={`cat-avatar ${place.category}`} aria-hidden="true">
+                    <Icon name={categoryIcon[place.category]} size={21} />
                   </span>
-                  <span className="sub">
-                    <span>{place.district}</span>
-                    {place.distanceKm !== null && <span>{place.distanceKm.toFixed(1)} км</span>}
-                    <span>{place.offerCount} {plural(place.offerCount, 'услуга', 'услуги', 'услуг')}</span>
+                  <span className="details">
+                    <span className="title-row">
+                      <strong className="title">{place.name}</strong>
+                      {rating !== null && <span className="rating"><Icon name="star" size={11} stroke={0} />{rating.toFixed(1)}</span>}
+                    </span>
+                    <span className="sub">
+                      <span>{place.district}</span>
+                      {place.distanceKm !== null && <span>{place.distanceKm.toFixed(1)} км</span>}
+                      {place.offerCount > 0
+                        ? <span>{place.offerCount} {plural(place.offerCount, 'услуга', 'услуги', 'услуг')}</span>
+                        : place.source ? <span className="source-note">{place.source.name}</span> : null}
+                    </span>
                   </span>
-                </span>
-                <span className="price-block">
-                  <span className="price">{price(place.priceFrom)}</span>
-                  <Icon name="chevron" size={16} />
-                </span>
-              </button>
-            </li>)}</ul>}
+                  <span className="price-block">
+                    <span className={`price${place.priceFrom === null ? ' source-price' : ''}`}>
+                      {place.priceFrom === null && place.source ? place.source.name : price(place.priceFrom)}
+                    </span>
+                    <Icon name="chevron" size={16} />
+                  </span>
+                </button>
+              </li>;
+            })}</ul>}
+      {items && total > items.length && <button type="button" className="ghost-mini wide load-more"
+        disabled={loadingMore} onClick={() => void loadMore()}>
+        {loadingMore ? 'Загружаем…' : `Показать ещё · ${total - items.length}`}
+      </button>}
     </section>
 
     <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Район">
@@ -1188,6 +1268,11 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [deliveryDistrict, setDeliveryDistrict] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewBody, setReviewBody] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewSent, setReviewSent] = useState(false);
 
   const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
@@ -1263,6 +1348,30 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     } finally { setBusy(false); }
   }
 
+  async function submitReview() {
+    if (!me) { notify('Войдите, чтобы оставить отзыв'); return; }
+    setReviewBusy(true);
+    try {
+      const result = await api<{ status?: string }>(`/api/v1/places/${place.id}/reviews`, {
+        method: 'POST', body: { rating: reviewRating, body: reviewBody.trim() },
+      });
+      setReviewOpen(false);
+      setReviewBody('');
+      if (result?.status === 'published') {
+        loadDetail();
+        notify('Спасибо! Отзыв опубликован');
+      } else {
+        setReviewSent(true);
+        notify('Отзыв отправлен на проверку');
+      }
+      haptic([8, 30, 12]);
+    } catch (error) {
+      notify((error as { code?: string }).code === 'review_exists'
+        ? 'Вы уже оставляли отзыв об этом месте'
+        : (error as Error).message || 'Не удалось отправить отзыв');
+    } finally { setReviewBusy(false); }
+  }
+
   async function book() {
     if (!slot) return;
     setBusy(true);
@@ -1288,16 +1397,33 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         <h1>{place.name}</h1>
         <span className="meta"><Icon name="pin" size={12} />{place.district} · {place.address}</span>
       </div>
-      {place.rating !== null && <span className="score"><Icon name="star" size={12} stroke={0} />{place.rating.toFixed(1)}</span>}
+      {(place.rating ?? place.source?.rating) !== null && <span className="score"><Icon name="star" size={12} stroke={0} />{(place.rating ?? place.source?.rating)!.toFixed(1)}</span>}
     </div>
 
     <div className="chips-row">
       <span className="chip"><Icon name={categoryIcon[place.category]} size={14} />{categories[place.category]}</span>
       {place.rating !== null && <span className="chip"><Icon name="heart" size={14} />{place.ratingCount} {plural(place.ratingCount, 'отзыв', 'отзыва', 'отзывов')}</span>}
+      {place.source && <a className="chip source-chip" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
+        <span className="source-badge">2ГИС</span>{place.source.rating !== null ? place.source.rating.toFixed(1) : 'карточка'}
+      </a>}
       {detail?.place.phone && <a className="chip" href={`tel:${detail.place.phone}`}><Icon name="phone" size={14} />Позвонить</a>}
+      {detail?.place.info?.sites?.[0] && <a className="chip" target="_blank" rel="noopener noreferrer"
+        href={/^https?:\/\//i.test(detail.place.info.sites[0]) ? detail.place.info.sites[0] : `https://${detail.place.info.sites[0]}`}>
+        Сайт
+      </a>}
     </div>
 
     <p className="about">{place.about}</p>
+    {detail?.place.info?.schedule && <p className="hint place-schedule">
+      <Icon name="clock" size={13} />{detail.place.info.schedule}
+    </p>}
+
+    {place.source && <a className="source-card" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
+      <span className="source-badge">2ГИС</span>
+      <span><strong>Данные и отзывы — 2ГИС</strong>
+        <small>{place.source.ratingCount} {plural(place.source.ratingCount, 'отзыв', 'отзыва', 'отзывов')} · открыть карточку организации</small></span>
+      <Icon name="chevron" size={16} />
+    </a>}
 
     {error && <div className="notice"><span>{error}</span></div>}
     {!detail && !error && <div className="skeleton-card tall" />}
@@ -1323,6 +1449,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
       })}</ul>
     </>}
 
+      {detail.offers.length > 0 ? <>
       <div className="panel-title"><h2>Услуги</h2><span className="count-chip">{detail.offers.length}</span></div>
       <ul className="offers compact">{detail.offers.map(item =>
         <li key={item.id} className={offer?.id === item.id ? 'selected' : ''}>
@@ -1358,18 +1485,50 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           <p className="hint">Оплата наличными на месте · отмена в «Заказах»</p>
         </>}
       </div>}
+      </> : place.source ? <div className="source-unbookable">
+        <span className="source-badge">2ГИС</span>
+        <p><strong>Справочная карточка</strong><br />Онлайн-запись и заказы появятся, когда заведение подключится к «Рядом».</p>
+      </div> : null}
     </>}
 
-    {detail && detail.reviews.length > 0 && <>
-      <div className="panel-title"><h2>Отзывы</h2><span className="count-chip">{detail.reviews.length}</span></div>
-      <ul className="reviews compact">{detail.reviews.slice(0, 4).map(review => <li key={review.id}>
-        <div className="review-head">
-          <span className="mini-avatar">{review.author.slice(0, 1)}</span>
-          <strong>{review.author}</strong>
-          <span className="rating"><Icon name="star" size={11} stroke={0} />{review.rating}</span>
-        </div>
-        {review.body && <p>{review.body}</p>}
-      </li>)}</ul>
+    {detail && <>
+      {(() => {
+        const ownReviews = detail.reviews.filter(review => review.source === 'own');
+        const sourceReviews = detail.reviews.filter(review => review.source === '2gis');
+        return <>
+          {(ownReviews.length > 0 || place.source) && <div className="panel-title"><h2>Отзывы</h2>
+            <span className="count-chip">{ownReviews.length + (place.source?.ratingCount ?? 0)}</span></div>}
+          {ownReviews.length > 0 && <ul className="reviews compact">{ownReviews.slice(0, 6).map(review => <li key={review.id}>
+            <div className="review-head">
+              <span className="mini-avatar">{review.author.slice(0, 1)}</span>
+              <strong>{review.author}</strong>
+              {review.rating !== null && <span className="rating"><Icon name="star" size={11} stroke={0} />{review.rating}</span>}
+            </div>
+            {review.body && <p>{review.body}</p>}
+          </li>)}</ul>}
+          {place.source && <div className="source-reviews-head">
+            <span className="source-badge">2ГИС</span>
+            <a href={place.source.reviewsUrl ?? place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
+              Все отзывы{place.source.rating !== null ? ` · ${place.source.rating.toFixed(1)}` : ''}<Icon name="chevron" size={13} />
+            </a>
+          </div>}
+          {sourceReviews.length > 0 && <ul className="reviews compact source-reviews">
+            {sourceReviews.slice(0, 5).map(review => <li key={review.id}>
+              <div className="review-head">
+                <span className="mini-avatar">{review.author.slice(0, 1)}</span>
+                <strong>{review.author}</strong>
+                <span className="review-source">2ГИС</span>
+              </div>
+              {review.body && <p>{review.body}</p>}
+            </li>)}
+          </ul>}
+          {me && !reviewSent && ownReviews.length === 0 && <button type="button" className="ghost-mini wide review-cta"
+            onClick={() => { haptic(); setReviewOpen(true); }}>
+            <Icon name="star" size={14} />Оставить свой отзыв
+          </button>}
+          {!me && <p className="hint">Свой отзыв можно оставить после входа в аккаунт «Рядом».</p>}
+        </>;
+      })()}
     </>}
 
     {cartCount > 0 ? <div className="book-bar shop-bar">
@@ -1421,6 +1580,24 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         <button type="button" className="primary wide" disabled={busy || !cartItems.length}
           onClick={() => void checkout()}>
           {busy ? 'Оформляем…' : 'Подтвердить заказ'}<Icon name="chevron" size={16} />
+        </button>
+      </div>
+    </Sheet>
+
+    <Sheet open={reviewOpen} onClose={() => { if (!reviewBusy) setReviewOpen(false); }} title="Свой отзыв">
+      <div className="review-form">
+        <div className="review-stars" role="radiogroup" aria-label="Оценка">
+          {[1, 2, 3, 4, 5].map(value => <button key={value} type="button" role="radio" aria-checked={reviewRating === value}
+            aria-label={`${value} из 5`} className={value <= reviewRating ? 'active' : ''}
+            onClick={() => { haptic(4); setReviewRating(value); }}>
+            <Icon name="star" size={28} stroke={0} />
+          </button>)}
+        </div>
+        <textarea value={reviewBody} onChange={event => setReviewBody(event.target.value)} maxLength={1000} rows={5}
+          placeholder="Что понравилось или что стоит улучшить" />
+        <p className="hint">Отзыв появится после проверки. Он не меняет карточку и рейтинг 2ГИС.</p>
+        <button type="button" className="primary wide" disabled={reviewBusy} onClick={() => void submitReview()}>
+          {reviewBusy ? 'Отправляем…' : 'Отправить отзыв'}<Icon name="chevron" size={16} />
         </button>
       </div>
     </Sheet>

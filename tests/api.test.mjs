@@ -102,12 +102,12 @@ test('живость и готовность различаются', async (t) 
 
 test('каталог отдаёт карточки с ценой от и не кэшируется', async (t) => {
   if (!ready) return t.skip(skipReason);
-  const all = await app.inject('/api/v1/places');
+  const all = await app.inject('/api/v1/places?city=demograd');
   assert.equal(all.statusCode, 200);
   assert.equal(all.headers['cache-control'], 'no-store');
   assert.ok(all.json().items.length >= 3);
   assert.ok(all.json().items.every(item => item.priceFrom && item.offerCount > 0));
-  const salons = await app.inject('/api/v1/places?category=salon');
+  const salons = await app.inject('/api/v1/places?city=demograd&category=salon');
   assert.ok(salons.json().items.every(item => item.category === 'salon'));
   assert.equal((await app.inject('/api/v1/places?category=unknown')).statusCode, 400);
   assert.equal((await app.inject('/api/v1/places/not-a-uuid')).statusCode, 404);
@@ -543,7 +543,7 @@ test('товары: витрина, остатки, самовывоз и изо
   const client = await login();
   const partner = await login();
   await addPartnerRole(partner.userId, 'Мастерская «Линия»');
-  const catalogue = await app.inject({ url: '/api/v1/places?category=food' });
+  const catalogue = await app.inject({ url: '/api/v1/places?city=demograd&category=food' });
   const place = catalogue.json().items.find(item => item.name === 'Кухня на районе');
   assert.ok(place, 'нужна витрина «Кухня на районе»');
   const detail = await app.inject({ url: `/api/v1/places/${place.id}` });
@@ -643,7 +643,7 @@ test('доставка: зона, сбор за доставку и путь к�
   await addPartnerRole(partner.userId, 'Мастерская «Линия»');
   const courier = await login();
   await addCourierRole(courier.userId);
-  const place = (await app.inject({ url: '/api/v1/places?category=food' })).json().items
+  const place = (await app.inject({ url: '/api/v1/places?city=demograd&category=food' })).json().items
     .find(item => item.name === 'Кухня на районе');
   const detail = (await app.inject({ url: `/api/v1/places/${place.id}` })).json();
   assert.equal(detail.delivery.available, true);
@@ -718,7 +718,7 @@ test('доставка: оператор назначает курьера и в
   await addCourierRole(courier.userId);
   const operator = await login();
   await addOperatorRole(operator.userId);
-  const place = (await app.inject({ url: '/api/v1/places?category=food' })).json().items
+  const place = (await app.inject({ url: '/api/v1/places?city=demograd&category=food' })).json().items
     .find(item => item.name === 'Кухня на районе');
   const detail = (await app.inject({ url: `/api/v1/places/${place.id}` })).json();
   const lunch = detail.products.find(item => item.title === 'Обед дня');
@@ -742,4 +742,52 @@ test('доставка: оператор назначает курьера и в
   assert.equal(assigned.json().courier.id, courier.userId);
   const mine = await app.inject({ url: '/api/v1/courier/delivery-jobs', headers: courier.headers });
   assert.ok(mine.json().mine.some(item => item.id === job.id));
+});
+
+test('Слюдянка: каталог 2ГИС, честный источник и отзыв от аккаунта', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const cities = await app.inject('/api/v1/cities');
+  assert.equal(cities.statusCode, 200, cities.body);
+  const city = cities.json().items.find(item => item.slug === 'slyudyanka');
+  assert.ok(city, 'Слюдянка должна быть в списке городов');
+  assert.ok(city.places >= 290, `ожидалось >= 290 мест, пришло ${city.places}`);
+  assert.ok(!cities.json().items.some(item => item.slug === 'demograd'), 'демо-город не показывается в рабочем списке');
+
+  const list = await app.inject('/api/v1/places?city=slyudyanka&limit=20');
+  assert.equal(list.statusCode, 200, list.body);
+  const imported = list.json().items.find(item => item.source?.name === '2ГИС');
+  assert.ok(imported, 'в каталоге должны быть организации 2ГИС');
+  assert.match(imported.source.url, /^https:\/\/2gis\.ru\/slyudyanka\/firm\//);
+  assert.equal(imported.offerCount, 0);
+
+  const detail = await app.inject(`/api/v1/places/${imported.id}`);
+  assert.equal(detail.statusCode, 200, detail.body);
+  assert.equal(detail.json().place.bookable, false);
+  assert.equal(detail.json().place.source.name, '2ГИС');
+  assert.ok(detail.json().reviews.some(review => review.source === '2gis'));
+  assert.ok(detail.json().reviews.every(review => review.source === '2gis'));
+
+  const client = await login();
+  const created = await app.inject({ method: 'POST', url: `/api/v1/places/${imported.id}/reviews`,
+    headers: client.headers, payload: { rating: 5, body: 'Проверка отзыва из аккаунта Рядом' } });
+  assert.equal(created.statusCode, 201, created.body);
+  assert.equal(created.json().status, 'pending');
+  const again = await app.inject({ method: 'POST', url: `/api/v1/places/${imported.id}/reviews`,
+    headers: client.headers, payload: { rating: 4 } });
+  assert.equal(again.statusCode, 409);
+  const hidden = await app.inject(`/api/v1/places/${imported.id}`);
+  assert.ok(hidden.json().reviews.every(review => review.source === '2gis'));
+
+  const operator = await loginPhone('+79000000003');
+  const queue = await app.inject({ url: '/api/v1/operator/reviews', headers: operator.headers });
+  const pending = queue.json().items.find(review => review.id === created.json().id);
+  assert.ok(pending, 'отзыв о месте должен попасть в очередь модерации');
+  const moderated = await app.inject({ method: 'POST', url: `/api/v1/operator/reviews/${pending.id}/moderate`,
+    headers: operator.headers, payload: { action: 'publish' } });
+  assert.equal(moderated.statusCode, 200, moderated.body);
+  const shown = await app.inject(`/api/v1/places/${imported.id}`);
+  assert.equal(shown.json().reviews[0].source, 'own');
+  assert.equal(shown.json().place.rating, 5);
+  assert.equal(shown.json().place.source.rating, imported.source.rating);
+  await pool.query('delete from reviews where place_id=$1 and author_user_id=$2', [imported.id, client.userId]);
 });

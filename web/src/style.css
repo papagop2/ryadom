@@ -1571,3 +1571,45 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .pull-indicator .icon { color: var(--yellow); }
 .pull-indicator.refreshing .icon { animation: refresh-spin 0.8s linear infinite; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
+
+/* City catalog and source attribution */
+.city-pill { cursor: pointer; gap: 4px; padding: 0 7px; font-size: 9.5px; letter-spacing: 0.04em; text-transform: none; color: #dfe2e8; }
+.city-pill .icon { color: var(--muted); }
+.source-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border-radius: 5px;
+  background: #ffd60a; color: #17181c; font-size: 8.5px; font-weight: 900; letter-spacing: 0.03em; }
+.source-note { color: var(--yellow); font-weight: 700; }
+.source-price { font-size: 10px; letter-spacing: 0.02em; color: var(--muted); }
+.source-chip { gap: 5px; }
+.source-card { display: flex; align-items: center; gap: 9px; margin: 10px 0 14px; padding: 10px 11px;
+  border: 1px solid rgba(255, 214, 10, 0.24); border-radius: 14px; background: rgba(255, 214, 10, 0.055); }
+.source-card > span:nth-child(2) { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.source-card strong { font-size: 11.5px; }
+.source-card small { font-size: 9.5px; color: var(--muted); }
+.source-card .icon { color: var(--muted); }
+.source-unbookable { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0 4px; padding: 11px;
+  border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.035); }
+.source-unbookable p { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.source-unbookable strong { color: var(--text); }
+.source-reviews-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; }
+.source-reviews-head a { display: inline-flex; align-items: center; gap: 2px; font-size: 10.5px; color: var(--muted); }
+.source-reviews .review-head strong { font-size: 11px; }
+.review-source { margin-left: auto; font-size: 8.5px; color: var(--yellow); font-weight: 800; }
+.review-cta { margin: 10px 0 4px; }
+.review-form { display: grid; gap: 12px; }
+.review-stars { display: flex; justify-content: center; gap: 4px; padding: 4px 0 2px; }
+.review-stars button { color: rgba(255, 255, 255, 0.16); transition: transform 0.12s, color 0.12s; }
+.review-stars button.active { color: var(--yellow); filter: drop-shadow(0 0 6px rgba(255, 214, 10, 0.3)); }
+.review-stars button:active { transform: scale(0.9); }
+.review-form textarea { width: 100%; resize: vertical; min-height: 110px; padding: 11px; border-radius: 13px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); color: #fff; font: inherit; font-size: 12px; }
+.review-form textarea:focus { outline: 1px solid rgba(255, 214, 10, 0.55); }
+.sheet-hint { margin: -2px 0 8px; font-size: 10.5px; color: var(--muted); line-height: 1.45; }
+.city-options button { align-items: center; }
+.city-option { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.city-option strong { font-size: 14px; }
+.city-option small { font-size: 10px; color: var(--muted); }
+.load-more { margin: 12px 0 4px; }
+.review-stars .icon { fill: currentColor; stroke: currentColor; }
+
+.place-schedule { display: flex; align-items: flex-start; gap: 7px; margin: 2px 0 8px; line-height: 1.45; }
+.place-schedule svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }

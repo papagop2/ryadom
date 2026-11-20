@@ -13,15 +13,16 @@ const PRODUCTS_KEY = 'rjadom.demo.products';
 const SHOP_ORDERS_KEY = 'rjadom.demo.shop-orders';
 const DELIVERY_ZONES_KEY = 'rjadom.demo.delivery-zones';
 const DELIVERY_JOBS_KEY = 'rjadom.demo.delivery-jobs';
+const PLACE_REVIEWS_KEY = 'rjadom.demo.place-reviews';
 const DAY = 86400000;
 
 const places = [
-  { id: 'forma', partnerId: 'p1', name: 'Форма', category: 'salon', district: 'Центр', address: 'ул. Мира, 12', lat: 55.7601, lng: 37.6186, about: 'Стрижки, укладка, окрашивание. Два мастера, окна с 10 до 19.', phone: '+79000000010' },
-  { id: 'liniya', partnerId: 'p2', name: 'Линия', category: 'salon', district: 'Северный', address: 'пр. Победы, 4', lat: 55.7742, lng: 37.6011, about: 'Маникюр, педикюр, уход за руками.', phone: '+79000000011' },
-  { id: 'ugol', partnerId: 'p2', name: 'Мастерская на углу', category: 'services', district: 'Центр', address: 'ул. Садовая, 3', lat: 55.7585, lng: 37.6290, about: 'Ремонт обуви и сумок, изготовление ключей.', phone: '+79000000011' },
-  { id: 'tihiy-chas', partnerId: 'p1', name: 'Тихий час', category: 'health', district: 'Заречный', address: 'ул. Речная, 8', lat: 55.7490, lng: 37.6402, about: 'Массаж и восстановление после тренировок.', phone: null },
-  { id: 'kuhnya', partnerId: 'p2', name: 'Кухня на районе', category: 'food', district: 'Южный', address: 'ул. Южная, 21', lat: 55.7402, lng: 37.6154, about: 'Домашние обеды, самовывоз с 11 до 20.', phone: '+79000000011' },
-  { id: 'glaz', partnerId: 'p1', name: 'Глаз да глаз', category: 'services', district: 'Северный', address: 'ул. Северная, 15', lat: 55.7801, lng: 37.6103, about: 'Мелкий ремонт одежды, подгонка по фигуре.', phone: null },
+  { id: 'forma', partnerId: 'p1', city: 'demograd', name: 'Форма', category: 'salon', district: 'Центр', address: 'ул. Мира, 12', lat: 55.7601, lng: 37.6186, about: 'Стрижки, укладка, окрашивание. Два мастера, окна с 10 до 19.', phone: '+79000000010' },
+  { id: 'liniya', partnerId: 'p2', city: 'demograd', name: 'Линия', category: 'salon', district: 'Северный', address: 'пр. Победы, 4', lat: 55.7742, lng: 37.6011, about: 'Маникюр, педикюр, уход за руками.', phone: '+79000000011' },
+  { id: 'ugol', partnerId: 'p2', city: 'demograd', name: 'Мастерская на углу', category: 'services', district: 'Центр', address: 'ул. Садовая, 3', lat: 55.7585, lng: 37.6290, about: 'Ремонт обуви и сумок, изготовление ключей.', phone: '+79000000011' },
+  { id: 'tihiy-chas', partnerId: 'p1', city: 'demograd', name: 'Тихий час', category: 'health', district: 'Заречный', address: 'ул. Речная, 8', lat: 55.7490, lng: 37.6402, about: 'Массаж и восстановление после тренировок.', phone: null },
+  { id: 'kuhnya', partnerId: 'p2', city: 'demograd', name: 'Кухня на районе', category: 'food', district: 'Южный', address: 'ул. Южная, 21', lat: 55.7402, lng: 37.6154, about: 'Домашние обеды, самовывоз с 11 до 20.', phone: '+79000000011' },
+  { id: 'glaz', partnerId: 'p1', city: 'demograd', name: 'Глаз да глаз', category: 'services', district: 'Северный', address: 'ул. Северная, 15', lat: 55.7801, lng: 37.6103, about: 'Мелкий ремонт одежды, подгонка по фигуре.', phone: null },
 ];
 
 const offers = [
@@ -203,17 +204,25 @@ const placeById = (id: string) => places.find(item => item.id === id);
 const offerById = (id: string) => offers.find(item => item.id === id);
 const money = (cents: number): Money => ({ cents, currency: 'RUB' });
 
+function placeReviews(): { id: string; placeId: string; rating: number; body: string; author: string; createdAt: string }[] {
+  try { return JSON.parse(localStorage.getItem(PLACE_REVIEWS_KEY) || '[]'); } catch { return []; }
+}
+
 function reviewsFor(placeId: string, bookings: DemoBooking[] = getBookings(), includePending = false): DemoReview[] {
   const seeded = (seedReviews[placeId] ?? []).map((review, index) => ({
-    id: `seed-${placeId}-${index}`, rating: review.rating, body: review.body,
+    id: `seed-${placeId}-${index}`, source: 'own' as const, rating: review.rating, body: review.body,
     author: review.author, createdAt: new Date(Date.now() - review.daysAgo * DAY).toISOString(),
     status: 'published' as const,
   }));
+  const added = placeReviews().filter(review => review.placeId === placeId).map(review => ({
+    id: review.id, source: 'own' as const, rating: review.rating, body: review.body,
+    author: review.author, createdAt: review.createdAt, status: 'published' as const,
+  }));
   const mine = bookings
     .filter(item => item.place.id === placeId && item.review)
-    .map(item => ({ id: item.review!.id, rating: item.review!.rating, body: 'Спасибо, всё понравилось.',
+    .map(item => ({ id: item.review!.id, source: 'own' as const, rating: item.review!.rating, body: 'Спасибо, всё понравилось.',
       author: getMe()?.user.displayName ?? 'Клиент', createdAt: item.createdAt, status: item.review!.status }));
-  return [...mine, ...seeded].filter(review => includePending || review.status === 'published');
+  return [...mine, ...added, ...seeded].filter(review => includePending || review.status === 'published');
 }
 
 function activeOffers(placeId: string) {
@@ -227,8 +236,9 @@ function card(place: typeof places[number], bookings = getBookings()) {
   return {
     id: place.id, name: place.name, category: place.category as Category, district: place.district,
     address: place.address, about: place.about, location: { lat: place.lat, lng: place.lng },
+    city: (place as { city?: string }).city ?? 'demograd',
     rating: rating === null ? null : Math.round(rating * 10) / 10,
-    ratingCount: reviews.length,
+    ratingCount: reviews.length, source: null,
     priceFrom: list.length ? money(Math.min(...list.map(item => item.price))) : null,
     offerCount: list.length, distanceKm: null,
   };
@@ -335,16 +345,23 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
   const method = init.method ?? 'GET';
   const body = (init.body ?? {}) as Record<string, string>;
 
+  if (url.pathname === '/api/v1/cities') {
+    return { items: [{ slug: 'demograd', name: 'Демоград', region: 'Демо-регион',
+      center: { lat: 55.7558, lng: 37.6173 }, places: places.length }] } as T;
+  }
+
   if (url.pathname === '/api/v1/districts') {
     return { items: [...new Set(places.map(place => place.district))] } as T;
   }
 
   if (url.pathname === '/api/v1/places') {
+    const city = url.searchParams.get('city');
     const category = url.searchParams.get('category');
     const district = url.searchParams.get('district');
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
     const items = places
       .filter(place => (place as { isPublished?: boolean }).isPublished !== false)
+      .filter(place => !city || (place as { city?: string }).city === city)
       .filter(place => (!category || place.category === category) && (!district || place.district === district))
       .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q))
       .map(place => card(place));
@@ -360,7 +377,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       ...item, price: money(item.price), nextSlot: slotsFor(item.id)[0]?.startsAt ?? null,
     }));
     const base = card(place, bookings);
-    return { place: { ...base, phone: place.phone }, offers: list,
+    return { place: { ...base, phone: place.phone, bookable: true }, offers: list,
       products: getProducts().filter(item => item.placeId === place.id && item.isActive),
       delivery: { available: getZones().some(item => item.placeId === place.id && item.isActive),
         zones: getZones().filter(item => item.placeId === place.id && item.isActive).map(item => ({
@@ -999,6 +1016,22 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
     return { items: partnerBookings(me) } as T;
+  }
+
+  const placeReviewMatch = url.pathname.match(/^\/api\/v1\/places\/([^/]+)\/reviews$/);
+  if (placeReviewMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(placeReviewMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    const items = placeReviews();
+    if (items.some(item => item.placeId === place.id && item.author === me.user.displayName)) {
+      return fail('Вы уже оставляли отзыв об этом месте', 'review_exists');
+    }
+    items.push({ id: `place-review-${Date.now()}`, placeId: place.id, rating: Number(body.rating) || 5,
+      body: String(body.body ?? '').slice(0, 1000), author: me.user.displayName, createdAt: new Date().toISOString() });
+    localStorage.setItem(PLACE_REVIEWS_KEY, JSON.stringify(items));
+    return { ok: true, status: 'published' } as T;
   }
 
   if (url.pathname === '/api/v1/reviews' && method === 'POST') {
