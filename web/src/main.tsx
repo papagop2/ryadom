@@ -663,8 +663,8 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
 function destinationsFor(city: City | null): TripPoint[] {
   if (city?.slug === 'slyudyanka') {
     return [
-      { label: 'Вокзал', lat: 51.658634, lng: 103.724241 },
-      { label: 'Рынок', lat: 51.654955, lng: 103.717088 },
+      { label: 'Вокзал', address: 'Вокзал, 18, улица Тонконога, Слюдянка', lat: 51.658634, lng: 103.724241 },
+      { label: 'Рынок', address: 'Рынок, улица Парижской Коммуны, Слюдянка', lat: 51.654955, lng: 103.717088 },
       { label: 'Центр', lat: city.center.lat, lng: city.center.lng },
     ];
   }
@@ -1124,6 +1124,7 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     try {
       const items = await searchAddress(point.label, city?.slug);
       if (items[0]) applyPlace(items[0], { kind: 'to' });
+      else if (point.address) applyPlace({ ...point, label: point.label, address: point.address, name: null, kind: null }, { kind: 'to' });
       else notify('Уточните адрес в строке «Куда»');
     } catch {
       notify('Не удалось найти адрес');

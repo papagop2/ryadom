@@ -16,6 +16,7 @@ const DEMO_PLACES: GeoPlace[] = [
   { label: 'улица Северная, 15', address: 'Демоград, улица Северная, 15', name: 'Глаз да глаз', kind: 'house', lat: 55.7801, lng: 37.6103 },
   { label: 'Привокзальная площадь, 1', address: 'Демоград, Привокзальная площадь, 1', name: 'Вокзал', kind: 'train_station', lat: 55.7761, lng: 37.6551 },
   { label: 'Центральный рынок', address: 'Демоград, Центральный рынок', name: 'Рынок', kind: 'marketplace', lat: 55.7548, lng: 37.6212 },
+  { label: 'Центр', address: 'Демоград, Центральная площадь', name: 'Центр', kind: 'square', lat: 55.7558, lng: 37.6173 },
 ];
 
 const cache = new Map<string, GeoPlace[]>();
@@ -25,9 +26,10 @@ export async function searchAddress(query: string, citySlug?: string | null): Pr
   const text = query.trim();
   if (text.length < 3) return [];
   if (DEMO) {
-    const lower = text.toLowerCase();
+    const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const lower = normalize(text);
     return DEMO_PLACES.filter(place =>
-      `${place.label} ${place.address} ${place.name ?? ''}`.toLowerCase().includes(lower)).slice(0, 6);
+      normalize(`${place.label} ${place.address} ${place.name ?? ''}`).includes(lower)).slice(0, 6);
   }
   const key = `${citySlug ?? ''}|${text.toLowerCase()}`;
   const cached = cache.get(key);
