@@ -59,13 +59,18 @@ type Booking = {
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
 type TripPoint = { label: string; lat: number; lng: number };
 type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
-type TripTariff = 'economy' | 'comfort' | 'minivan';
+type TripOffer = {
+  id: string; price: Money; etaMin: number | null; message: string;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn'; createdAt: string;
+  driver: { id: string; name: string; car: string; plate: string };
+};
 type Trip = {
   id: string; status: TripStatus; from: TripPoint; to: TripPoint; distanceKm: number; durationMin: number;
-  price: Money; tariff?: TripTariff; createdAt: string; client: { id: string; name: string };
+  price: Money | null; createdAt: string; client: { id: string; name: string };
   driver: { id: string; name: string; car: string; plate: string } | null;
+  offers?: TripOffer[];
 };
-type Estimate = { distanceKm: number; durationMin: number; price: Money; route?: 'osrm' | 'straight'; tariff?: TripTariff };
+type Estimate = { distanceKm: number; durationMin: number; route?: 'osrm' | 'straight' };
 type ServiceCategory = 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
 type ServiceStatus = 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
 type ServiceOffer = {
@@ -660,11 +665,6 @@ const tripStatusLabel: Record<TripStatus, string> = {
   in_progress: 'В пути', completed: 'Завершена', cancelled: 'Отменена',
 };
 const TRIP_ACTIVE: TripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
-const TRIP_TARIFFS: { id: TripTariff; label: string; hint: string }[] = [
-  { id: 'economy', label: 'Эконом', hint: 'до 4 мест' },
-  { id: 'comfort', label: 'Комфорт', hint: 'просторнее' },
-  { id: 'minivan', label: 'Минивэн', hint: 'багаж' },
-];
 
 function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: TripPoint | null; onPick: (point: TripPoint) => void; readOnly?: boolean }) {
   const box = useRef<HTMLDivElement | null>(null);
@@ -769,7 +769,7 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
   return <div className="trip-card">
     <div className="trip-card-head">
       <span className={`status ${trip.status}`}><span className="dot" />{tripStatusLabel[trip.status]}</span>
-      <strong>{price(trip.price)}</strong>
+      <strong>{trip.price ? price(trip.price) : 'Договорная'}</strong>
     </div>
     <div className="trip-route">
       <span className="route-dot from" />
@@ -777,7 +777,7 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
       <span className="route-dot to" />
       <p>{trip.to.label}</p>
     </div>
-    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин · {TRIP_TARIFFS.find(item => item.id === (trip.tariff ?? 'economy'))?.label}</p>
+    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин</p>
     {showClient && <p className="meta trip-client"><Icon name="user" size={13} />{trip.client.name}</p>}
     {trip.driver && <div className="driver-line">
       <span className="mini-avatar">{trip.driver.name.slice(0, 1)}</span>
@@ -788,6 +788,33 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
   </div>;
 }
 
+function TripOffers({ offers, busyOffer, onChoose }: {
+  offers: TripOffer[]; busyOffer: string | null; onChoose: (offer: TripOffer) => void;
+}) {
+  const pending = offers.filter(offer => offer.status === 'pending');
+  return <div className="trip-offers">
+    <div className="section-title"><h2>Предложения водителей</h2><span className="count-chip">{pending.length}</span></div>
+    {pending.length === 0
+      ? <div className="trip-offers-empty">
+        <span className="taxi-empty-icon"><Icon name="car" size={19} /></span>
+        <div><strong>Ждём предложения</strong><span>Водители увидят заказ и предложат цену</span></div>
+      </div>
+      : pending.map(offer => <div className="trip-offer" key={offer.id}>
+        <span className="mini-avatar">{offer.driver.name.slice(0, 1)}</span>
+        <div className="trip-offer-info">
+          <strong>{offer.driver.name}</strong>
+          <span>{offer.driver.car} · {offer.driver.plate}{offer.etaMin ? ` · ${offer.etaMin} мин` : ''}</span>
+          {offer.message && <p>{offer.message}</p>}
+        </div>
+        <div className="trip-offer-price">
+          <strong>{price(offer.price)}</strong>
+          <button type="button" className="primary mini" disabled={busyOffer === offer.id}
+            onClick={() => onChoose(offer)}>{busyOffer === offer.id ? 'Выбираем…' : 'Выбрать'}</button>
+        </div>
+      </div>)}
+  </div>;
+}
+
 function TaxiScreen({ me, city, notify, onLogin }: {
   me: Me | null; city: City | null; notify: (text: string) => void; onLogin: () => void;
 }) {
@@ -795,11 +822,11 @@ function TaxiScreen({ me, city, notify, onLogin }: {
   const destinations = destinationsFor(city);
   const [from, setFrom] = useState<TripPoint>({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
   const [to, setTo] = useState<TripPoint | null>(null);
-  const [tariff, setTariff] = useState<TripTariff>('economy');
-  const [quotes, setQuotes] = useState<Record<TripTariff, Estimate> | null>(null);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [trips, setTrips] = useState<Trip[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyOffer, setBusyOffer] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!me) { setTrips([]); return; }
@@ -820,18 +847,13 @@ function TaxiScreen({ me, city, notify, onLogin }: {
   }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!to) { setQuotes(null); setQuoteLoading(false); return; }
+    if (!to) { setEstimate(null); setQuoteLoading(false); return; }
     let cancelled = false;
     setQuoteLoading(true);
-    setQuotes(null);
-    void Promise.all(TRIP_TARIFFS.map(option =>
-      api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to, tariff: option.id } })
-        .then(data => [option.id, data] as const)))
-      .then(entries => {
-        if (cancelled) return;
-        setQuotes(Object.fromEntries(entries) as Record<TripTariff, Estimate>);
-      })
-      .catch(() => { if (!cancelled) setQuotes(null); })
+    setEstimate(null);
+    void api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to } })
+      .then(data => { if (!cancelled) setEstimate(data); })
+      .catch(() => { if (!cancelled) setEstimate(null); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
   }, [from, to]);
@@ -841,8 +863,8 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     if (!to) return;
     setBusy(true);
     try {
-      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, tariff, idempotencyKey: `taxi-${Date.now()}` } });
-      notify('Заказ создан, ищем водителя');
+      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, idempotencyKey: `taxi-${Date.now()}` } });
+      notify('Заказ создан, ждём предложения водителей');
       load();
     } catch (error) {
       const code = (error as { code?: string }).code;
@@ -858,13 +880,24 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     } catch { notify('Не удалось отменить'); }
   }
 
-  const estimate = quotes?.[tariff] ?? null;
+  async function chooseOffer(trip: Trip, offer: TripOffer) {
+    setBusyOffer(offer.id);
+    try {
+      await api(`/api/v1/trips/${trip.id}/offers/${offer.id}/accept`, { method: 'POST' });
+      notify(`Водитель выбран · ${price(offer.price)}`);
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'driver_busy' ? 'Водитель уже занят другой поездкой' : 'Не удалось выбрать водителя');
+    } finally { setBusyOffer(null); }
+  }
+
   const history = (trips ?? []).filter(trip => !TRIP_ACTIVE.includes(trip.status)).slice(0, 3);
 
   return <section className="taxi">
     <div className="taxi-head">
       <span className="taxi-badge"><Icon name="car" size={24} /></span>
-      <div><h1>Такси</h1><span className="meta">по городу · наличными водителю</span></div>
+      <div><h1>Такси</h1><span className="meta">по городу · цена договорная · наличными</span></div>
     </div>
 
     {active ? <>
@@ -877,8 +910,12 @@ function TaxiScreen({ me, city, notify, onLogin }: {
           <button type="button" className="ghost-mini" onClick={() => void cancel(active.id)}>Отменить поездку</button>}
         {active.status === 'in_progress' && <span className="meta"><Icon name="shield" size={13} /> В пути, отмена через поддержку</span>}
       </TripSummary>
+      {active.status === 'requested' && <TripOffers offers={active.offers ?? []} busyOffer={busyOffer}
+        onChoose={offer => void chooseOffer(active, offer)} />}
       <TripProgress status={active.status} />
-      <p className="hint">Статус обновляется автоматически. Водитель подтвердит посадку.</p>
+      <p className="hint">{active.status === 'requested'
+        ? 'Водители предлагают цену, вы выбираете. Оплата наличными водителю.'
+        : 'Статус обновляется автоматически. Водитель подтвердит посадку.'}</p>
     </> : <>
       <div className="taxi-map-shell">
         <TripMap from={from} to={to} onPick={setTo} />
@@ -918,30 +955,20 @@ function TaxiScreen({ me, city, notify, onLogin }: {
           <div><strong>Куда едем?</strong><span>Выберите точку или ткните на карту</span></div>
         </div>}
 
-        {to && <div className="tariff-options">
-          {TRIP_TARIFFS.map(option => <button key={option.id} type="button"
-            className={tariff === option.id ? 'active' : ''}
-            aria-pressed={tariff === option.id}
-            onClick={() => { haptic(3); setTariff(option.id); }}>
-            <span><Icon name="car" size={13} />{option.label}</span>
-            <em>{quotes?.[option.id] ? price(quotes[option.id].price) : option.hint}</em>
-          </button>)}
-        </div>}
-
         {quoteLoading && <div className="estimate-card estimate-loading">
           <span><Icon name="refresh" size={14} />Строим маршрут по дорогам…</span>
         </div>}
 
         {estimate && <div className="estimate-card">
-          <div className="tariff-line">
-            <span className="tariff-icon"><Icon name="car" size={19} /></span>
-            <div><strong>{TRIP_TARIFFS.find(item => item.id === tariff)?.label} по городу</strong>
+          <div className="route-summary">
+            <span className="route-summary-icon"><Icon name="pin" size={19} /></span>
+            <div><strong>Маршрут готов</strong>
               <span>{estimate.distanceKm.toFixed(1)} км · {estimate.durationMin} мин · {estimate.route === 'osrm' ? 'по дорогам' : 'напрямую'}</span></div>
-            <strong>{price(estimate.price)}</strong>
           </div>
           <button type="button" className="primary" disabled={busy || !to} onClick={() => void order()}>
-            {busy ? 'Заказываем…' : me ? 'Заказать' : 'Войти и заказать'}<Icon name="chevron" size={16} />
+            {busy ? 'Заказываем…' : me ? 'Заказать поездку' : 'Войти и заказать'}<Icon name="chevron" size={16} />
           </button>
+          <p className="hint">Цену предложат водители — вы выберете подходящую.</p>
         </div>}
       </div>
     </>}
@@ -955,6 +982,7 @@ function TaxiScreen({ me, city, notify, onLogin }: {
 
 function DriverPanel({ notify }: { notify: (text: string) => void }) {
   const [data, setData] = useState<{ available: Trip[]; mine: Trip[] } | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { price: string; eta: string }>>({});
   const load = useCallback(() => {
     void api<{ available: Trip[]; mine: Trip[] }>('/api/v1/driver/trips')
       .then(setData).catch(() => setData({ available: [], mine: [] }));
@@ -965,15 +993,38 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
     return () => clearInterval(timer);
   }, [load]);
 
-  async function act(id: string, action: 'accept' | 'arrive' | 'start' | 'complete') {
+  async function act(id: string, action: 'arrive' | 'start' | 'complete') {
     try {
       await api(`/api/v1/trips/${id}/${action}`, { method: 'POST' });
-      const text = { accept: 'Поездка принята', arrive: 'Отмечено: на месте', start: 'Поездка начата', complete: 'Поездка завершена' };
+      const text = { arrive: 'Отмечено: на месте', start: 'Поездка начата', complete: 'Поездка завершена' };
       notify(text[action]);
       load();
     } catch (error) {
       const code = (error as { code?: string }).code;
-      notify(code === 'driver_busy' ? 'У вас уже есть активная поездка' : 'Не удалось обновить поездку');
+      notify(code === 'price_not_agreed' ? 'Сначала согласуйте цену с клиентом' : 'Не удалось обновить поездку');
+    }
+  }
+
+  async function offer(trip: Trip) {
+    const draft = drafts[trip.id] ?? { price: '', eta: '' };
+    const rubles = Number(draft.price.replace(',', '.'));
+    if (!Number.isFinite(rubles) || rubles < 50) {
+      notify('Укажите цену от 50 ₽');
+      return;
+    }
+    const eta = draft.eta ? Number(draft.eta) : null;
+    try {
+      await api(`/api/v1/trips/${trip.id}/offers`, {
+        method: 'POST',
+        body: { priceCents: Math.round(rubles * 100), etaMin: eta && eta > 0 ? Math.round(eta) : undefined },
+      });
+      notify(`Предложение отправлено · ${Math.round(rubles)} ₽`);
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'driver_busy' ? 'У вас уже есть активная поездка'
+        : code === 'trip_taken' ? 'Заказ уже разобрали'
+          : 'Не удалось отправить предложение');
     }
   }
 
@@ -984,20 +1035,36 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
     return null;
   }
 
+  function offerControls(trip: Trip) {
+    const own = trip.offers?.[0];
+    if (own?.status === 'pending') {
+      return <span className="my-offer"><span>Ваше предложение</span><strong>{price(own.price)}</strong></span>;
+    }
+    const draft = drafts[trip.id] ?? { price: '', eta: '' };
+    const setDraft = (patch: Partial<{ price: string; eta: string }>) =>
+      setDrafts(current => ({ ...current, [trip.id]: { ...draft, ...patch } }));
+    return <div className="driver-offer-form">
+      <input inputMode="decimal" placeholder="Цена, ₽" value={draft.price}
+        onChange={event => setDraft({ price: event.target.value.replace(/[^0-9.,]/g, '').slice(0, 7) })} />
+      <input inputMode="numeric" placeholder="мин" value={draft.eta}
+        onChange={event => setDraft({ eta: event.target.value.replace(/[^0-9]/g, '').slice(0, 3) })} />
+      <button type="button" className="primary mini" onClick={() => void offer(trip)}>Предложить</button>
+    </div>;
+  }
+
   return <div className="driver-panel">
     <div className="panel-title"><h2>Кабинет водителя</h2><span className="count-chip">{data ? data.mine.length : '—'}</span></div>
     {!data ? <div className="skeleton-card" />
       : !data.mine.length ? <p className="notice">Нет назначенных поездок</p>
         : data.mine.map(trip => <TripSummary key={trip.id} trip={trip} showClient>{actions(trip)}</TripSummary>)}
     {data && data.available.length > 0 && <>
-      <h3 className="sub-title">Свободные заказы</h3>
+      <h3 className="sub-title">Заказы без водителя</h3>
       {data.available.map(trip => <TripSummary key={trip.id} trip={trip} showClient>
-        <button type="button" className="primary mini" onClick={() => void act(trip.id, 'accept')}>Принять</button>
+        {offerControls(trip)}
       </TripSummary>)}
     </>}
   </div>;
 }
-
 
 function DeliveryCard({ job, children }: { job: DeliveryJob; children?: ReactNode }) {
   return <div className="service-card delivery-card">

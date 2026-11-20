@@ -115,7 +115,38 @@ const TRIP_SELECT = `
   left join users d on d.id = t.driver_user_id
   left join driver_profiles dp on dp.user_id = t.driver_user_id`;
 
-function tripView(row) {
+function tripOfferView(row) {
+  return {
+    id: row.id,
+    price: money(row.price_cents, 'RUB'),
+    etaMin: row.eta_min,
+    message: row.message,
+    status: row.status,
+    createdAt: row.created_at,
+    driver: { id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate },
+  };
+}
+
+async function tripOffersForTrips(db, tripIds, driverId = null) {
+  const byTrip = new Map();
+  if (!tripIds.length) return byTrip;
+  const params = [tripIds];
+  let sql = `select o.*, u.display_name as driver_name, dp.car_model, dp.plate
+             from trip_offers o
+             join users u on u.id = o.driver_user_id
+             left join driver_profiles dp on dp.user_id = o.driver_user_id
+             where o.trip_id = any($1::uuid[])`;
+  if (driverId) { sql += ' and o.driver_user_id = $2'; params.push(driverId); }
+  sql += ' order by o.created_at';
+  const { rows } = await db.query(sql, params);
+  for (const row of rows) {
+    if (!byTrip.has(row.trip_id)) byTrip.set(row.trip_id, []);
+    byTrip.get(row.trip_id).push(row);
+  }
+  return byTrip;
+}
+
+function tripView(row, offers = []) {
   return {
     id: row.id,
     status: row.status,
@@ -123,12 +154,12 @@ function tripView(row) {
     to: { label: row.to_label, lat: Number(row.to_lat), lng: Number(row.to_lng) },
     distanceKm: Number(row.distance_km),
     durationMin: row.duration_min,
-    price: money(row.price_cents, row.currency),
-    tariff: row.tariff ?? 'economy',
+    price: row.price_cents == null ? null : money(row.price_cents, row.currency),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     client: { id: row.client_user_id, name: row.client_name },
     driver: row.driver_user_id ? { id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate } : null,
+    offers: offers.map(tripOfferView),
   };
 }
 
@@ -176,26 +207,14 @@ async function roadRoute(from, to) {
   return null;
 }
 
-const TRIP_TARIFFS = {
-  economy: { minCents: 14900, multiplier: 1 },
-  comfort: { minCents: 21900, multiplier: 1.45 },
-  minivan: { minCents: 27900, multiplier: 1.8 },
-};
-const TRIP_TARIFF_SCHEMA = { type: 'string', enum: Object.keys(TRIP_TARIFFS) };
-
-// Тариф закрытого пилота: посадка + километры + минуты, минимум зависит от класса.
-async function quoteTrip(from, to, tariff = 'economy') {
+// Оценка поездки — только дорожный километраж и время. Стоимость не считаем:
+// цену предлагает водитель, клиент выбирает предложение.
+async function routeQuote(from, to) {
   const road = await roadRoute(from, to);
   const straight = distanceKm(from, to);
   const km = Math.max(0.3, Math.round((road?.distanceKm ?? straight * 1.35) * 10) / 10);
   const minutes = Math.max(4, Math.round(road?.durationMin ?? (km / 24 * 60 + 3)));
-  const config = TRIP_TARIFFS[tariff] ?? TRIP_TARIFFS.economy;
-  const raw = (9900 + km * 2500 + minutes * 500) * config.multiplier;
-  const cents = Math.max(config.minCents, Math.round(raw / 1000) * 1000);
-  return {
-    distanceKm: km, durationMin: minutes, price: money(cents), currency: 'RUB',
-    route: road ? 'osrm' : 'straight', tariff: TRIP_TARIFFS[tariff] ? tariff : 'economy',
-  };
+  return { distanceKm: km, durationMin: minutes, route: road ? 'osrm' : 'straight' };
 }
 
 const SERVICE_CATEGORIES = ['repair', 'cleaning', 'beauty', 'tutoring', 'moving', 'other'];
@@ -1320,9 +1339,9 @@ export function routes(app, { pool, demoLogin = false }) {
   app.post('/api/v1/trips/estimate', {
     schema: { body: {
       type: 'object', additionalProperties: false, required: ['from', 'to'],
-      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA, tariff: TRIP_TARIFF_SCHEMA },
+      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA },
     } },
-  }, async (request) => quoteTrip(request.body.from, request.body.to, request.body.tariff ?? 'economy'));
+  }, async (request) => routeQuote(request.body.from, request.body.to));
 
   app.post('/api/v1/trips', {
     schema: { body: {
@@ -1330,14 +1349,13 @@ export function routes(app, { pool, demoLogin = false }) {
       properties: {
         from: POINT_SCHEMA,
         to: POINT_SCHEMA,
-        tariff: TRIP_TARIFF_SCHEMA,
         idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
       },
     } },
   }, async (request, reply) => {
     const auth = requireUser(request);
-    const { from, to, tariff = 'economy', idempotencyKey = null } = request.body;
-    const quote = await quoteTrip(from, to, tariff);
+    const { from, to, idempotencyKey = null } = request.body;
+    const quote = await routeQuote(from, to);
     const attempt = async () => withTransaction(pool, async (client) => {
       if (idempotencyKey) {
         const existing = await client.query(
@@ -1346,23 +1364,23 @@ export function routes(app, { pool, demoLogin = false }) {
       }
       const inserted = await client.query(
         `insert into trips (client_user_id, from_label, from_lat, from_lng, to_label, to_lat, to_lng,
-                            distance_km, duration_min, price_cents, currency, tariff, idempotency_key)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
+                            distance_km, duration_min, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
         [auth.userId, from.label, from.lat, from.lng, to.label, to.lat, to.lng,
-          quote.distanceKm, quote.durationMin, quote.price.cents, quote.currency, quote.tariff, idempotencyKey]);
+          quote.distanceKm, quote.durationMin, idempotencyKey]);
       const tripId = inserted.rows[0].id;
       await client.query(
         `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'requested', $2)`, [tripId, auth.userId]);
       await client.query(
         `insert into notifications (user_id, kind, payload) values ($1, 'trip_requested', $2)`,
-        [auth.userId, JSON.stringify({ tripId, from: from.label, to: to.label, price: quote.price.cents })]);
+        [auth.userId, JSON.stringify({ tripId, from: from.label, to: to.label })]);
       const drivers = await client.query(
         `select m.user_id from memberships m join driver_profiles dp on dp.user_id = m.user_id
          where m.role = 'driver' and dp.is_online`);
       for (const driver of drivers.rows) {
         await client.query(
           `insert into notifications (user_id, kind, payload) values ($1, 'trip_new', $2)`,
-          [driver.user_id, JSON.stringify({ tripId, from: from.label, to: to.label, price: quote.price.cents })]);
+          [driver.user_id, JSON.stringify({ tripId, from: from.label, to: to.label })]);
       }
       const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [tripId]);
       return { trip: tripView(view.rows[0]), created: true };
@@ -1384,8 +1402,9 @@ export function routes(app, { pool, demoLogin = false }) {
     const auth = requireUser(request);
     const { rows } = await pool.query(
       `${TRIP_SELECT} where t.client_user_id = $1 order by t.created_at desc limit 50`, [auth.userId]);
+    const offers = await tripOffersForTrips(pool, rows.map(row => row.id));
     reply.header('Cache-Control', 'no-store');
-    return { items: rows.map(tripView) };
+    return { items: rows.map(row => tripView(row, offers.get(row.id) ?? [])) };
   });
 
   app.get('/api/v1/trips/:id', async (request, reply) => {
@@ -1396,8 +1415,10 @@ export function routes(app, { pool, demoLogin = false }) {
     if (trip.client_user_id !== auth.userId && trip.driver_user_id !== auth.userId && !isOperator(auth)) {
       fail(403, 'forbidden', 'Нет доступа к поездке');
     }
+    const ownOnly = trip.client_user_id !== auth.userId && !isOperator(auth) ? auth.userId : null;
+    const offers = await tripOffersForTrips(pool, [trip.id], ownOnly);
     reply.header('Cache-Control', 'no-store');
-    return tripView(trip);
+    return tripView(trip, offers.get(trip.id) ?? []);
   });
 
   app.post('/api/v1/trips/:id/cancel', async (request) => {
@@ -1413,6 +1434,9 @@ export function routes(app, { pool, demoLogin = false }) {
       if (!clientCan && !driverCan && !isOperator(auth)) fail(403, 'forbidden', 'Отменить поездку нельзя');
       await client.query(
         `update trips set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`, [trip.id]);
+      await client.query(
+        `update trip_offers set status = 'declined', updated_at = now()
+         where trip_id = $1 and status = 'pending'`, [trip.id]);
       await client.query(
         `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'cancelled', $2)`, [trip.id, auth.userId]);
       const target = isClient ? trip.driver_user_id : trip.client_user_id;
@@ -1434,6 +1458,9 @@ export function routes(app, { pool, demoLogin = false }) {
       if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
       if (trip.driver_user_id !== auth.userId && !isOperator(auth)) fail(403, 'forbidden', 'Это не ваша поездка');
       if (!fromStatuses.includes(trip.status)) fail(409, 'invalid_transition', 'Поездка уже в другом состоянии');
+      if (toStatus === 'completed' && trip.price_cents == null) {
+        fail(409, 'price_not_agreed', 'Сначала согласуйте цену с клиентом');
+      }
       const stamp = stampColumn === 'updated_at' ? '' : `, ${stampColumn} = now()`;
       await client.query(
         `update trips set status = $2${stamp}, updated_at = now() where id = $1`,
@@ -1459,28 +1486,108 @@ export function routes(app, { pool, demoLogin = false }) {
     const mine = await pool.query(
       `${TRIP_SELECT} where t.driver_user_id = $1 and t.status in ('assigned', 'arrived', 'in_progress')
        order by t.created_at desc limit 50`, [auth.userId]);
+    const allIds = [...available.rows, ...mine.rows].map(row => row.id);
+    const offers = await tripOffersForTrips(pool, allIds, auth.userId);
     reply.header('Cache-Control', 'no-store');
-    return { available: available.rows.map(tripView), mine: mine.rows.map(tripView) };
+    return {
+      available: available.rows.map(row => tripView(row, offers.get(row.id) ?? [])),
+      mine: mine.rows.map(row => tripView(row, offers.get(row.id) ?? [])),
+    };
   });
 
-  app.post('/api/v1/trips/:id/accept', async (request) => {
-    const auth = requireRole(request, 'driver', 'operator');
+  app.post('/api/v1/trips/:id/offers', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['priceCents'],
+      properties: {
+        priceCents: { type: 'integer', minimum: 5000, maximum: 10000000 },
+        etaMin: { type: 'integer', minimum: 1, maximum: 180 },
+        message: { type: 'string', maxLength: 200 },
+      },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'driver');
+    const tripId = uuidParam(request);
+    const priceCents = request.body.priceCents;
+    const etaMin = request.body.etaMin ?? null;
+    const message = String(request.body.message ?? '').trim().slice(0, 200);
+    const result = await withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from trips where id = $1 for update', [tripId]);
+      const trip = rows[0];
+      if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+      if (trip.client_user_id === auth.userId) fail(400, 'own_trip', 'Нельзя предложить цену на свою поездку');
+      if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездка уже не ищет водителя');
+      const busy = await client.query(
+        `select 1 from trips where driver_user_id = $1
+           and status in ('assigned', 'arrived', 'in_progress') limit 1`, [auth.userId]);
+      if (busy.rows[0]) fail(409, 'driver_busy', 'У вас уже есть активная поездка');
+      const existing = await client.query(
+        'select * from trip_offers where trip_id = $1 and driver_user_id = $2 for update', [tripId, auth.userId]);
+      let offerId;
+      if (existing.rows[0]) {
+        if (existing.rows[0].status !== 'pending') fail(409, 'offer_locked', 'Предложение уже обработано');
+        offerId = existing.rows[0].id;
+        await client.query(
+          `update trip_offers set price_cents = $2, eta_min = $3, message = $4, updated_at = now()
+           where id = $1`, [offerId, priceCents, etaMin, message]);
+      } else {
+        const inserted = await client.query(
+          `insert into trip_offers (trip_id, driver_user_id, price_cents, eta_min, message)
+           values ($1, $2, $3, $4, $5) returning id`, [tripId, auth.userId, priceCents, etaMin, message]);
+        offerId = inserted.rows[0].id;
+      }
+      const offer = await client.query(
+        `select o.*, u.display_name as driver_name, dp.car_model, dp.plate
+         from trip_offers o join users u on u.id = o.driver_user_id
+         left join driver_profiles dp on dp.user_id = o.driver_user_id
+         where o.id = $1`, [offerId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'trip_offer', $2)`,
+        [trip.client_user_id, JSON.stringify({
+          tripId, offerId, priceCents, driverName: offer.rows[0].driver_name,
+        })]);
+      return tripOfferView(offer.rows[0]);
+    });
+    reply.code(201);
+    return result;
+  });
+
+  app.post('/api/v1/trips/:id/offers/:offerId/accept', async (request) => {
+    const auth = requireUser(request);
+    const tripId = uuidParam(request);
+    const offerId = uuidValue(request.params.offerId, 'Предложение');
     try {
       return await withTransaction(pool, async (client) => {
-        const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+        const { rows } = await client.query('select * from trips where id = $1 for update', [tripId]);
         const trip = rows[0];
         if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
-        if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездку уже приняли');
+        if (trip.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша поездка');
+        if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездка уже назначена');
+        const offer = await client.query(
+          `select o.*, u.display_name as driver_name, dp.car_model, dp.plate
+           from trip_offers o join users u on u.id = o.driver_user_id
+           left join driver_profiles dp on dp.user_id = o.driver_user_id
+           where o.id = $1 and o.trip_id = $2 and o.status = 'pending' for update of o`, [offerId, tripId]);
+        if (!offer.rows[0]) fail(404, 'offer_not_found', 'Предложение недоступно');
+        const selected = offer.rows[0];
         await client.query(
-          `update trips set status = 'assigned', driver_user_id = $2, accepted_at = now(), updated_at = now()
-           where id = $1`, [trip.id, auth.userId]);
+          `update trips set status = 'assigned', driver_user_id = $2, price_cents = $3, currency = 'RUB',
+             accepted_at = now(), updated_at = now() where id = $1`,
+          [tripId, selected.driver_user_id, selected.price_cents]);
         await client.query(
-          `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'assigned', $2)`, [trip.id, auth.userId]);
+          `update trip_offers set status = 'accepted', updated_at = now() where id = $1`, [selected.id]);
+        await client.query(
+          `update trip_offers set status = 'declined', updated_at = now()
+           where trip_id = $1 and id <> $2 and status = 'pending'`, [tripId, selected.id]);
+        await client.query(
+          `insert into trip_events (trip_id, status, actor_user_id, note)
+           values ($1, 'assigned', $2, $3)`,
+          [tripId, auth.userId, `цена ${selected.price_cents} копеек`]);
         await client.query(
           `insert into notifications (user_id, kind, payload) values ($1, 'trip_assigned', $2)`,
-          [trip.client_user_id, JSON.stringify({ tripId: trip.id, status: 'assigned' })]);
-        const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
-        return tripView(view.rows[0]);
+          [selected.driver_user_id, JSON.stringify({ tripId, priceCents: selected.price_cents, status: 'assigned' })]);
+        const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [tripId]);
+        const offers = await tripOffersForTrips(client, [tripId]);
+        return tripView(view.rows[0], offers.get(tripId) ?? []);
       });
     } catch (error) {
       if (isUniqueViolation(error) && error.constraint === 'trips_driver_active_uq') {
@@ -1522,8 +1629,11 @@ export function routes(app, { pool, demoLogin = false }) {
 
   app.post('/api/v1/operator/trips/:id/assign', {
     schema: { body: {
-      type: 'object', additionalProperties: false, required: ['driverUserId'],
-      properties: { driverUserId: { type: 'string', format: 'uuid' } },
+      type: 'object', additionalProperties: false, required: ['driverUserId', 'priceCents'],
+      properties: {
+        driverUserId: { type: 'string', format: 'uuid' },
+        priceCents: { type: 'integer', minimum: 5000, maximum: 10000000 },
+      },
     } },
   }, async (request) => {
     const auth = requireRole(request, 'operator');
@@ -1539,15 +1649,16 @@ export function routes(app, { pool, demoLogin = false }) {
       if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
       if (trip.status !== 'requested') fail(409, 'trip_taken', 'Поездка уже назначена');
       await client.query(
-        `update trips set status = 'assigned', driver_user_id = $2, accepted_at = now(), updated_at = now()
-         where id = $1`, [trip.id, request.body.driverUserId]);
+        `update trips set status = 'assigned', driver_user_id = $2, price_cents = $3, currency = 'RUB',
+           accepted_at = now(), updated_at = now() where id = $1`,
+        [trip.id, request.body.driverUserId, request.body.priceCents]);
       await client.query(
         `insert into trip_events (trip_id, status, actor_user_id, note) values ($1, 'assigned', $2, 'operator')`,
         [trip.id, auth.userId]);
       for (const userId of [trip.client_user_id, request.body.driverUserId]) {
         await client.query(
           `insert into notifications (user_id, kind, payload) values ($1, 'trip_assigned', $2)`,
-          [userId, JSON.stringify({ tripId: trip.id, status: 'assigned' })]);
+          [userId, JSON.stringify({ tripId: trip.id, priceCents: request.body.priceCents, status: 'assigned' })]);
       }
       const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
       return tripView(view.rows[0]);

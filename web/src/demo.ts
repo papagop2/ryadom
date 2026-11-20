@@ -63,11 +63,16 @@ type DemoRole = { role: string; partner_id: string | null };
 type DemoMe = { user: { id: string; phone: string; displayName: string }; roles: DemoRole[]; partnerIds: string[] };
 type DemoTripPoint = { label: string; lat: number; lng: number };
 type DemoTripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
-type DemoTripTariff = 'economy' | 'comfort' | 'minivan';
+type DemoTripOffer = {
+  id: string; price: Money; etaMin: number | null; message: string;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn'; createdAt: string;
+  driver: { id: string; name: string; car: string; plate: string };
+};
 type DemoTrip = {
   id: string; status: DemoTripStatus; from: DemoTripPoint; to: DemoTripPoint; distanceKm: number; durationMin: number;
-  price: Money; tariff?: DemoTripTariff; createdAt: string; client: { id: string; name: string };
+  price: Money | null; createdAt: string; client: { id: string; name: string };
   driver: { id: string; name: string; car: string; plate: string } | null;
+  offers?: DemoTripOffer[];
 };
 type DemoServiceOffer = {
   id: string; price: Money; message: string; etaMin: number | null;
@@ -189,7 +194,7 @@ const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p
 const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
 const saveServices = (items: DemoServiceRequest[]) => write(SERVICE_KEY, items);
 
-function tripQuote(from: DemoTripPoint, to: DemoTripPoint, tariff: DemoTripTariff = 'economy') {
+function tripQuote(from: DemoTripPoint, to: DemoTripPoint) {
   const rad = (value: number) => value * Math.PI / 180;
   const dLat = rad(to.lat - from.lat);
   const dLng = rad(to.lng - from.lng);
@@ -197,14 +202,7 @@ function tripQuote(from: DemoTripPoint, to: DemoTripPoint, tariff: DemoTripTarif
   const straight = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)));
   const distanceKm = Math.max(0.3, Math.round(straight * 1.35 * 10) / 10);
   const durationMin = Math.max(4, Math.round(distanceKm / 24 * 60 + 3));
-  const config = {
-    economy: { minCents: 14900, multiplier: 1 },
-    comfort: { minCents: 21900, multiplier: 1.45 },
-    minivan: { minCents: 27900, multiplier: 1.8 },
-  }[tariff];
-  const raw = (9900 + distanceKm * 2500 + durationMin * 500) * config.multiplier;
-  const cents = Math.max(config.minCents, Math.round(raw / 1000) * 1000);
-  return { distanceKm, durationMin, price: money(cents), tariff };
+  return { distanceKm, durationMin };
 }
 
 const placeById = (id: string) => places.find(item => item.id === id);
@@ -617,8 +615,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const from = body.from as unknown as DemoTripPoint;
     const to = body.to as unknown as DemoTripPoint;
     if (!from || !to) return fail('Укажите маршрут', 'invalid_route');
-    const tariff = (body.tariff === 'comfort' || body.tariff === 'minivan' ? body.tariff : 'economy') as DemoTripTariff;
-    return tripQuote(from, to, tariff) as T;
+    return tripQuote(from, to) as T;
   }
 
   if (url.pathname === '/api/v1/trips' && method === 'POST') {
@@ -636,11 +633,11 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (trips.some(item => item.client.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
       return fail('У вас уже есть активная поездка', 'active_trip');
     }
-    const tariff = (body.tariff === 'comfort' || body.tariff === 'minivan' ? body.tariff : 'economy') as DemoTripTariff;
-    const quote = tripQuote(from, to, tariff);
+    const quote = tripQuote(from, to);
     const trip: DemoTrip & { key?: string | null } = {
-      id: `t-${Date.now()}`, status: 'requested', from, to, ...quote,
-      createdAt: new Date().toISOString(), client: { id: me.user.id, name: me.user.displayName }, driver: null, key,
+      id: `t-${Date.now()}`, status: 'requested', from, to, ...quote, price: null,
+      createdAt: new Date().toISOString(), client: { id: me.user.id, name: me.user.displayName }, driver: null,
+      offers: [], key,
     };
     saveTrips([trip, ...trips]);
     return trip as T;
@@ -659,7 +656,9 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'driver' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
     const trips = getTrips();
     return {
-      available: trips.filter(item => item.status === 'requested' && item.client.id !== me.user.id),
+      available: trips.filter(item => item.status === 'requested' && item.client.id !== me.user.id).map(item => ({
+        ...item, offers: (item.offers ?? []).filter(offer => offer.driver.id === me.user.id),
+      })),
       mine: trips.filter(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status)),
     } as T;
   }
@@ -670,7 +669,60 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return { items: getTrips().filter(item => TRIP_ACTIVE.includes(item.status)) } as T;
   }
 
-  const tripActionMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/(accept|arrive|start|complete|cancel)$/);
+  const tripOfferMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/offers$/);
+  if (tripOfferMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'driver')) return fail('Недостаточно прав', 'forbidden');
+    const trips = getTrips();
+    const trip = trips.find(item => item.id === tripOfferMatch[1]);
+    if (!trip) return fail('Поездка не найдена', 'not_found');
+    if (trip.client.id === me.user.id) return fail('Нельзя предложить цену на свою поездку', 'own_trip');
+    if (trip.status !== 'requested') return fail('Заказ уже разобрали', 'trip_taken');
+    if (trips.some(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
+      return fail('У вас уже есть активная поездка', 'driver_busy');
+    }
+    const priceCents = Number(body.priceCents);
+    if (!Number.isInteger(priceCents) || priceCents < 5000 || priceCents > 10000000) {
+      return fail('Укажите цену от 50 ₽', 'invalid_price');
+    }
+    const driver = { id: me.user.id, name: me.user.displayName, car: 'Kia Rio', plate: 'A123ВС77' };
+    const existing = (trip.offers ?? []).find(offer => offer.driver.id === me.user.id);
+    if (existing && existing.status !== 'pending') return fail('Предложение уже обработано', 'offer_locked');
+    const offer: DemoTripOffer = existing ?? {
+      id: `to-${Date.now()}`, price: money(priceCents), etaMin: null, message: '',
+      status: 'pending', createdAt: new Date().toISOString(), driver,
+    };
+    offer.price = money(priceCents);
+    offer.etaMin = body.etaMin ? Number(body.etaMin) : null;
+    offer.message = String(body.message ?? '').slice(0, 200);
+    offer.createdAt = new Date().toISOString();
+    trip.offers = [...(trip.offers ?? []).filter(item => item.id !== offer.id), offer];
+    saveTrips(trips);
+    return offer as T;
+  }
+
+  const tripOfferAcceptMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/offers\/([^/]+)\/accept$/);
+  if (tripOfferAcceptMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const trips = getTrips();
+    const trip = trips.find(item => item.id === tripOfferAcceptMatch[1]);
+    if (!trip) return fail('Поездка не найдена', 'not_found');
+    if (trip.client.id !== me.user.id) return fail('Это не ваша поездка', 'forbidden');
+    if (trip.status !== 'requested') return fail('Поездка уже назначена', 'trip_taken');
+    const offer = (trip.offers ?? []).find(item => item.id === tripOfferAcceptMatch[2] && item.status === 'pending');
+    if (!offer) return fail('Предложение недоступно', 'offer_not_found');
+    trip.status = 'assigned';
+    trip.driver = offer.driver;
+    trip.price = offer.price;
+    trip.offers = (trip.offers ?? []).map(item => item.id === offer.id
+      ? { ...item, status: 'accepted' as const }
+      : item.status === 'pending' ? { ...item, status: 'declined' as const } : item);
+    saveTrips(trips);
+    return trip as T;
+  }
+
+  const tripActionMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/(arrive|start|complete|cancel)$/);
   if (tripActionMatch && method === 'POST') {
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
@@ -685,22 +737,15 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       const driverCan = isDriver && ['assigned', 'arrived'].includes(trip.status);
       if (!clientCan && !driverCan) return fail('Отменить поездку нельзя', 'forbidden');
       trip.status = 'cancelled';
+      trip.offers = (trip.offers ?? []).map(item => item.status === 'pending' ? { ...item, status: 'declined' as const } : item);
     } else {
       if (!me.roles.some(role => role.role === 'driver' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
-      if (action === 'accept') {
-        if (trip.status !== 'requested') return fail('Поездку уже приняли', 'trip_taken');
-        if (getTrips().some(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
-          return fail('У вас уже есть активная поездка', 'driver_busy');
-        }
-        trip.status = 'assigned';
-        trip.driver = { id: me.user.id, name: me.user.displayName, car: 'Kia Rio', plate: 'A123ВС77' };
-      } else {
-        if (trip.driver?.id !== me.user.id) return fail('Это не ваша поездка', 'forbidden');
-        const next: Record<string, DemoTripStatus> = { arrive: 'arrived', start: 'in_progress', complete: 'completed' };
-        const allowed: Record<string, DemoTripStatus> = { arrive: 'assigned', start: 'arrived', complete: 'in_progress' };
-        if (trip.status !== allowed[action]) return fail('Поездка уже в другом состоянии', 'invalid_transition');
-        trip.status = next[action];
-      }
+      if (trip.driver?.id !== me.user.id) return fail('Это не ваша поездка', 'forbidden');
+      const next: Record<string, DemoTripStatus> = { arrive: 'arrived', start: 'in_progress', complete: 'completed' };
+      const allowed: Record<string, DemoTripStatus> = { arrive: 'assigned', start: 'arrived', complete: 'in_progress' };
+      if (trip.status !== allowed[action]) return fail('Поездка уже в другом состоянии', 'invalid_transition');
+      if (action === 'complete' && !trip.price) return fail('Сначала согласуйте цену с клиентом', 'price_not_agreed');
+      trip.status = next[action];
     }
     saveTrips(trips);
     return trip as T;
