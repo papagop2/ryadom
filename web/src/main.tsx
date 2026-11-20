@@ -494,7 +494,7 @@ function App() {
     </nav>
 
     <Sheet open={cityOpen} onClose={() => setCityOpen(false)} title="Город">
-      <p className="sheet-hint">Сейчас пилот — Слюдянка. Новый город добавляется импортом каталога.</p>
+      <p className="sheet-hint">Выберите город. Новые города подключаются вместе с каталогом.</p>
       <div className="sheet-options city-options">
         {cities.map(item => <button key={item.slug} type="button"
           className={citySlug === item.slug ? 'selected' : ''}
