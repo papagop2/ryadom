@@ -103,7 +103,7 @@ type ModerationItem = {
   author: string; place_name: string; place_id: string; booking_id: string;
 };
 
-const categories: Record<string, string> = { all: 'Всё', salon: 'Красота', services: 'Мастера', health: 'Здоровье', food: 'Еда' };
+const categories: Record<string, string> = { all: 'Всё', salon: 'Красота', services: 'Сервисы', health: 'Здоровье', food: 'Еда' };
 type Category = 'salon' | 'services' | 'health' | 'food';
 const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 const price = (value: Money | null) => value ? money.format(value.cents / 100) : '—';
@@ -551,6 +551,7 @@ type MapMarker = {
   key: string; x: number; y: number; sumX: number; sumY: number;
   items: PlaceCard[]; kind: MapMarkerKind; size: number;
 };
+type MapViewport = { center: { lat: number; lng: number }; zoom: number };
 
 function mapMarkerKind(count: number, item: PlaceCard, zoom: number): MapMarkerKind {
   if (count > 1) return 'cluster';
@@ -566,19 +567,30 @@ function mapMarkerSize(kind: MapMarkerKind, count: number, zoom: number, cell: n
   return Math.max(36, Math.min(cell - 4, wanted));
 }
 
-function MapView({ items, center: cityCenter, onOpen, notify }: {
+function MapView({ items, center: cityCenter, onOpen, notify, initialView, onViewChange }: {
   items: PlaceCard[]; center: { lat: number; lng: number };
   onOpen: (place: PlaceCard) => void; notify: (text: string) => void;
+  initialView?: MapViewport | null; onViewChange?: (view: MapViewport) => void;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number; world: { x: number; y: number } } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number; center: { lat: number; lng: number } } | null>(null);
   const fitKey = useRef('');
   const [size, setSize] = useState({ w: 360, h: 320 });
-  const [zoom, setZoom] = useState(11);
-  const [center, setCenter] = useState(cityCenter);
+  const [zoom, setZoom] = useState(() => initialView?.zoom ?? 11);
+  const [center, setCenter] = useState(() => initialView?.center ?? cityCenter);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
+  const [clusterOpen, setClusterOpen] = useState<MapMarker | null>(null);
+  const preserveView = useRef(Boolean(initialView));
+  const viewHandler = useRef(onViewChange);
+  useEffect(() => { viewHandler.current = onViewChange; }, [onViewChange]);
+  useEffect(() => {
+    viewHandler.current?.({ center, zoom });
+  }, [center.lat, center.lng, zoom]);
 
   useEffect(() => {
+    if (preserveView.current) return;
     fitKey.current = '';
     setCenter(cityCenter);
     setZoom(11);
@@ -595,7 +607,7 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   }, []);
 
   useEffect(() => {
-    if (!items.length || !size.w || !size.h) return;
+    if (preserveView.current || !items.length || !size.w || !size.h) return;
     const key = `${items.length}:${items[0].id}:${items[items.length - 1].id}:${size.w}x${size.h}`;
     if (fitKey.current === key) return;
     fitKey.current = key;
@@ -636,16 +648,42 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('button, a')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { x: event.clientX, y: event.clientY, world };
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 1) {
+      drag.current = { x: event.clientX, y: event.clientY, world };
+    } else if (pointers.current.size === 2) {
+      const [first, second] = [...pointers.current.values()];
+      pinch.current = {
+        distance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)),
+        zoom, center,
+      };
+      drag.current = null;
+    }
   };
   const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch.current && pointers.current.size >= 2) {
+      const [first, second] = [...pointers.current.values()];
+      const distance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+      setZoom(clamp(Math.round(pinch.current.zoom + Math.log2(distance / pinch.current.distance)), 9, 18));
+      setCenter(pinch.current.center);
+      return;
+    }
+    if (!drag.current || pointers.current.size !== 1) return;
     const next = unproject(
       drag.current.world.x - (event.clientX - drag.current.x),
       drag.current.world.y - (event.clientY - drag.current.y), zoom);
     setCenter({ lat: clamp(next.lat, -85, 85), lng: next.lng });
   };
-  const endDrag = () => { drag.current = null; };
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 0) drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   // Сетка задаёт стартовые группы, а проверка пересечений доводит их до
   // состояния, в котором ни одна метка не наезжает на соседнюю. На дальнем
@@ -710,7 +748,9 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   }
 
   return <div className="tile-map" ref={box} aria-label="Карта заведений"
-    onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+    onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+    onWheel={event => { event.preventDefault(); setZoom(value => clamp(value + (event.deltaY < 0 ? 1 : -1), 9, 18)); }}
+    onDoubleClick={() => setZoom(value => clamp(value + 1, 9, 18))}>
     <div className="tile-layer">
       {tiles.map(tile => <img key={tile.key} src={tile.src} alt="" draggable={false} loading="lazy"
         style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
@@ -732,6 +772,11 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
           title={marker.items.slice(0, 6).map(item => item.name).join(', ')}
           onPointerDown={event => event.stopPropagation()}
           onClick={() => {
+            if (count <= 12 || zoom >= 16) {
+              setClusterOpen(marker);
+              haptic(4);
+              return;
+            }
             const centerPoint = {
               lat: marker.items.reduce((sum, item) => sum + item.location.lat, 0) / count,
               lng: marker.items.reduce((sum, item) => sum + item.location.lng, 0) / count,
@@ -762,6 +807,19 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
         </span><em>{point.name}</em>
       </button>;
     })}
+    {clusterOpen && <div className="tile-cluster-sheet" onPointerDown={event => event.stopPropagation()}>
+      <div className="tile-cluster-sheet-head">
+        <span><strong>{clusterOpen.items.length} мест</strong><small>выберите организацию</small></span>
+        <button type="button" aria-label="Закрыть список" onClick={() => setClusterOpen(null)}>×</button>
+      </div>
+      <div className="tile-cluster-list">
+        {clusterOpen.items.map(item => <button key={item.id} type="button" className="tile-cluster-item"
+          onClick={() => { setClusterOpen(null); onOpen(item); }}>
+          <PlaceThumb place={item} />
+          <span><strong>{item.name}</strong><small>{item.address}</small></span>
+        </button>)}
+      </div>
+    </div>}
     <div className="map-tools">
       <button type="button" aria-label="Приблизить" onClick={() => setZoom(value => clamp(value + 1, 9, 18))}>+</button>
       <button type="button" aria-label="Отдалить" onClick={() => setZoom(value => clamp(value - 1, 9, 18))}>−</button>
@@ -1768,6 +1826,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
+  const [mapView, setMapView] = useState<(MapViewport & { citySlug: string }) | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -1967,7 +2026,9 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         </button>)}
     </div>
 
-    {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify} />}
+    {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify}
+      initialView={mapView?.citySlug === city?.slug ? mapView : null}
+      onViewChange={view => setMapView({ citySlug: city?.slug ?? '', ...view })} />}
 
     <section aria-labelledby="catalogue">
       <div className="section-title">

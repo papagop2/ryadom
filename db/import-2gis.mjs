@@ -9,22 +9,7 @@ import { createPool } from '../api/db.mjs';
 export const SLYUDYANKA = { slug: 'slyudyanka', name: 'Слюдянский район', region: 'Иркутская область', lat: 51.659713, lng: 103.706825 };
 const FILE = new URL('./data/slyudyanka-2gis.json', import.meta.url);
 
-const FOOD = ['кафе', 'ресторан', 'кофейн', 'бар', 'суши', 'пицц', 'столов', 'продукт', 'супермаркет',
-  'кондитер', 'пекарн', 'мясо', 'рыб', 'молочн', 'напитк', 'доставка еды', 'кулинар', 'шашлык',
-  'бургер', 'стрит-фуд', 'чай', 'кофе', 'консерв', 'овощ', 'фрукт', 'орех', 'макарон', 'сыр',
-  'колбас', 'яйцо', 'специи', 'детское питание'];
-const HEALTH = ['аптек', 'медицин', 'стоматолог', 'поликлиник', 'больниц', 'врач', 'диагност',
-  'лаборатор', 'оптик', 'бад', 'фитопродукц', 'массаж', 'ветеринар', 'косметолог'];
-const SALON = ['парикмахер', 'ногтевой', 'маникюр', 'педикюр', 'бров', 'ресниц', 'косметик',
-  'салон красоты', 'барбершоп', 'визаж', 'эпиляц', 'загар', 'тату', 'спа', 'солярий'];
-
-function categoryOf(rubrics = []) {
-  const text = rubrics.join(' ').toLowerCase();
-  if (HEALTH.some(word => text.includes(word))) return 'health';
-  if (SALON.some(word => text.includes(word))) return 'salon';
-  if (FOOD.some(word => text.includes(word))) return 'food';
-  return 'services';
-}
+import { categoryOf } from './categories.mjs';
 
 function clean(value, max) {
   const text = String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -67,7 +52,7 @@ export async function importCity(pool, { city = SLYUDYANKA, file = FILE, verbose
       const address = clean(org.address, 200) || clean(org.district, 60) || 'Слюдянка';
       const district = clean(org.district, 60) || 'Слюдянка';
       const about = rubrics.length ? rubrics.join(' · ') : 'Организация из справочника 2ГИС';
-      const category = categoryOf(rubrics);
+      const category = categoryOf({ rubrics, name });
       const metadata = {
         rubrics,
         sites: org.sites ?? [],

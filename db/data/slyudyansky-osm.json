@@ -446,7 +446,7 @@
     "district": "Быстрая",
     "lat": 51.7510215,
     "lng": 103.4272605,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -468,7 +468,7 @@
     "district": "Слюдянка",
     "lat": 51.6543682,
     "lng": 103.72113,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Апартаменты"
     ],
@@ -684,7 +684,7 @@
     "district": "Слюдянка",
     "lat": 51.6635708,
     "lng": 103.7202738,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -777,7 +777,7 @@
     "district": "Слюдянка",
     "lat": 51.6642888,
     "lng": 103.7198424,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -799,7 +799,7 @@
     "district": "Слюдянка",
     "lat": 51.6463881,
     "lng": 103.7024994,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Хостел"
     ],
@@ -865,7 +865,7 @@
     "district": "Байкальск",
     "lat": 51.5224218,
     "lng": 104.1506448,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -1311,7 +1311,7 @@
     "district": "Байкальск",
     "lat": 51.4443886,
     "lng": 104.0616745,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -1377,7 +1377,7 @@
     "district": "Байкальск",
     "lat": 51.4378979,
     "lng": 103.9976207,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -1487,7 +1487,7 @@
     "district": "Буровщина",
     "lat": 51.6258927,
     "lng": 103.8111911,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -1583,7 +1583,7 @@
     "district": "Култук",
     "lat": 51.719585,
     "lng": 103.68698,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -1759,7 +1759,7 @@
     "district": "Култук",
     "lat": 51.7208906,
     "lng": 103.6725631,
-    "category": "services",
+    "category": "food",
     "rubrics": [
       "Макароны"
     ],
@@ -1881,7 +1881,7 @@
     "district": "Байкальск",
     "lat": 51.5189123,
     "lng": 104.1096494,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -1972,7 +1972,7 @@
     "district": "Слюдянка",
     "lat": 51.6504947,
     "lng": 103.7101186,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -1999,7 +1999,7 @@
     "district": "Байкальск",
     "lat": 51.5088712,
     "lng": 104.1199098,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -2029,7 +2029,7 @@
     "district": "Новоснежная",
     "lat": 51.3962369,
     "lng": 104.6486619,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -2119,7 +2119,7 @@
     "district": "Слюдянка",
     "lat": 51.6896217,
     "lng": 103.6535772,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -2680,7 +2680,7 @@
     "district": "Култук",
     "lat": 51.7331773,
     "lng": 103.7256481,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -2724,7 +2724,7 @@
     "district": "Новоснежная",
     "lat": 51.3963011,
     "lng": 104.6488934,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -2746,7 +2746,7 @@
     "district": "Новоснежная",
     "lat": 51.3558011,
     "lng": 104.6162424,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -3193,7 +3193,7 @@
     "district": "Половинная",
     "lat": 51.8028818,
     "lng": 104.3517018,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Апартаменты"
     ],
@@ -3529,7 +3529,7 @@
     "district": "Порт Байкал",
     "lat": 51.8817861,
     "lng": 104.8092172,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -3999,7 +3999,7 @@
     "district": "Новоснежная",
     "lat": 51.4730861,
     "lng": 104.6270949,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -4044,7 +4044,7 @@
     "district": "Байкальск",
     "lat": 51.5107991,
     "lng": 104.1400748,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -4286,7 +4286,7 @@
     "district": "Буровщина",
     "lat": 51.6198041,
     "lng": 103.8111244,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -4308,7 +4308,7 @@
     "district": "Новоснежная",
     "lat": 51.2810696,
     "lng": 104.1589434,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -4444,7 +4444,7 @@
     "district": "Сухой Ручей",
     "lat": 51.6459761,
     "lng": 103.7591896,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -4488,7 +4488,7 @@
     "district": "Новоснежная",
     "lat": 51.3518357,
     "lng": 104.608168,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -4643,7 +4643,7 @@
     "district": "Байкальск",
     "lat": 51.524242,
     "lng": 104.134223,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -4665,7 +4665,7 @@
     "district": "Сухой Ручей",
     "lat": 51.6459777,
     "lng": 103.7585544,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -4690,7 +4690,7 @@
     "district": "Баклань",
     "lat": 51.7603385,
     "lng": 104.1010803,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -4717,7 +4717,7 @@
     "district": "Слюдянка",
     "lat": 51.655456,
     "lng": 103.715667,
-    "category": "services",
+    "category": "food",
     "rubrics": [
       "Рынок"
     ],
@@ -5170,7 +5170,7 @@
     "district": "Байкальск",
     "lat": 51.523513,
     "lng": 104.133285,
-    "category": "salon",
+    "category": "services",
     "rubrics": [
       "Сауна"
     ],
@@ -5192,7 +5192,7 @@
     "district": "Байкальск",
     "lat": 51.513682,
     "lng": 104.121259,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -5236,7 +5236,7 @@
     "district": "Быстрая",
     "lat": 51.7428652,
     "lng": 103.4193037,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5258,7 +5258,7 @@
     "district": "Тибельти",
     "lat": 51.7622799,
     "lng": 103.2605816,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5280,7 +5280,7 @@
     "district": "Култук",
     "lat": 51.728101,
     "lng": 103.7158783,
-    "category": "services",
+    "category": "food",
     "rubrics": [
       "Рынок"
     ],
@@ -5302,7 +5302,7 @@
     "district": "Мангутай",
     "lat": 51.6020488,
     "lng": 103.9065075,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -5656,7 +5656,7 @@
     "district": "Слюдянка",
     "lat": 51.6775396,
     "lng": 103.7063802,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг",
       "По всему берегу множества мест для палаток"
@@ -5725,7 +5725,7 @@
     "district": "Новоснежная",
     "lat": 51.4722783,
     "lng": 104.6260267,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -5774,7 +5774,7 @@
     "district": "Байкальск",
     "lat": 51.513901,
     "lng": 104.121962,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -5911,7 +5911,7 @@
     "district": "Новоснежная",
     "lat": 51.4768484,
     "lng": 104.6232108,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5933,7 +5933,7 @@
     "district": "Новоснежная",
     "lat": 51.371517,
     "lng": 104.3849474,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5955,7 +5955,7 @@
     "district": "Новоснежная",
     "lat": 51.3738502,
     "lng": 104.276027,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5977,7 +5977,7 @@
     "district": "Новоснежная",
     "lat": 51.2805051,
     "lng": 104.1616103,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -5999,7 +5999,7 @@
     "district": "Утулик",
     "lat": 51.5389316,
     "lng": 104.0581874,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -6043,7 +6043,7 @@
     "district": "Новоснежная",
     "lat": 51.3956587,
     "lng": 104.6475595,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -6190,7 +6190,7 @@
     "district": "Слюдянка",
     "lat": 51.5287107,
     "lng": 103.5873252,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -6218,7 +6218,7 @@
     "district": "Култук",
     "lat": 51.7307156,
     "lng": 103.727315,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -6241,7 +6241,7 @@
     "district": "Утулик",
     "lat": 51.5282001,
     "lng": 104.0478069,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -6263,7 +6263,7 @@
     "district": "Слюдянка",
     "lat": 51.6599822,
     "lng": 103.7280722,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -6329,7 +6329,7 @@
     "district": "Утулик",
     "lat": 51.5480036,
     "lng": 104.0679337,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -6351,7 +6351,7 @@
     "district": "Мурино",
     "lat": 51.4872256,
     "lng": 104.4007286,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -6484,7 +6484,7 @@
     "district": "Маритуй",
     "lat": 51.7762186,
     "lng": 104.1805755,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -6506,7 +6506,7 @@
     "district": "Порт Байкал",
     "lat": 51.8591923,
     "lng": 104.7178142,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -6550,7 +6550,7 @@
     "district": "Утулик",
     "lat": 51.5510737,
     "lng": 104.0595,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -6660,7 +6660,7 @@
     "district": "Слюдянка",
     "lat": 51.5285989,
     "lng": 103.5876954,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -6688,7 +6688,7 @@
     "district": "Маритуй",
     "lat": 51.7957264,
     "lng": 104.5154426,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -6909,7 +6909,7 @@
     "district": "Шаражалгай",
     "lat": 51.7510462,
     "lng": 103.9843968,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "База отдыха"
     ],
@@ -7738,7 +7738,7 @@
     "district": "Мурино",
     "lat": 51.4885577,
     "lng": 104.4121584,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -7805,7 +7805,7 @@
     "district": "Порт Байкал",
     "lat": 51.8709735,
     "lng": 104.8067026,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -7947,7 +7947,7 @@
     "district": "Слюдянка",
     "lat": 51.6550758,
     "lng": 103.7337751,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Кемпинг"
     ],
@@ -7991,7 +7991,7 @@
     "district": "Утулик",
     "lat": 51.5478516,
     "lng": 104.061813,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -8038,7 +8038,7 @@
     "district": "Утулик",
     "lat": 51.5525078,
     "lng": 104.0587331,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],
@@ -8175,7 +8175,7 @@
     "district": "Байкальск",
     "lat": 51.5237834,
     "lng": 104.1448632,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостиница"
     ],
@@ -8197,7 +8197,7 @@
     "district": "Утулик",
     "lat": 51.539339,
     "lng": 104.0478735,
-    "category": "food",
+    "category": "services",
     "rubrics": [
       "Гостевой дом"
     ],

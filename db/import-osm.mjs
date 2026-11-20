@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createPool } from '../api/db.mjs';
 import { SLYUDYANKA } from './import-2gis.mjs';
+import { categoryOf } from './categories.mjs';
 
 const FILE = new URL('./data/slyudyansky-osm.json', import.meta.url);
 
@@ -34,6 +35,7 @@ export async function importOsm(pool, { city = SLYUDYANKA, file = FILE, verbose 
       const district = clean(org.district, 60) || 'Слюдянский район';
       const address = clean(org.address, 200) || district;
       const about = clean(org.about, 600) || rubrics.join(' · ') || 'Организация из OpenStreetMap';
+      const category = categoryOf({ rubrics, tags: org.tags, name: org.name });
       const metadata = {
         rubrics,
         sites: org.sites ?? [],
@@ -57,7 +59,7 @@ export async function importOsm(pool, { city = SLYUDYANKA, file = FILE, verbose 
            lat = excluded.lat, lng = excluded.lng, about = excluded.about, phone = excluded.phone,
            source_url = excluded.source_url, source_reviews_url = null, source_rating = null,
            source_rating_count = 0, metadata = excluded.metadata, image_url = null, photos = '[]'::jsonb`,
-        [city.name, city.slug, clean(org.name, 120), org.category || 'services', district, address,
+        [city.name, city.slug, clean(org.name, 120), category, district, address,
           lat, lng, about, org.phones?.[0] ? clean(org.phones[0], 40) : null,
           `osm:${org.osm}`, sourceUrl, JSON.stringify(metadata)]);
       places += 1;
