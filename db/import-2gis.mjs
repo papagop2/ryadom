@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createPool } from '../api/db.mjs';
 
-export const SLYUDYANKA = { slug: 'slyudyanka', name: 'Слюдянка', region: 'Иркутская область', lat: 51.659713, lng: 103.706825 };
+export const SLYUDYANKA = { slug: 'slyudyanka', name: 'Слюдянский район', region: 'Иркутская область', lat: 51.659713, lng: 103.706825 };
 const FILE = new URL('./data/slyudyanka-2gis.json', import.meta.url);
 
 const FOOD = ['кафе', 'ресторан', 'кофейн', 'бар', 'суши', 'пицц', 'столов', 'продукт', 'супермаркет',
@@ -64,7 +64,8 @@ export async function importCity(pool, { city = SLYUDYANKA, file = FILE, verbose
       const lng = Number(org.lng) || CITY.lng;
       const rubrics = Array.isArray(org.rubrics) ? org.rubrics : [];
       const name = clean(org.name, 120) || 'Организация';
-      const address = clean(org.address, 200) || CITY.name;
+      const address = clean(org.address, 200) || clean(org.district, 60) || 'Слюдянка';
+      const district = clean(org.district, 60) || 'Слюдянка';
       const about = rubrics.length ? rubrics.join(' · ') : 'Организация из справочника 2ГИС';
       const category = categoryOf(rubrics);
       const metadata = {
@@ -90,7 +91,7 @@ export async function importCity(pool, { city = SLYUDYANKA, file = FILE, verbose
            metadata = excluded.metadata, image_url = excluded.image_url,
            photos = excluded.photos
          returning id`,
-        [CITY.name, CITY.slug, name, category, CITY.name, address, lat, lng, about, phoneOf(org),
+        [CITY.name, CITY.slug, name, category, district, address, lat, lng, about, phoneOf(org),
           String(org.id), sourceUrl, `${sourceUrl}/tab/reviews`, org.rating ?? null, org.ratingCount ?? 0,
           JSON.stringify(metadata), org.image ?? null, JSON.stringify(org.photos ?? [])]);
       const placeId = inserted.rows[0].id;

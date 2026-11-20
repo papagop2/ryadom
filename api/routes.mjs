@@ -62,6 +62,24 @@ function dayHours(day) {
   return hours.join(', ') || 'выходной';
 }
 
+function sourceView(row) {
+  if (row.source === '2gis') {
+    return {
+      kind: '2gis', name: '2ГИС', url: row.source_url,
+      reviewsUrl: row.source_reviews_url,
+      rating: row.source_rating === null ? null : Number(row.source_rating),
+      ratingCount: row.source_rating_count,
+    };
+  }
+  if (row.source === 'osm') {
+    return {
+      kind: 'osm', name: 'OpenStreetMap', url: row.source_url, reviewsUrl: null,
+      rating: null, ratingCount: 0, license: 'ODbL',
+    };
+  }
+  return null;
+}
+
 function scheduleText(schedule) {
   if (!schedule || typeof schedule !== 'object') return null;
   const values = WEEK.map(([key]) => dayHours(schedule[key]));
@@ -784,11 +802,7 @@ export function routes(app, { pool, demoLogin = false }) {
         image: row.image_url,
         rating: row.rating_avg === null ? null : Number(row.rating_avg),
         ratingCount: row.rating_count,
-        source: row.source === '2gis' ? {
-          name: '2ГИС', url: row.source_url,
-          rating: row.source_rating === null ? null : Number(row.source_rating),
-          ratingCount: row.source_rating_count,
-        } : null,
+        source: sourceView(row),
         priceFrom: row.min_price_cents === null ? null : money(row.min_price_cents),
         offerCount: row.offer_count,
         distanceKm: row.distance_km === null ? null : Number(row.distance_km),
@@ -796,6 +810,33 @@ export function routes(app, { pool, demoLogin = false }) {
       total: rows[0]?.total ?? 0,
       limit,
       offset,
+    };
+  });
+
+  app.get('/api/v1/places/map', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: {
+      city: { type: 'string', maxLength: 40 },
+    } } },
+  }, async (request, reply) => {
+    const { city } = request.query;
+    const { rows } = await pool.query(
+      `select p.id, p.name, p.category, p.district, p.address, p.about, p.lat, p.lng,
+              p.rating_avg, p.rating_count, p.source, p.source_url, p.source_reviews_url,
+              p.source_rating, p.source_rating_count, p.city_slug, p.image_url
+       from places p
+       where p.is_published and ($1::text is null or p.city_slug = $1)
+       order by p.name asc`, [city ?? null]);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      items: rows.map(row => ({
+        id: row.id, name: row.name, category: row.category, district: row.district,
+        address: row.address, about: row.about, location: { lat: Number(row.lat), lng: Number(row.lng) },
+        city: row.city_slug, image: row.image_url,
+        rating: row.rating_avg === null ? null : Number(row.rating_avg), ratingCount: row.rating_count,
+        source: sourceView(row),
+        priceFrom: null, offerCount: 0, distanceKm: null,
+      })),
+      total: rows.length,
     };
   });
 
@@ -868,13 +909,9 @@ export function routes(app, { pool, demoLogin = false }) {
         bookable: place.bookable,
         rating: place.rating_avg === null ? null : Number(place.rating_avg),
         ratingCount: place.rating_count,
-        source: place.source === '2gis' ? {
-          name: '2ГИС', url: place.source_url, reviewsUrl: place.source_reviews_url,
-          rating: place.source_rating === null ? null : Number(place.source_rating),
-          ratingCount: place.source_rating_count,
-        } : null,
+        source: sourceView(place),
         info: {
-          schedule: scheduleText(place.metadata?.schedule),
+          schedule: scheduleText(place.metadata?.schedule) || place.metadata?.openingHours || null,
           sites: Array.isArray(place.metadata?.sites) ? place.metadata.sites.filter(Boolean).slice(0, 3) : [],
         },
       },

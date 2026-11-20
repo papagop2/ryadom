@@ -384,6 +384,15 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return { items } as T;
   }
 
+  if (url.pathname === '/api/v1/places/map') {
+    const city = url.searchParams.get('city');
+    const items = places
+      .filter(place => (place as { isPublished?: boolean }).isPublished !== false)
+      .filter(place => !city || (place as { city?: string }).city === city)
+      .map(place => card(place));
+    return { items, total: items.length } as T;
+  }
+
   const placeMatch = url.pathname.match(/^\/api\/v1\/places\/([^/]+)$/);
   if (placeMatch) {
     const place = placeById(placeMatch[1]);

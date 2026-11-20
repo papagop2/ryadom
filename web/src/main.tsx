@@ -7,7 +7,7 @@ import { reverseAddress, searchAddress, type GeoPlace } from './geocoding';
 import './style.css';
 
 type Money = { cents: number; currency: string };
-type PlaceSource = { name: string; url: string | null; reviewsUrl?: string | null; rating: number | null; ratingCount: number };
+type PlaceSource = { kind?: '2gis' | 'osm'; name: string; url: string | null; reviewsUrl?: string | null; rating: number | null; ratingCount: number; license?: string };
 type PlaceCard = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
   location: { lat: number; lng: number }; city: string; image: string | null;
@@ -552,16 +552,16 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; y: number; world: { x: number; y: number } } | null>(null);
-  const centered = useRef(false);
+  const fitKey = useRef('');
   const [size, setSize] = useState({ w: 360, h: 320 });
-  const [zoom, setZoom] = useState(14);
+  const [zoom, setZoom] = useState(11);
   const [center, setCenter] = useState(cityCenter);
   const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
-    centered.current = false;
+    fitKey.current = '';
     setCenter(cityCenter);
-    setZoom(14);
+    setZoom(11);
   }, [cityCenter.lat, cityCenter.lng]);
 
   useEffect(() => {
@@ -575,13 +575,25 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   }, []);
 
   useEffect(() => {
-    if (centered.current || !items.length) return;
-    setCenter({
-      lat: items.reduce((sum, item) => sum + item.location.lat, 0) / items.length,
-      lng: items.reduce((sum, item) => sum + item.location.lng, 0) / items.length,
-    });
-    centered.current = true;
-  }, [items]);
+    if (!items.length || !size.w || !size.h) return;
+    const key = `${items.length}:${items[0].id}:${items[items.length - 1].id}:${size.w}x${size.h}`;
+    if (fitKey.current === key) return;
+    fitKey.current = key;
+    const lats = items.map(item => item.location.lat);
+    const lngs = items.map(item => item.location.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const next = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+    const latSpan = Math.max(maxLat - minLat, 0.002);
+    const lngSpan = Math.max(maxLng - minLng, 0.002);
+    const fitX = Math.log2((size.w * 0.8) * 360 / lngSpan / TILE);
+    const mercator = 1 / Math.cos(next.lat * Math.PI / 180);
+    const fitY = Math.log2((size.h * 0.7) * 360 / latSpan / mercator / TILE);
+    setCenter(next);
+    setZoom(clamp(Math.floor(Math.min(fitX, fitY)), 9, 16));
+  }, [items, size.w, size.h]);
 
   const world = project(center.lat, center.lng, zoom);
   const left = world.x - size.w / 2;
@@ -615,6 +627,19 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   };
   const endDrag = () => { drag.current = null; };
 
+  const cell = zoom < 15 ? 62 : 0;
+  const clusters = new Map<string, { x: number; y: number; items: PlaceCard[] }>();
+  for (const item of items) {
+    const pos = project(item.location.lat, item.location.lng, zoom);
+    const x = pos.x - left;
+    const y = pos.y - top;
+    if (x < -36 || y < -36 || x > size.w + 36 || y > size.h + 36) continue;
+    const key = cell ? `${Math.floor(x / cell)}:${Math.floor(y / cell)}` : item.id;
+    const group = clusters.get(key);
+    if (group) group.items.push(item);
+    else clusters.set(key, { x, y, items: [item] });
+  }
+
   return <div className="tile-map" ref={box} aria-label="Карта заведений"
     onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
     <div className="tile-layer">
@@ -628,21 +653,36 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
       if (x < -20 || y < -20 || x > size.w + 20 || y > size.h + 20) return null;
       return <span className="me-pin" style={{ left: `${x}px`, top: `${y}px` }} aria-label="Моё место" />;
     })()}
-    {items.map(item => {
-      const pos = project(item.location.lat, item.location.lng, zoom);
-      return <button key={item.id} type="button" className="tile-pin" title={item.name}
-        aria-label={item.name} style={{ left: `${pos.x - left}px`, top: `${pos.y - top}px` }}
-        onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(item)}>
-        <span className={`tile-pin-photo${item.image ? ' with-photo' : ''}`}>
-          <b>{item.name.slice(0, 1)}</b>
-          {item.image && <img src={item.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-            onError={event => { event.currentTarget.style.display = 'none'; }} />}
-        </span><em>{item.name}</em>
+    {[...clusters.entries()].map(([key, group]) => {
+      const point = group.items[0];
+      if (group.items.length === 1) {
+        return <button key={key} type="button" className="tile-pin" title={point.name}
+          aria-label={point.name} style={{ left: `${group.x}px`, top: `${group.y}px` }}
+          onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(point)}>
+          <span className={`tile-pin-photo${point.image ? ' with-photo' : ''}`}>
+            <b>{point.name.slice(0, 1)}</b>
+            {point.image && <img src={point.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+              onError={event => { event.currentTarget.style.display = 'none'; }} />}
+          </span><em>{point.name}</em>
+        </button>;
+      }
+      const count = group.items.length;
+      const centerPoint = {
+        lat: group.items.reduce((sum, item) => sum + item.location.lat, 0) / count,
+        lng: group.items.reduce((sum, item) => sum + item.location.lng, 0) / count,
+      };
+      return <button key={key} type="button" className="tile-cluster"
+        style={{ left: `${group.x}px`, top: `${group.y}px` }}
+        aria-label={`${count} организаций — приблизить`}
+        title={group.items.slice(0, 6).map(item => item.name).join(', ')}
+        onPointerDown={event => event.stopPropagation()}
+        onClick={() => { setCenter(centerPoint); setZoom(value => clamp(value + 2, 11, 18)); haptic(4); }}>
+        <b>{count}</b><small>мест</small>
       </button>;
     })}
     <div className="map-tools">
-      <button type="button" aria-label="Приблизить" onClick={() => setZoom(value => clamp(value + 1, 11, 18))}>+</button>
-      <button type="button" aria-label="Отдалить" onClick={() => setZoom(value => clamp(value - 1, 11, 18))}>−</button>
+      <button type="button" aria-label="Приблизить" onClick={() => setZoom(value => clamp(value + 1, 9, 18))}>+</button>
+      <button type="button" aria-label="Отдалить" onClick={() => setZoom(value => clamp(value - 1, 9, 18))}>−</button>
       <button type="button" aria-label="Где я" onClick={() => {
         if (!navigator.geolocation) return notify('Геолокация недоступна');
         navigator.geolocation.getCurrentPosition(
@@ -650,7 +690,7 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
             const point = { lat: position.coords.latitude, lng: position.coords.longitude };
             setMe(point);
             setCenter(point);
-            setZoom(15);
+            setZoom(16);
           },
           () => notify('Не удалось определить положение. Карта работает без геолокации.'),
           { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 });
@@ -659,7 +699,6 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
     <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
   </div>;
 }
-
 function destinationsFor(city: City | null): TripPoint[] {
   if (city?.slug === 'slyudyanka') {
     return [
@@ -1612,12 +1651,12 @@ function PlaceCover({ place, photos, onOpen }: {
   const content = <>
     <img src={src} alt={place.name} loading="eager" decoding="async"
       referrerPolicy="no-referrer" onError={() => setFailed(true)} />
-    <span className="cover-source">{place.source ? `2ГИС · ${photos?.length ?? 1} фото` : 'Фото'}</span>
+    <span className="cover-source">{place.source?.kind === '2gis' ? `2ГИС · ${Math.max(photos?.length ?? 0, 1)} фото` : 'Фото'}</span>
   </>;
   return onOpen
     ? <button type="button" className="place-cover" onClick={() => onOpen(0)}
       aria-label={`Фотографии: ${place.name}`}>{content}</button>
-    : <a className="place-cover" href={place.source ? `${place.source.url ?? '#'}/tab/photos` : src}
+    : <a className="place-cover" href={place.source?.kind === '2gis' ? `${place.source.url ?? '#'}/tab/photos` : src}
       target="_blank" rel="noopener noreferrer" aria-label={`Фотографии: ${place.name}`}>{content}</a>;
 }
 
@@ -1639,6 +1678,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [query, setQuery] = useState('');
   const [districts, setDistricts] = useState<string[]>([]);
   const [items, setItems] = useState<PlaceCard[] | null>(null);
+  const [mapItems, setMapItems] = useState<PlaceCard[] | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<PlaceCard | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -1661,6 +1701,16 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     if (!city) return;
     if (district !== 'all') setDistrict('all');
   }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!city) return;
+    let cancelled = false;
+    setMapItems(null);
+    void api<{ items: PlaceCard[]; total: number }>(`/api/v1/places/map?city=${encodeURIComponent(city.slug)}`)
+      .then(data => { if (!cancelled) setMapItems(data.items); })
+      .catch(() => { if (!cancelled) setMapItems([]); });
+    return () => { cancelled = true; };
+  }, [city?.slug]);
+
 
   useEffect(() => {
     if (!city) return;
@@ -1790,7 +1840,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     </div>
     {withMap ? <div className="map-head">
       <span className="eyebrow"><Icon name="pin" size={14} /> {city?.name ?? 'Город'}</span>
-      <span className="map-count">{total ? `${total} мест` : '…'}</span>
+      <span className="map-count">{mapItems ? `${mapItems.length} мест` : total ? `${total} мест` : '…'}</span>
     </div> : <section className="spotlight">
       <div className="spotlight-copy">
         <span className="eyebrow"><span className="pulse" aria-hidden="true" />{firstName ? `${firstName}, вы рядом` : `${city?.name ?? 'Город'} · онлайн`}</span>
@@ -1835,7 +1885,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         </button>)}
     </div>
 
-    {withMap && <MapView key={city?.slug} items={items ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify} />}
+    {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify} />}
 
     <section aria-labelledby="catalogue">
       <div className="section-title">
@@ -2061,12 +2111,12 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
       <span className="chip"><Icon name={categoryIcon[place.category]} size={14} />{categories[place.category]}</span>
       {place.rating !== null && <span className="chip"><Icon name="heart" size={14} />{place.ratingCount} {plural(place.ratingCount, 'отзыв', 'отзыва', 'отзывов')}</span>}
       {place.source && <a className="chip source-chip" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
-        <span className="source-badge">2ГИС</span>{place.source.rating !== null ? place.source.rating.toFixed(1) : 'карточка'}
+        <span className="source-badge">{place.source.name}</span>{place.source.rating !== null ? place.source.rating.toFixed(1) : place.source.kind === 'osm' ? 'ODbL' : 'карточка'}
       </a>}
       {detail?.place.phone && <a className="chip" href={`tel:${detail.place.phone}`}><Icon name="phone" size={14} />Позвонить</a>}
       <a className="chip" href={`https://yandex.ru/maps/?rtext=~${place.location.lat},${place.location.lng}&rtt=auto`}
         target="_blank" rel="noopener noreferrer"><Icon name="map" size={14} />Маршрут</a>
-      {place.source?.url && <a className="chip" href={`${place.source.url}/tab/photos`}
+      {place.source?.kind === '2gis' && place.source.url && <a className="chip" href={`${place.source.url}/tab/photos`}
         target="_blank" rel="noopener noreferrer"><Icon name="sparkles" size={14} />Фото</a>}
       {detail?.place.info?.sites?.[0] && <a className="chip" target="_blank" rel="noopener noreferrer"
         href={/^https?:\/\//i.test(detail.place.info.sites[0]) ? detail.place.info.sites[0] : `https://${detail.place.info.sites[0]}`}>
@@ -2080,9 +2130,10 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     </p>}
 
     {place.source && <a className="source-card" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
-      <span className="source-badge">2ГИС</span>
-      <span><strong>Данные и отзывы — 2ГИС</strong>
-        <small>{place.source.ratingCount} {plural(place.source.ratingCount, 'отзыв', 'отзыва', 'отзывов')} · открыть карточку организации</small></span>
+      <span className="source-badge">{place.source.name}</span>
+      <span><strong>{place.source.kind === 'osm' ? 'Данные — OpenStreetMap' : 'Данные и отзывы — 2ГИС'}</strong>
+        <small>{place.source.kind === 'osm' ? 'Справочные данные · лицензия ODbL · открыть карточку'
+          : `${place.source.ratingCount} ${plural(place.source.ratingCount, 'отзыв', 'отзыва', 'отзывов')} · открыть карточку организации`}</small></span>
       <Icon name="chevron" size={16} />
     </a>}
 
@@ -2147,7 +2198,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         </>}
       </div>}
       </> : place.source ? <div className="source-unbookable">
-        <span className="source-badge">2ГИС</span>
+        <span className="source-badge">{place.source.name}</span>
         <p><strong>Справочная карточка</strong><br />Онлайн-запись и заказы появятся, когда заведение подключится к «Рядом».</p>
       </div> : null}
     </>}
@@ -2157,8 +2208,8 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         const ownReviews = detail.reviews.filter(review => review.source === 'own');
         const sourceReviews = detail.reviews.filter(review => review.source === '2gis');
         return <>
-          {(ownReviews.length > 0 || place.source) && <div className="panel-title"><h2>Отзывы</h2>
-            <span className="count-chip">{ownReviews.length + (place.source?.ratingCount ?? 0)}</span></div>}
+          {(ownReviews.length > 0 || place.source?.kind === '2gis') && <div className="panel-title"><h2>Отзывы</h2>
+            <span className="count-chip">{ownReviews.length + (place.source?.kind === '2gis' ? place.source.ratingCount : 0)}</span></div>}
           {ownReviews.length > 0 && <ul className="reviews compact">{ownReviews.slice(0, 6).map(review => <li key={review.id}>
             <div className="review-head">
               <span className="mini-avatar">{review.author.slice(0, 1)}</span>
@@ -2167,7 +2218,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
             </div>
             {review.body && <p>{review.body}</p>}
           </li>)}</ul>}
-          {place.source && <div className="source-reviews-head">
+          {place.source?.kind === '2gis' && <div className="source-reviews-head">
             <span className="source-badge">2ГИС</span>
             <a href={place.source.reviewsUrl ?? place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
               Все отзывы{place.source.rating !== null ? ` · ${place.source.rating.toFixed(1)}` : ''}<Icon name="chevron" size={13} />

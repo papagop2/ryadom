@@ -1,0 +1,8237 @@
+[
+  {
+    "osm": "node/4269806690",
+    "name": "36.6",
+    "address": "микрорайон Гагарина, 152",
+    "district": "Байкальск",
+    "lat": 51.5212907,
+    "lng": 104.1498175,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4269806690",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/7118660316",
+    "name": "777",
+    "address": "Комсомольская улица",
+    "district": "Култук",
+    "lat": 51.713497,
+    "lng": 103.688401,
+    "category": "services",
+    "rubrics": [
+      "Автозапчасти"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автозапчасти",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7118660316",
+    "tags": {
+      "shop": "car_parts"
+    }
+  },
+  {
+    "osm": "node/9527508357",
+    "name": "Автомагазин",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.721409,
+    "lng": 103.704024,
+    "category": "services",
+    "rubrics": [
+      "Автозапчасти"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автозапчасти",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508357",
+    "tags": {
+      "shop": "car_parts"
+    }
+  },
+  {
+    "osm": "node/9526134221",
+    "name": "АГЗС",
+    "address": "Брусничный переулок",
+    "district": "Слюдянка",
+    "lat": 51.662921,
+    "lng": 103.68795,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526134221",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "way/503127861",
+    "name": "АГЗС",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5171345,
+    "lng": 104.1321473,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503127861",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/6717762474",
+    "name": "Администрация г.Слюдянка",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.658965,
+    "lng": 103.716869,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762474",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/7229915433",
+    "name": "Администрация города Байкальск",
+    "address": "«Байкал», 16",
+    "district": "Байкальск",
+    "lat": 51.5090861,
+    "lng": 104.1426768,
+    "category": "services",
+    "rubrics": [
+      "Администрация"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Администрация",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915433",
+    "tags": {
+      "amenity": "townhall"
+    }
+  },
+  {
+    "osm": "node/9527507538",
+    "name": "Администрация Култукского городского поселения",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.724518,
+    "lng": 103.71041,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507538",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/6717762471",
+    "name": "Администрация Слюдянского района",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.656968,
+    "lng": 103.719002,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762471",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/7794015286",
+    "name": "Алкомаркет",
+    "address": "Рудничный переулок",
+    "district": "Слюдянка",
+    "lat": 51.6459407,
+    "lng": 103.7048305,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7794015286",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/9527508252",
+    "name": "Алкомаркет",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725069,
+    "lng": 103.710569,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508252",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/6450298947",
+    "name": "Альвит",
+    "address": "Магистральный переулок",
+    "district": "Слюдянка",
+    "lat": 51.6648347,
+    "lng": 103.6948649,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6450298947",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/6712251522",
+    "name": "Альянс",
+    "address": "Горная улица",
+    "district": "Слюдянка",
+    "lat": 51.652183,
+    "lng": 103.725967,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712251522",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6712251524",
+    "name": "Альянс",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.655443,
+    "lng": 103.721995,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712251524",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6717773023",
+    "name": "Альянс",
+    "address": "Пионерский переулок",
+    "district": "Слюдянка",
+    "lat": 51.661257,
+    "lng": 103.7140291,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773023",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6887976280",
+    "name": "Альянс",
+    "address": "Амбулаторная улица",
+    "district": "Слюдянка",
+    "lat": 51.669761,
+    "lng": 103.6807368,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976280",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7979960659",
+    "name": "Альянс",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.722949,
+    "lng": 103.684658,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979960659",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9526134259",
+    "name": "Альянс",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.66281,
+    "lng": 103.701825,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526134259",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/12369391801",
+    "name": "Ангария",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6554218,
+    "lng": 103.7194852,
+    "category": "food",
+    "rubrics": [
+      "Мороженое"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Мороженое",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12369391801",
+    "tags": {
+      "amenity": "ice_cream"
+    }
+  },
+  {
+    "osm": "node/11962173305",
+    "name": "АНТА",
+    "address": "«Байкал»",
+    "district": "Новоснежная",
+    "lat": 51.4380607,
+    "lng": 104.620767,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11962173305",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/4229466894",
+    "name": "Анчук",
+    "address": "дорога к Иркуту",
+    "district": "Быстрая",
+    "lat": 51.7510215,
+    "lng": 103.4272605,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4229466894",
+    "tags": {
+      "tourism": "caravan_site"
+    }
+  },
+  {
+    "osm": "node/9895809239",
+    "name": "Апартаменты на Байкале",
+    "address": "улица Ленина, 130",
+    "district": "Слюдянка",
+    "lat": 51.6543682,
+    "lng": 103.72113,
+    "category": "food",
+    "rubrics": [
+      "Апартаменты"
+    ],
+    "phones": [],
+    "sites": [
+      "https://ostrovok.ru/hotel/russia/baykal_sludyanka_neighborhood/mid9996721/odnokomnatnaya_kvartira_na_bajkale/?guests=2&price=one&q=965829481&type_group=apart&sid=8c39ba35-301b-482c-8693-72b6d9b92587"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Апартаменты",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9895809239",
+    "tags": {
+      "tourism": "apartment",
+      "website": "https://ostrovok.ru/hotel/russia/baykal_sludyanka_neighborhood/mid9996721/odnokomnatnaya_kvartira_na_bajkale/?guests=2&price=one&q=965829481&type_group=apart&sid=8c39ba35-301b-482c-8693-72b6d9b92587",
+      "addr": "улица Ленина, 130"
+    }
+  },
+  {
+    "osm": "node/6717762467",
+    "name": "Аптека",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.6577,
+    "lng": 103.718765,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762467",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/7229915427",
+    "name": "Аптека",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5064651,
+    "lng": 104.1462398,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915427",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/10589207265",
+    "name": "Аптека",
+    "address": "улица Фрунзе",
+    "district": "Слюдянка",
+    "lat": 51.671366,
+    "lng": 103.684036,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207265",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/9527508046",
+    "name": "Аптека (недейств.)",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725241,
+    "lng": 103.711277,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508046",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/8237635051",
+    "name": "Аптека от склада",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5224411,
+    "lng": 104.148033,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [
+      "+7 800 5500033"
+    ],
+    "sites": [
+      "https://apteka-ot-sklada.ru/",
+      "https://vk.com/skladzdorovya"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Fr 09:00-21:00; Sa-Su 09:00-20:00",
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/8237635051",
+    "tags": {
+      "amenity": "pharmacy",
+      "healthcare": "pharmacy",
+      "opening_hours": "Mo-Fr 09:00-21:00; Sa-Su 09:00-20:00"
+    }
+  },
+  {
+    "osm": "node/9645294146",
+    "name": "Аптека от склада",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6580048,
+    "lng": 103.7169564,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [
+      "+7 800 5500033"
+    ],
+    "sites": [
+      "https://apteka-ot-sklada.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Fr 09:00-21:00; Sa-Su 10:00-20:00",
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9645294146",
+    "tags": {
+      "amenity": "pharmacy",
+      "healthcare": "pharmacy",
+      "opening_hours": "Mo-Fr 09:00-21:00; Sa-Su 10:00-20:00"
+    }
+  },
+  {
+    "osm": "node/9527507733",
+    "name": "Аптечный пункт",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725119,
+    "lng": 103.710633,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507733",
+    "tags": {
+      "amenity": "pharmacy",
+      "healthcare": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/6717762468",
+    "name": "Арбат",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.65926,
+    "lng": 103.715437,
+    "category": "services",
+    "rubrics": [
+      "Хозтовары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хозтовары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762468",
+    "tags": {
+      "shop": "hardware"
+    }
+  },
+  {
+    "osm": "way/309790317",
+    "name": "Аршан Гостевой Дом",
+    "address": "улица 40 лет Октября, 11",
+    "district": "Слюдянка",
+    "lat": 51.6635708,
+    "lng": 103.7202738,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [
+      "https://www.booking.com/Share-8Qd2Soq"
+    ],
+    "schedule": null,
+    "openingHours": "24/7",
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/309790317",
+    "tags": {
+      "tourism": "guest_house",
+      "opening_hours": "24/7",
+      "website": "https://www.booking.com/Share-8Qd2Soq",
+      "addr": "улица 40 лет Октября, 11"
+    }
+  },
+  {
+    "osm": "way/214040795",
+    "name": "АСИК",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6637141,
+    "lng": 103.6995421,
+    "category": "food",
+    "rubrics": [
+      "Супермаркет"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Супермаркет",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/214040795",
+    "tags": {
+      "shop": "supermarket"
+    }
+  },
+  {
+    "osm": "node/4459451113",
+    "name": "Аура",
+    "address": "улица Слюдянских Красногвардейцев",
+    "district": "Слюдянка",
+    "lat": 51.6548876,
+    "lng": 103.7205574,
+    "category": "services",
+    "rubrics": [
+      "Хозтовары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хозтовары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451113",
+    "tags": {
+      "shop": "hardware"
+    }
+  },
+  {
+    "osm": "node/9526081865",
+    "name": "Баба Люба",
+    "address": "улица Захарова",
+    "district": "Слюдянка",
+    "lat": 51.65829,
+    "lng": 103.713209,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081865",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4421931294",
+    "name": "база отдыха",
+    "address": "улица 40 лет Октября",
+    "district": "Слюдянка",
+    "lat": 51.6642888,
+    "lng": 103.7198424,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4421931294",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/6465122061",
+    "name": "Байк-пост Аль Пачино",
+    "address": "улица Мичурина",
+    "district": "Слюдянка",
+    "lat": 51.6463881,
+    "lng": 103.7024994,
+    "category": "food",
+    "rubrics": [
+      "Хостел"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хостел",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6465122061",
+    "tags": {
+      "tourism": "hostel"
+    }
+  },
+  {
+    "osm": "node/1138455648",
+    "name": "Байкал",
+    "address": "улица Кутелева",
+    "district": "Слюдянка",
+    "lat": 51.6551191,
+    "lng": 103.7168381,
+    "category": "food",
+    "rubrics": [
+      "Супермаркет"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Супермаркет",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1138455648",
+    "tags": {
+      "shop": "supermarket"
+    }
+  },
+  {
+    "osm": "node/11090070028",
+    "name": "Байкал",
+    "address": "улица 40 лет Октября",
+    "district": "Слюдянка",
+    "lat": 51.6597103,
+    "lng": 103.726894,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11090070028",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/1013448116",
+    "name": "Байкал",
+    "address": "микрорайон Гагарина, 169",
+    "district": "Байкальск",
+    "lat": 51.5224218,
+    "lng": 104.1506448,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [
+      "https://www.baikalski.com/accomodations/baikal_hotel.html"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "ООО БГК «Гора Соболиная»",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1013448116",
+    "tags": {
+      "tourism": "hotel",
+      "operator": "ООО БГК «Гора Соболиная»",
+      "website": "https://www.baikalski.com/accomodations/baikal_hotel.html"
+    }
+  },
+  {
+    "osm": "way/401579005",
+    "name": "Байкал",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5242277,
+    "lng": 104.1477612,
+    "category": "services",
+    "rubrics": [
+      "Спортивный центр"
+    ],
+    "phones": [
+      "+73952600616"
+    ],
+    "sites": [
+      "https://baikalski.net/"
+    ],
+    "schedule": null,
+    "openingHours": "We-Su 09:00-21:00",
+    "about": "Спортивный центр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/401579005",
+    "tags": {
+      "leisure": "sports_centre",
+      "opening_hours": "We-Su 09:00-21:00",
+      "website": "https://baikalski.net/",
+      "phone": "+73952600616",
+      "addr": "«Байкал»"
+    }
+  },
+  {
+    "osm": "node/3184253412",
+    "name": "Байкал 665921",
+    "address": "Вокзальная улица",
+    "district": "Порт Байкал",
+    "lat": 51.8701476,
+    "lng": 104.8086051,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Tu-We 11:00-14:00, 15:00-18:00; Th 11:00-14:00, 15:00-17:00; Fr 09:00-13:00, 14:00-16:00",
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3184253412",
+    "tags": {
+      "amenity": "post_office",
+      "opening_hours": "Tu-We 11:00-14:00, 15:00-18:00; Th 11:00-14:00, 15:00-17:00; Fr 09:00-13:00, 14:00-16:00"
+    }
+  },
+  {
+    "osm": "node/4484470668",
+    "name": "Байкал мебель",
+    "address": "Школьный переулок, 4А",
+    "district": "Байкальск",
+    "lat": 51.5207669,
+    "lng": 104.1333927,
+    "category": "services",
+    "rubrics": [
+      "Мебель"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Мебель",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4484470668",
+    "tags": {
+      "shop": "furniture"
+    }
+  },
+  {
+    "osm": "node/4937710917",
+    "name": "Байкал Мебель",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.6636144,
+    "lng": 103.6997588,
+    "category": "services",
+    "rubrics": [
+      "Мебель"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Мебель",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710917",
+    "tags": {
+      "shop": "furniture"
+    }
+  },
+  {
+    "osm": "node/11016500553",
+    "name": "Байкал-энергия",
+    "address": "Байкальская улица, 24",
+    "district": "Байкальск",
+    "lat": 51.5238446,
+    "lng": 104.1349223,
+    "category": "services",
+    "rubrics": [
+      "Энергоснабжение"
+    ],
+    "phones": [
+      "+7 395 2436306",
+      "+7 991 3707072"
+    ],
+    "sites": [
+      "https://www.wind-solar.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-18:00",
+    "about": "Энергоснабжение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11016500553",
+    "tags": {
+      "office": "energy_supplier",
+      "opening_hours": "Mo-Su 10:00-18:00"
+    }
+  },
+  {
+    "osm": "node/10760393205",
+    "name": "Байкальска Глубина",
+    "address": "Слюдянский район",
+    "district": "Слюдянский район",
+    "lat": 51.651021,
+    "lng": 104.7327488,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10760393205",
+    "tags": {
+      "amenity": "restaurant"
+    }
+  },
+  {
+    "osm": "way/503260114",
+    "name": "Байкальская городская больница",
+    "address": "Красный Ключ, 92",
+    "district": "Байкальск",
+    "lat": 51.5121434,
+    "lng": 104.1218796,
+    "category": "health",
+    "rubrics": [
+      "Больница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Больница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503260114",
+    "tags": {
+      "amenity": "hospital",
+      "healthcare": "hospital"
+    }
+  },
+  {
+    "osm": "node/7984363111",
+    "name": "Байкальские росы",
+    "address": "улица Чапаева",
+    "district": "Култук",
+    "lat": 51.722217,
+    "lng": 103.67063,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7984363111",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/4267948489",
+    "name": "Байкальские сувениры",
+    "address": "улица Рыбака, 7",
+    "district": "Сухой Ручей",
+    "lat": 51.6433221,
+    "lng": 103.7555354,
+    "category": "services",
+    "rubrics": [
+      "Сувениры"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Сувениры",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4267948489",
+    "tags": {
+      "shop": "gift",
+      "addr": "улица Рыбака, 7"
+    }
+  },
+  {
+    "osm": "node/7229808789",
+    "name": "Байкальский Бриз",
+    "address": "Красный Ключ, 90",
+    "district": "Байкальск",
+    "lat": 51.51408,
+    "lng": 104.121635,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229808789",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/11378636799",
+    "name": "Байкальский омуль",
+    "address": "Береговая улица",
+    "district": "Утулик",
+    "lat": 51.5388264,
+    "lng": 104.0497609,
+    "category": "food",
+    "rubrics": [
+      "Рыба и морепродукты"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Рыба и морепродукты",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636799",
+    "tags": {
+      "shop": "seafood"
+    }
+  },
+  {
+    "osm": "way/439871636",
+    "name": "Байкальский техникум отраслевых технологий и сервиса",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5100125,
+    "lng": 104.1412903,
+    "category": "services",
+    "rubrics": [
+      "Колледж"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Колледж",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439871636",
+    "tags": {
+      "amenity": "college"
+    }
+  },
+  {
+    "osm": "node/7229915426",
+    "name": "Байкальский техникум отраслевых технологий и сервиса (Училище №16)",
+    "address": "«Байкал», 1",
+    "district": "Байкальск",
+    "lat": 51.5097691,
+    "lng": 104.1415858,
+    "category": "services",
+    "rubrics": [
+      "Колледж"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Колледж",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915426",
+    "tags": {
+      "amenity": "college"
+    }
+  },
+  {
+    "osm": "node/3209756794",
+    "name": "Байкальский технический стационар института ядерных исследований Российской Академии наук",
+    "address": "галерея № 9 (Ивановская)",
+    "district": "Маритуй",
+    "lat": 51.8016795,
+    "lng": 104.4135246,
+    "category": "services",
+    "rubrics": [
+      "Научное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Научное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3209756794",
+    "tags": {
+      "office": "research"
+    }
+  },
+  {
+    "osm": "way/503372857",
+    "name": "Байкальский транзит",
+    "address": "«Байкал»",
+    "district": "Утулик",
+    "lat": 51.6187393,
+    "lng": 103.8208971,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503372857",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/7221434948",
+    "name": "Байкальское отделение Полиции",
+    "address": "Железнодорожная улица, 21",
+    "district": "Байкальск",
+    "lat": 51.520885,
+    "lng": 104.131362,
+    "category": "services",
+    "rubrics": [
+      "Полиция"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Полиция",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434948",
+    "tags": {
+      "amenity": "police"
+    }
+  },
+  {
+    "osm": "node/12369281002",
+    "name": "Байхан",
+    "address": "Кругобайкальская улица",
+    "district": "Слюдянка",
+    "lat": 51.6586279,
+    "lng": 103.7297618,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12369281002",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/3549078293",
+    "name": "Бар \"Бугель вугель\"",
+    "address": "улица 0-я",
+    "district": "Байкальск",
+    "lat": 51.5092224,
+    "lng": 104.120328,
+    "category": "food",
+    "rubrics": [
+      "Бар"
+    ],
+    "phones": [
+      "+7 964 2777771"
+    ],
+    "sites": [
+      "https://211company.ru/"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продюсерский центр 211",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3549078293",
+    "tags": {
+      "amenity": "bar",
+      "operator": "Продюсерский центр 211",
+      "website": "https://211company.ru/",
+      "phone": "+7 964 2777771"
+    }
+  },
+  {
+    "osm": "node/4267427189",
+    "name": "Без воды 1640м",
+    "address": "на пик. Порожистый",
+    "district": "Байкальск",
+    "lat": 51.4443886,
+    "lng": 104.0616745,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4267427189",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/7979961636",
+    "name": "Белоречье (недейств.)",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.722863,
+    "lng": 103.684383,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979961636",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527357415",
+    "name": "Белочка",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.66612,
+    "lng": 103.690498,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527357415",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/13176354701",
+    "name": "Бивак",
+    "address": "пик Бабха",
+    "district": "Байкальск",
+    "lat": 51.4378979,
+    "lng": 103.9976207,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/13176354701",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/7221434980",
+    "name": "Благая весть",
+    "address": "Байкальская улица, 7",
+    "district": "Байкальск",
+    "lat": 51.523184,
+    "lng": 104.138932,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434980",
+    "tags": {
+      "amenity": "place_of_worship"
+    }
+  },
+  {
+    "osm": "node/7221434986",
+    "name": "Бригантина",
+    "address": "Речная улица",
+    "district": "Байкальск",
+    "lat": 51.521139,
+    "lng": 104.140559,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434986",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/7920590091",
+    "name": "БРК (АГЗС)",
+    "address": "«Байкал»",
+    "district": "Слюдянка",
+    "lat": 51.683955,
+    "lng": 103.692198,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7920590091",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/6717762476",
+    "name": "БТИ",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.658925,
+    "lng": 103.716779,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762476",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/8784364117",
+    "name": "Буровщина",
+    "address": "Набережная улица",
+    "district": "Буровщина",
+    "lat": 51.6258927,
+    "lng": 103.8111911,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/8784364117",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/4905055306",
+    "name": "Бурятзолото. Култукская база МТС",
+    "address": "улица Чапаева",
+    "district": "Култук",
+    "lat": 51.7196144,
+    "lng": 103.6758606,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905055306",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/9504253534",
+    "name": "Бууза",
+    "address": "Профсоюзная улица",
+    "district": "Култук",
+    "lat": 51.730882,
+    "lng": 103.647019,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9504253534",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/9865654968",
+    "name": "Вейп шоп MarkS Vape",
+    "address": "улица Ленина, 3/2",
+    "district": "Слюдянка",
+    "lat": 51.6670444,
+    "lng": 103.6910322,
+    "category": "services",
+    "rubrics": [
+      "Вейп-шоп"
+    ],
+    "phones": [
+      "89501381771"
+    ],
+    "sites": [
+      "https://vk.com/marksvape"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-20:00",
+    "about": "Вейп-шоп",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9865654968",
+    "tags": {
+      "shop": "e-cigarette",
+      "opening_hours": "Mo-Su 10:00-20:00",
+      "website": "https://vk.com/marksvape",
+      "phone": "89501381771",
+      "addr": "улица Ленина, 3/2"
+    }
+  },
+  {
+    "osm": "node/7979960985",
+    "name": "Вертикаль",
+    "address": "Рабочая улица",
+    "district": "Култук",
+    "lat": 51.719585,
+    "lng": 103.68698,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979960985",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/7920549956",
+    "name": "Веста",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.663146,
+    "lng": 103.702361,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7920549956",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/6712251520",
+    "name": "Вечерняя школа №8",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.652267,
+    "lng": 103.725318,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712251520",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/4459451114",
+    "name": "Вино-град",
+    "address": "улица Пушкина",
+    "district": "Слюдянка",
+    "lat": 51.6549119,
+    "lng": 103.7191647,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451114",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/6717762466",
+    "name": "Виномаркет",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.660969,
+    "lng": 103.712858,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762466",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/11374455200",
+    "name": "Восточная кухня",
+    "address": "«Байкал»",
+    "district": "Солзан",
+    "lat": 51.4969013,
+    "lng": 104.2209485,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11374455200",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/6717773021",
+    "name": "ВостсибТрансКомБанк",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.65989,
+    "lng": 103.7161361,
+    "category": "services",
+    "rubrics": [
+      "Банк"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Банк",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773021",
+    "tags": {
+      "amenity": "bank"
+    }
+  },
+  {
+    "osm": "node/6712216678",
+    "name": "Восход",
+    "address": "Железнодорожная улица",
+    "district": "Слюдянка",
+    "lat": 51.656778,
+    "lng": 103.723254,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712216678",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/11016493460",
+    "name": "Впрок",
+    "address": "улица Чапаева",
+    "district": "Култук",
+    "lat": 51.7208906,
+    "lng": 103.6725631,
+    "category": "services",
+    "rubrics": [
+      "Макароны"
+    ],
+    "phones": [
+      "+7 395 2500144",
+      "+7 395 2550865"
+    ],
+    "sites": [
+      "https://td-vprok.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Tu-Sa 10:00-17:00",
+    "about": "Макароны",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11016493460",
+    "tags": {
+      "shop": "pasta",
+      "opening_hours": "Tu-Sa 10:00-17:00"
+    }
+  },
+  {
+    "osm": "node/7984363610",
+    "name": "Вторчермет",
+    "address": "Оборонный переулок",
+    "district": "Култук",
+    "lat": 51.72236,
+    "lng": 103.669974,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7984363610",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/4038295772",
+    "name": "Высота 900",
+    "address": "ПККД",
+    "district": "Байкальск",
+    "lat": 51.49766,
+    "lng": 104.1086091,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [],
+    "sites": [
+      "https://baikalski.net/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-17:00",
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4038295772",
+    "tags": {
+      "amenity": "restaurant",
+      "opening_hours": "Mo-Su 10:00-17:00",
+      "website": "https://baikalski.net/",
+      "addr": "ПККД"
+    }
+  },
+  {
+    "osm": "node/7406542346",
+    "name": "Выставка-экспозиция КБЖД",
+    "address": "Вокзальная улица",
+    "district": "Порт Байкал",
+    "lat": 51.8701783,
+    "lng": 104.8090687,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "ООО «ТСПК ТУР»",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7406542346",
+    "tags": {
+      "tourism": "museum",
+      "operator": "ООО «ТСПК ТУР»"
+    }
+  },
+  {
+    "osm": "node/9526081697",
+    "name": "Гастроном",
+    "address": "Московская улица",
+    "district": "Слюдянка",
+    "lat": 51.658141,
+    "lng": 103.715692,
+    "category": "food",
+    "rubrics": [
+      "Супермаркет"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Супермаркет",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081697",
+    "tags": {
+      "shop": "supermarket"
+    }
+  },
+  {
+    "osm": "way/440736941",
+    "name": "Голден палас",
+    "address": "10-я улица",
+    "district": "Байкальск",
+    "lat": 51.5189123,
+    "lng": 104.1096494,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/440736941",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/6712251526",
+    "name": "Голос",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.654815,
+    "lng": 103.722724,
+    "category": "services",
+    "rubrics": [
+      "Ночной клуб"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ночной клуб",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712251526",
+    "tags": {
+      "amenity": "nightclub"
+    }
+  },
+  {
+    "osm": "node/2449553829",
+    "name": "Горнолыжный курорт \"Гора Соболиная\"",
+    "address": "улица 0-я",
+    "district": "Байкальск",
+    "lat": 51.509548,
+    "lng": 104.1209677,
+    "category": "services",
+    "rubrics": [
+      "Спортивный центр"
+    ],
+    "phones": [],
+    "sites": [
+      "https://baikalski.net/"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Спортивный центр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/2449553829",
+    "tags": {
+      "leisure": "sports_centre",
+      "website": "https://baikalski.net/"
+    }
+  },
+  {
+    "osm": "node/5829332782",
+    "name": "Городская библиотека",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5218945,
+    "lng": 104.1562145,
+    "category": "services",
+    "rubrics": [
+      "Библиотека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Библиотека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5829332782",
+    "tags": {
+      "amenity": "library"
+    }
+  },
+  {
+    "osm": "node/9100799220",
+    "name": "Гостевой домик",
+    "address": "улица Парижской Коммуны, 49",
+    "district": "Слюдянка",
+    "lat": 51.6504947,
+    "lng": 103.7101186,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [
+      "89025794852"
+    ],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "24/7",
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9100799220",
+    "tags": {
+      "tourism": "guest_house",
+      "opening_hours": "24/7",
+      "phone": "89025794852",
+      "addr": "улица Парижской Коммуны, 49"
+    }
+  },
+  {
+    "osm": "way/503260120",
+    "name": "ГрандБайкал",
+    "address": "ПККД",
+    "district": "Байкальск",
+    "lat": 51.5088712,
+    "lng": 104.1199098,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [
+      "+73952600616"
+    ],
+    "sites": [
+      "https://baikalski.net/"
+    ],
+    "schedule": null,
+    "openingHours": "24/7",
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503260120",
+    "tags": {
+      "tourism": "hotel",
+      "opening_hours": "24/7",
+      "website": "https://baikalski.net/",
+      "phone": "+73952600616",
+      "addr": "ПККД"
+    }
+  },
+  {
+    "osm": "node/13180389069",
+    "name": "да Марья",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3962369,
+    "lng": 104.6486619,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/13180389069",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/2204502529",
+    "name": "Дворец культуры железнодорожников",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.656429,
+    "lng": 103.7197428,
+    "category": "services",
+    "rubrics": [
+      "Театр"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Театр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/2204502529",
+    "tags": {
+      "amenity": "theatre"
+    }
+  },
+  {
+    "osm": "node/6465122059",
+    "name": "Деловой Двор",
+    "address": "улица Парижской Коммуны, 75",
+    "district": "Слюдянка",
+    "lat": 51.6460522,
+    "lng": 103.7046171,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Tu-Th 12:00-15:00; Fr 12:00-15:00, 18:00-01:00; Sa 18:00-01:00",
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6465122059",
+    "tags": {
+      "amenity": "restaurant",
+      "opening_hours": "Tu-Th 12:00-15:00; Fr 12:00-15:00, 18:00-01:00; Sa 18:00-01:00",
+      "addr": "улица Парижской Коммуны, 75"
+    }
+  },
+  {
+    "osm": "node/4459451115",
+    "name": "Детские товары",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6549358,
+    "lng": 103.7204609,
+    "category": "services",
+    "rubrics": [
+      "Детские товары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детские товары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451115",
+    "tags": {
+      "shop": "baby_goods"
+    }
+  },
+  {
+    "osm": "way/206796453",
+    "name": "Детский лагерь «Байкал»",
+    "address": "Талая улица",
+    "district": "Слюдянка",
+    "lat": 51.6896217,
+    "lng": 103.6535772,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/206796453",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "way/206843891",
+    "name": "Детский сад № 58",
+    "address": "Заводская улица, 4А",
+    "district": "Ангасолка",
+    "lat": 51.7523327,
+    "lng": 103.7499567,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/206843891",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7229915428",
+    "name": "Детский сад №1",
+    "address": "на пик. Порожистый",
+    "district": "Байкальск",
+    "lat": 51.5055581,
+    "lng": 104.1424858,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915428",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/439843731",
+    "name": "Детский сад №13",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5183091,
+    "lng": 104.1549378,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439843731",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/439871637",
+    "name": "Детский сад №14",
+    "address": "«Байкал», 15",
+    "district": "Байкальск",
+    "lat": 51.5086244,
+    "lng": 104.1434747,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439871637",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7221434966",
+    "name": "Детский сад №16",
+    "address": "Пионерский переулок",
+    "district": "Байкальск",
+    "lat": 51.522071,
+    "lng": 104.136894,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434966",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/210369272",
+    "name": "Детский сад №213",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.6606912,
+    "lng": 103.715513,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/210369272",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7229915440",
+    "name": "Детский сад №3 \"Теремок\"",
+    "address": "«Байкал», 28",
+    "district": "Байкальск",
+    "lat": 51.5077861,
+    "lng": 104.1468398,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915440",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7229915425",
+    "name": "Детский сад №4",
+    "address": "«Байкал», 15",
+    "district": "Байкальск",
+    "lat": 51.5085181,
+    "lng": 104.1432718,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915425",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7984363565",
+    "name": "Детский сад №4 \"Сказка\"",
+    "address": "Оборонный переулок",
+    "district": "Култук",
+    "lat": 51.723961,
+    "lng": 103.670098,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7984363565",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/439843732",
+    "name": "Детский сад №7",
+    "address": "Таёжный переулок",
+    "district": "Байкальск",
+    "lat": 51.5170756,
+    "lng": 104.1501114,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439843732",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/98397970",
+    "name": "Детский сад №70",
+    "address": "улица Кутелева, 35",
+    "district": "Слюдянка",
+    "lat": 51.6535612,
+    "lng": 103.7198007,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/98397970",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/439843733",
+    "name": "Детский сад №9",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5182757,
+    "lng": 104.1536919,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439843733",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "node/7221434968",
+    "name": "Детский сад, №12",
+    "address": "Пионерский переулок, 11",
+    "district": "Байкальск",
+    "lat": 51.522586,
+    "lng": 104.137031,
+    "category": "services",
+    "rubrics": [
+      "Детский сад"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Детский сад",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434968",
+    "tags": {
+      "amenity": "kindergarten"
+    }
+  },
+  {
+    "osm": "way/215578187",
+    "name": "Детско-юношеская спортивная школа",
+    "address": "улица Ленина, 1Е",
+    "district": "Слюдянка",
+    "lat": 51.6727281,
+    "lng": 103.6873106,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/215578187",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/6887976276",
+    "name": "Дом детского творчества",
+    "address": "улица Куприна, 53",
+    "district": "Слюдянка",
+    "lat": 51.669875,
+    "lng": 103.6835008,
+    "category": "services",
+    "rubrics": [
+      "Дом культуры"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Дом культуры",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976276",
+    "tags": {
+      "amenity": "community_centre",
+      "addr": "улица Куприна, 53"
+    }
+  },
+  {
+    "osm": "way/214272490",
+    "name": "Дом культуры «Перевал»",
+    "address": "улица Ленина, 8А",
+    "district": "Слюдянка",
+    "lat": 51.6717238,
+    "lng": 103.6852392,
+    "category": "services",
+    "rubrics": [
+      "Театр"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Tu-Sa 11:00-21:00",
+    "about": "Театр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/214272490",
+    "tags": {
+      "amenity": "theatre",
+      "opening_hours": "Tu-Sa 11:00-21:00",
+      "addr": "улица Ленина, 8А"
+    }
+  },
+  {
+    "osm": "node/6581664837",
+    "name": "Дом.ru",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.658424,
+    "lng": 103.716216,
+    "category": "services",
+    "rubrics": [
+      "Связь"
+    ],
+    "phones": [
+      "+7 395 2482248",
+      "+7 800 3337000"
+    ],
+    "sites": [
+      "https://irkutsk.domru.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Fr 09:00-18:00",
+    "about": "ЭР-Телеком Холдинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6581664837",
+    "tags": {
+      "office": "telecommunication",
+      "operator": "ЭР-Телеком Холдинг",
+      "opening_hours": "Mo-Fr 09:00-18:00"
+    }
+  },
+  {
+    "osm": "node/7221434964",
+    "name": "Домоуправление №2",
+    "address": "Строительная улица",
+    "district": "Байкальск",
+    "lat": 51.520767,
+    "lng": 104.132835,
+    "category": "services",
+    "rubrics": [
+      "Управляющая компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Управляющая компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434964",
+    "tags": {
+      "office": "property_management"
+    }
+  },
+  {
+    "osm": "way/503127851",
+    "name": "ДПС",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5154115,
+    "lng": 104.1374986,
+    "category": "services",
+    "rubrics": [
+      "Полиция"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Полиция России",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503127851",
+    "tags": {
+      "amenity": "police",
+      "operator": "Полиция России"
+    }
+  },
+  {
+    "osm": "node/9527507807",
+    "name": "Дружба",
+    "address": "Октябрьская улица",
+    "district": "Култук",
+    "lat": 51.725302,
+    "lng": 103.711897,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507807",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4459451116",
+    "name": "Елена",
+    "address": "улица Парижской Коммуны",
+    "district": "Слюдянка",
+    "lat": 51.6554981,
+    "lng": 103.7173052,
+    "category": "salon",
+    "rubrics": [
+      "Парикмахерская"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Парикмахерская",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451116",
+    "tags": {
+      "shop": "hairdresser"
+    }
+  },
+  {
+    "osm": "node/9526164505",
+    "name": "Желдорохрана",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.663583,
+    "lng": 103.700608,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526164505",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/6717773019",
+    "name": "Жемчужный (стом.центр)",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.661182,
+    "lng": 103.7148511,
+    "category": "health",
+    "rubrics": [
+      "Больница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Больница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773019",
+    "tags": {
+      "amenity": "hospital"
+    }
+  },
+  {
+    "osm": "node/6712251529",
+    "name": "ЗАГС Слюдянского района",
+    "address": "улица Слюдянских Красногвардейцев",
+    "district": "Слюдянка",
+    "lat": 51.655227,
+    "lng": 103.721133,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712251529",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "way/971701993",
+    "name": "Земляничная",
+    "address": "Горная улица",
+    "district": "Култук",
+    "lat": 51.7331773,
+    "lng": 103.7256481,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/971701993",
+    "tags": {
+      "leisure": "resort"
+    }
+  },
+  {
+    "osm": "node/4037680221",
+    "name": "Золотая юрта",
+    "address": "«Байкал»",
+    "district": "Сухой Ручей",
+    "lat": 51.642592,
+    "lng": 103.7552885,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4037680221",
+    "tags": {
+      "amenity": "restaurant"
+    }
+  },
+  {
+    "osm": "node/2417885694",
+    "name": "Иван",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3963011,
+    "lng": 104.6488934,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/2417885694",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/4417419600",
+    "name": "Идол",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3558011,
+    "lng": 104.6162424,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4417419600",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "way/503422087",
+    "name": "Иркутскнефтепродукт",
+    "address": "Перевальская улица",
+    "district": "Слюдянка",
+    "lat": 51.6758273,
+    "lng": 103.6873963,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503422087",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/9526134290",
+    "name": "Иркутскэнергосбыт",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.662419,
+    "lng": 103.706201,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526134290",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/9584911806",
+    "name": "Касса взаимопомощи",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6558301,
+    "lng": 103.7190565,
+    "category": "services",
+    "rubrics": [
+      "Микрозаймы"
+    ],
+    "phones": [
+      "+7 983 4156530"
+    ],
+    "sites": [
+      "https://kreditkassa.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-13:00,14:00-18:00",
+    "about": "Микрозаймы",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9584911806",
+    "tags": {
+      "shop": "money_lender",
+      "opening_hours": "Mo-Su 09:00-13:00,14:00-18:00"
+    }
+  },
+  {
+    "osm": "way/418570329",
+    "name": "Кафе \"Привал\"",
+    "address": "мост Перемен",
+    "district": "Слюдянка",
+    "lat": 51.5919526,
+    "lng": 103.632293,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/418570329",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "way/217853765",
+    "name": "Клуб",
+    "address": "«Байкал»",
+    "district": "Мурино",
+    "lat": 51.4822128,
+    "lng": 104.3842551,
+    "category": "services",
+    "rubrics": [
+      "Общественное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Общественное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/217853765",
+    "tags": {
+      "amenity": "public_building"
+    }
+  },
+  {
+    "osm": "node/4373035191",
+    "name": "Колледж",
+    "address": "«Байкал», 27",
+    "district": "Байкальск",
+    "lat": 51.507444,
+    "lng": 104.1463099,
+    "category": "services",
+    "rubrics": [
+      "Колледж"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Колледж",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373035191",
+    "tags": {
+      "amenity": "college"
+    }
+  },
+  {
+    "osm": "node/4909333888",
+    "name": "Колосок",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.726502,
+    "lng": 103.7126624,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4909333888",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6364207641",
+    "name": "Колосок 24 часа",
+    "address": "Безымянный переулок",
+    "district": "Култук",
+    "lat": 51.726667,
+    "lng": 103.6594485,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6364207641",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6712216673",
+    "name": "Копеечка",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.6544,
+    "lng": 103.724403,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712216673",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6717773017",
+    "name": "Копеечка",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.659233,
+    "lng": 103.7171331,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773017",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/10589207230",
+    "name": "Копеечка",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.66773,
+    "lng": 103.690576,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207230",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/11374454511",
+    "name": "Кочевник",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5246002,
+    "lng": 104.0937984,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11374454511",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "way/214040791",
+    "name": "Крайс Нефть",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6636207,
+    "lng": 103.6983179,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/214040791",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/7997711219",
+    "name": "Крайснефть",
+    "address": "Профсоюзная улица",
+    "district": "Култук",
+    "lat": 51.731193,
+    "lng": 103.646255,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7997711219",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "node/9527507911",
+    "name": "Култук 665911",
+    "address": "Октябрьская улица",
+    "district": "Култук",
+    "lat": 51.725345,
+    "lng": 103.711795,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АО \"Почта России\"",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507911",
+    "tags": {
+      "amenity": "post_office",
+      "operator": "АО \"Почта России\""
+    }
+  },
+  {
+    "osm": "node/4905061449",
+    "name": "Култукская участковая больница",
+    "address": "улица Автомобилистов",
+    "district": "Култук",
+    "lat": 51.7244548,
+    "lng": 103.6617364,
+    "category": "health",
+    "rubrics": [
+      "Больница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Больница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061449",
+    "tags": {
+      "amenity": "hospital"
+    }
+  },
+  {
+    "osm": "node/2994005244",
+    "name": "Курбатовский",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5221186,
+    "lng": 104.1484843,
+    "category": "food",
+    "rubrics": [
+      "Супермаркет"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Mo-Su 08:00-23:00",
+    "about": "Супермаркет",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/2994005244",
+    "tags": {
+      "shop": "supermarket",
+      "opening_hours": "Mo-Su 08:00-23:00"
+    }
+  },
+  {
+    "osm": "node/9526081674",
+    "name": "Курбатовский",
+    "address": "улица Мичурина",
+    "district": "Слюдянка",
+    "lat": 51.646914,
+    "lng": 103.703724,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081674",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7118660317",
+    "name": "Лавка~[0x1c] 24часа",
+    "address": "«Байкал»",
+    "district": "Култук",
+    "lat": 51.713343,
+    "lng": 103.688274,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7118660317",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "way/895545403",
+    "name": "Лесная сказка",
+    "address": "110 км кругобайкальской железной дороги",
+    "district": "Половинная",
+    "lat": 51.8028818,
+    "lng": 104.3517018,
+    "category": "food",
+    "rubrics": [
+      "Апартаменты"
+    ],
+    "phones": [
+      "+73952272381"
+    ],
+    "sites": [
+      "http://www.skazka38.ru"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Апартаменты",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/895545403",
+    "tags": {
+      "tourism": "apartment",
+      "addr": "110 км кругобайкальской железной дороги"
+    }
+  },
+  {
+    "osm": "node/6450298945",
+    "name": "лесхоз",
+    "address": "Магистральный переулок",
+    "district": "Слюдянка",
+    "lat": 51.6650687,
+    "lng": 103.6950079,
+    "category": "services",
+    "rubrics": [
+      "Администрация"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Администрация",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6450298945",
+    "tags": {
+      "office": "administrative"
+    }
+  },
+  {
+    "osm": "node/12194009239",
+    "name": "Лодочная стоянка в Быстрой",
+    "address": "дорога к Иркуту",
+    "district": "Быстрая",
+    "lat": 51.7481394,
+    "lng": 103.4187615,
+    "category": "services",
+    "rubrics": [
+      "Марина"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Марина",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12194009239",
+    "tags": {
+      "leisure": "marina"
+    }
+  },
+  {
+    "osm": "way/98606041",
+    "name": "Локомотив",
+    "address": "улица Кутелева",
+    "district": "Слюдянка",
+    "lat": 51.6523056,
+    "lng": 103.719719,
+    "category": "services",
+    "rubrics": [
+      "Стадион"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Стадион",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/98606041",
+    "tags": {
+      "leisure": "stadium"
+    }
+  },
+  {
+    "osm": "node/9104979817",
+    "name": "магазин",
+    "address": "улица Мира",
+    "district": "Мангутай",
+    "lat": 51.6024174,
+    "lng": 103.9042302,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9104979817",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7221434942",
+    "name": "Магазин",
+    "address": "Берёзовый переулок",
+    "district": "Байкальск",
+    "lat": 51.524005,
+    "lng": 104.139503,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434942",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7221434962",
+    "name": "Магазин",
+    "address": "Байкальская улица, 13",
+    "district": "Байкальск",
+    "lat": 51.523406,
+    "lng": 104.136375,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434962",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7229915430",
+    "name": "Магазин",
+    "address": "«Байкал», 25",
+    "district": "Байкальск",
+    "lat": 51.5062711,
+    "lng": 104.1455378,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915430",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "way/676838134",
+    "name": "Магазин",
+    "address": "Красногвардейская улица",
+    "district": "Утулик",
+    "lat": 51.5422023,
+    "lng": 104.052835,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/676838134",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "way/232952161",
+    "name": "магазин Альянс",
+    "address": "Ленинградская улица",
+    "district": "Слюдянка",
+    "lat": 51.6529829,
+    "lng": 103.7220999,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/232952161",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527508015",
+    "name": "Марина минимаркет",
+    "address": "Партизанская улица",
+    "district": "Култук",
+    "lat": 51.725009,
+    "lng": 103.71048,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508015",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4269812891",
+    "name": "Мегафон",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5226584,
+    "lng": 104.1483174,
+    "category": "services",
+    "rubrics": [
+      "Мобильные телефоны"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Мобильные телефоны",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4269812891",
+    "tags": {
+      "shop": "mobile_phone"
+    }
+  },
+  {
+    "osm": "way/503127852",
+    "name": "Медвежья берлога",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5148926,
+    "lng": 104.1372736,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503127852",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "way/448936852",
+    "name": "Медицинский лечебно-диагностический центр ООО \"Вита-Дент\"",
+    "address": "улица Пушкина, 7",
+    "district": "Слюдянка",
+    "lat": 51.654678,
+    "lng": 103.7197794,
+    "category": "health",
+    "rubrics": [
+      "Врач"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Врач",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/448936852",
+    "tags": {
+      "amenity": "doctors",
+      "addr": "улица Пушкина, 7"
+    }
+  },
+  {
+    "osm": "node/7984363218",
+    "name": "Меркурий",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.723949,
+    "lng": 103.676123,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7984363218",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9027280635",
+    "name": "Место для лагеря",
+    "address": "Ангарская улица",
+    "district": "Порт Байкал",
+    "lat": 51.8817861,
+    "lng": 104.8092172,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9027280635",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/7221434947",
+    "name": "Милена",
+    "address": "Строительная улица, 19",
+    "district": "Байкальск",
+    "lat": 51.520408,
+    "lng": 104.132621,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434947",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/1501679168",
+    "name": "Минералогический музей",
+    "address": "Слюдяная улица",
+    "district": "Слюдянка",
+    "lat": 51.6380972,
+    "lng": 103.6982665,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Музей",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1501679168",
+    "tags": {
+      "tourism": "museum"
+    }
+  },
+  {
+    "osm": "node/4905061447",
+    "name": "Минимаркет",
+    "address": "Безымянный переулок",
+    "district": "Култук",
+    "lat": 51.7265548,
+    "lng": 103.6597546,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061447",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4373031791",
+    "name": "Мировой судья",
+    "address": "«Байкал», 27",
+    "district": "Байкальск",
+    "lat": 51.5072472,
+    "lng": 104.1462167,
+    "category": "services",
+    "rubrics": [
+      "Суд"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Суд",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373031791",
+    "tags": {
+      "amenity": "courthouse"
+    }
+  },
+  {
+    "osm": "node/4905061441",
+    "name": "Мои Документы",
+    "address": "Безымянный переулок",
+    "district": "Култук",
+    "lat": 51.7265298,
+    "lng": 103.6594104,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061441",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/9526081837",
+    "name": "Мотовелотехника",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.658914,
+    "lng": 103.715106,
+    "category": "services",
+    "rubrics": [
+      "Хозтовары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хозтовары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081837",
+    "tags": {
+      "shop": "hardware"
+    }
+  },
+  {
+    "osm": "node/11687248769",
+    "name": "Музей БЦБК",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5194576,
+    "lng": 104.1794503,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [
+      "http://музей.бцбк.рф"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Музей",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11687248769",
+    "tags": {
+      "tourism": "museum",
+      "website": "http://музей.бцбк.рф"
+    }
+  },
+  {
+    "osm": "node/6712216677",
+    "name": "Музей древностей Байкала",
+    "address": "улица Бабушкина",
+    "district": "Слюдянка",
+    "lat": 51.653402,
+    "lng": 103.726951,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Музей",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712216677",
+    "tags": {
+      "tourism": "museum"
+    }
+  },
+  {
+    "osm": "node/6712216674",
+    "name": "Музей истории ВСЖД",
+    "address": "Железнодорожная улица",
+    "district": "Слюдянка",
+    "lat": 51.654749,
+    "lng": 103.72652,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Музей",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712216674",
+    "tags": {
+      "tourism": "museum"
+    }
+  },
+  {
+    "osm": "node/12484171101",
+    "name": "Музей Рериха",
+    "address": "галерея № 14 (Недостроенная)",
+    "district": "Култук",
+    "lat": 51.7323722,
+    "lng": 103.8283357,
+    "category": "services",
+    "rubrics": [
+      "Музей"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Музей",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12484171101",
+    "tags": {
+      "tourism": "museum"
+    }
+  },
+  {
+    "osm": "way/439843735",
+    "name": "Музыкальная школа",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5203832,
+    "lng": 104.1536758,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439843735",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/7459675260",
+    "name": "Муниципальная библиотека им.Просекина",
+    "address": "Депутатская улица",
+    "district": "Култук",
+    "lat": 51.722322,
+    "lng": 103.682613,
+    "category": "services",
+    "rubrics": [
+      "Библиотека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Библиотека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7459675260",
+    "tags": {
+      "amenity": "library"
+    }
+  },
+  {
+    "osm": "node/9526164481",
+    "name": "МФЦ",
+    "address": "Магистральная улица",
+    "district": "Слюдянка",
+    "lat": 51.665699,
+    "lng": 103.691766,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526164481",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/5691956421",
+    "name": "МЧС Южный псо",
+    "address": "Набережная улица, 38",
+    "district": "Слюдянка",
+    "lat": 51.6363776,
+    "lng": 103.6935242,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [
+      "+7 901 6609112"
+    ],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5691956421",
+    "tags": {
+      "office": "government",
+      "phone": "+7 901 6609112",
+      "addr": "Набережная улица, 38"
+    }
+  },
+  {
+    "osm": "node/3876125367",
+    "name": "Мыс Половинный",
+    "address": "Половинная",
+    "district": "Половинная",
+    "lat": 51.7984626,
+    "lng": 104.3531388,
+    "category": "services",
+    "rubrics": [
+      "Причал"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Причал",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3876125367",
+    "tags": {
+      "amenity": "ferry_terminal"
+    }
+  },
+  {
+    "osm": "node/3876170285",
+    "name": "Мыс Толстый",
+    "address": "Маритуй",
+    "district": "Маритуй",
+    "lat": 51.79139,
+    "lng": 104.6113899,
+    "category": "services",
+    "rubrics": [
+      "Причал"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Причал",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3876170285",
+    "tags": {
+      "amenity": "ferry_terminal"
+    }
+  },
+  {
+    "osm": "node/7221434953",
+    "name": "На речной",
+    "address": "Речная улица, 1А/1",
+    "district": "Байкальск",
+    "lat": 51.5220403,
+    "lng": 104.1400998,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434953",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6887976279",
+    "name": "Надежда",
+    "address": "Амбулаторная улица, 24Д",
+    "district": "Слюдянка",
+    "lat": 51.669445,
+    "lng": 103.6795038,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976279",
+    "tags": {
+      "shop": "convenience",
+      "addr": "Амбулаторная улица, 24Д"
+    }
+  },
+  {
+    "osm": "node/6887988540",
+    "name": "Надежда",
+    "address": "улица Куприна",
+    "district": "Слюдянка",
+    "lat": 51.6697165,
+    "lng": 103.6868427,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887988540",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4905061451",
+    "name": "Надежда (бывш.)",
+    "address": "Профсоюзная улица",
+    "district": "Култук",
+    "lat": 51.7260608,
+    "lng": 103.6628144,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061451",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/5994828413",
+    "name": "Новоснежка",
+    "address": "Набережная улица",
+    "district": "Новоснежная",
+    "lat": 51.4730861,
+    "lng": 104.6270949,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5994828413",
+    "tags": {
+      "tourism": "hotel",
+      "addr": "Набережная улица"
+    }
+  },
+  {
+    "osm": "node/4373195496",
+    "name": "Облкоммунэнерго",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5133309,
+    "lng": 104.1443739,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373195496",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/7229915423",
+    "name": "Общежитие",
+    "address": "«Байкал», 24",
+    "district": "Байкальск",
+    "lat": 51.5107991,
+    "lng": 104.1400748,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915423",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/9527359045",
+    "name": "Овощи-фрукты",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.666736,
+    "lng": 103.690701,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527359045",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "way/367831415",
+    "name": "ОМВД России по Слюдянскому району",
+    "address": "улица Кутелева",
+    "district": "Слюдянка",
+    "lat": 51.6514416,
+    "lng": 103.7223446,
+    "category": "services",
+    "rubrics": [
+      "Полиция"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Полиция",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/367831415",
+    "tags": {
+      "amenity": "police"
+    }
+  },
+  {
+    "osm": "node/9193290024",
+    "name": "ОМНИ №2",
+    "address": "«Байкал»",
+    "district": "Култук",
+    "lat": 51.719827,
+    "lng": 103.695675,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9193290024",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "way/503127864",
+    "name": "Омуль",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5178141,
+    "lng": 104.1311178,
+    "category": "food",
+    "rubrics": [
+      "Рыба и морепродукты"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Рыба и морепродукты",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503127864",
+    "tags": {
+      "shop": "seafood"
+    }
+  },
+  {
+    "osm": "node/7979961310",
+    "name": "ООО Вертикаль",
+    "address": "Рабочая улица",
+    "district": "Култук",
+    "lat": 51.719612,
+    "lng": 103.687187,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979961310",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/6717773016",
+    "name": "ОП Сокол",
+    "address": "Московская улица",
+    "district": "Слюдянка",
+    "lat": 51.659302,
+    "lng": 103.7169801,
+    "category": "services",
+    "rubrics": [
+      "Полиция"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Полиция",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773016",
+    "tags": {
+      "amenity": "police"
+    }
+  },
+  {
+    "osm": "node/9567437604",
+    "name": "ОПС 665903",
+    "address": "Школьная улица",
+    "district": "Слюдянка",
+    "lat": 51.643116,
+    "lng": 103.705571,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9567437604",
+    "tags": {
+      "amenity": "post_office"
+    }
+  },
+  {
+    "osm": "node/9526081846",
+    "name": "ОПС 665904",
+    "address": "улица Ржанова",
+    "district": "Слюдянка",
+    "lat": 51.656585,
+    "lng": 103.716758,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081846",
+    "tags": {
+      "amenity": "post_office"
+    }
+  },
+  {
+    "osm": "node/7979960800",
+    "name": "ОПС 665910",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.723443,
+    "lng": 103.681757,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979960800",
+    "tags": {
+      "amenity": "post_office"
+    }
+  },
+  {
+    "osm": "node/4373031792",
+    "name": "Орлиное гнездо",
+    "address": "«Байкал», 27",
+    "district": "Байкальск",
+    "lat": 51.5073184,
+    "lng": 104.1462053,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373031792",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/5691847724",
+    "name": "отель Юрты",
+    "address": "«Байкал»",
+    "district": "Буровщина",
+    "lat": 51.6198041,
+    "lng": 103.8111244,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5691847724",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/6893097819",
+    "name": "Охотничий шалаш",
+    "address": "Новоснежная",
+    "district": "Новоснежная",
+    "lat": 51.2810696,
+    "lng": 104.1589434,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6893097819",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/8021263946",
+    "name": "Оюна",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.523934,
+    "lng": 104.150205,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/8021263946",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/3876122681",
+    "name": "п.Шумиха",
+    "address": "галерея № 7 (Шумихинская)",
+    "district": "Шумиха",
+    "lat": 51.7997647,
+    "lng": 104.4649118,
+    "category": "services",
+    "rubrics": [
+      "Причал"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Причал",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/3876122681",
+    "tags": {
+      "amenity": "ferry_terminal"
+    }
+  },
+  {
+    "osm": "node/11668381169",
+    "name": "Петербург",
+    "address": "микрорайон Гагарина, 220",
+    "district": "Байкальск",
+    "lat": 51.5238848,
+    "lng": 104.1500357,
+    "category": "food",
+    "rubrics": [
+      "Ресторан",
+      "Кухня: russian"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Mo-Su 12:00-23:00",
+    "about": "Кухня: russian",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11668381169",
+    "tags": {
+      "amenity": "restaurant",
+      "cuisine": "russian",
+      "opening_hours": "Mo-Su 12:00-23:00",
+      "addr": "микрорайон Гагарина, 220"
+    }
+  },
+  {
+    "osm": "node/9504253543",
+    "name": "Пивной причал",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725248,
+    "lng": 103.670197,
+    "category": "food",
+    "rubrics": [
+      "Бар"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Бар",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9504253543",
+    "tags": {
+      "amenity": "bar"
+    }
+  },
+  {
+    "osm": "node/9526081808",
+    "name": "Пивной причал",
+    "address": "улица Парижской Коммуны",
+    "district": "Слюдянка",
+    "lat": 51.655517,
+    "lng": 103.716954,
+    "category": "food",
+    "rubrics": [
+      "Бар"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Бар",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081808",
+    "tags": {
+      "amenity": "bar"
+    }
+  },
+  {
+    "osm": "node/1958389958",
+    "name": "Пик Черского",
+    "address": "Профсоюзная улица",
+    "district": "Сухой Ручей",
+    "lat": 51.6459761,
+    "lng": 103.7591896,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1958389958",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/6450298948",
+    "name": "Победа-2",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6636797,
+    "lng": 103.6958009,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6450298948",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4417434194",
+    "name": "Подушка",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3518357,
+    "lng": 104.608168,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4417434194",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "way/503469273",
+    "name": "Пожарная Часть № 52",
+    "address": "«Байкал»",
+    "district": "Слюдянка",
+    "lat": 51.6741196,
+    "lng": 103.6853849,
+    "category": "services",
+    "rubrics": [
+      "Пожарная часть"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Пожарная часть",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503469273",
+    "tags": {
+      "amenity": "fire_station"
+    }
+  },
+  {
+    "osm": "node/7229915437",
+    "name": "Пожарная Часть №39",
+    "address": "«Байкал», 1",
+    "district": "Байкальск",
+    "lat": 51.5041001,
+    "lng": 104.1440958,
+    "category": "services",
+    "rubrics": [
+      "Пожарная часть"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Пожарная часть",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915437",
+    "tags": {
+      "amenity": "fire_station"
+    }
+  },
+  {
+    "osm": "node/5654157903",
+    "name": "Пожарный поезд ст. Слюдянка",
+    "address": "Пионерский переулок",
+    "district": "Слюдянка",
+    "lat": 51.6621111,
+    "lng": 103.7164833,
+    "category": "services",
+    "rubrics": [
+      "Пожарная часть"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "ФГП «Ведомственная охрана железнодорожного транспорта Российской Федерации» (Восточно-Сибирская железная дорога)",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5654157903",
+    "tags": {
+      "amenity": "fire_station",
+      "operator": "ФГП «Ведомственная охрана железнодорожного транспорта Российской Федерации» (Восточно-Сибирская железная дорога)"
+    }
+  },
+  {
+    "osm": "node/11378636812",
+    "name": "Позы",
+    "address": "Магистральная улица",
+    "district": "Утулик",
+    "lat": 51.5374596,
+    "lng": 104.0566464,
+    "category": "food",
+    "rubrics": [
+      "Быстрое питание"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Быстрое питание",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636812",
+    "tags": {
+      "amenity": "fast_food"
+    }
+  },
+  {
+    "osm": "node/368382504",
+    "name": "Полина",
+    "address": "«Байкал»",
+    "district": "Утулик",
+    "lat": 51.5368577,
+    "lng": 104.0551424,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/368382504",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/4269778708",
+    "name": "Почта 665932",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5228828,
+    "lng": 104.1528797,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4269778708",
+    "tags": {
+      "amenity": "post_office"
+    }
+  },
+  {
+    "osm": "node/7221434959",
+    "name": "Прибой",
+    "address": "Берёзовый переулок, 1",
+    "district": "Байкальск",
+    "lat": 51.524242,
+    "lng": 104.134223,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434959",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/4406292255",
+    "name": "Прибрежный",
+    "address": "Профсоюзная улица",
+    "district": "Сухой Ручей",
+    "lat": 51.6459777,
+    "lng": 103.7585544,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [
+      "+7 914 9586376"
+    ],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4406292255",
+    "tags": {
+      "tourism": "guest_house",
+      "phone": "+7 914 9586376"
+    }
+  },
+  {
+    "osm": "node/6854044626",
+    "name": "Приют туриста",
+    "address": "Баклань",
+    "district": "Баклань",
+    "lat": 51.7603385,
+    "lng": 104.1010803,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [
+      "+7 914 9012939"
+    ],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "24/7",
+    "about": "Ольга",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6854044626",
+    "tags": {
+      "tourism": "hotel",
+      "operator": "Ольга",
+      "opening_hours": "24/7",
+      "phone": "+7 914 9012939"
+    }
+  },
+  {
+    "osm": "node/9526081727",
+    "name": "Продрынок",
+    "address": "улица Кутелева",
+    "district": "Слюдянка",
+    "lat": 51.655456,
+    "lng": 103.715667,
+    "category": "services",
+    "rubrics": [
+      "Рынок"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Рынок",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081727",
+    "tags": {
+      "amenity": "marketplace"
+    }
+  },
+  {
+    "osm": "node/4373599796",
+    "name": "Продукты",
+    "address": "Таёжный переулок",
+    "district": "Байкальск",
+    "lat": 51.519184,
+    "lng": 104.150308,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373599796",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/5024699748",
+    "name": "Продукты",
+    "address": "Железнодорожная улица",
+    "district": "Андрияновская",
+    "lat": 51.8049348,
+    "lng": 103.8092944,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5024699748",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6887976277",
+    "name": "Продукты",
+    "address": "Амбулаторная улица, 12",
+    "district": "Слюдянка",
+    "lat": 51.6702125,
+    "lng": 103.6811487,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976277",
+    "tags": {
+      "shop": "convenience",
+      "addr": "Амбулаторная улица, 12"
+    }
+  },
+  {
+    "osm": "node/6887976278",
+    "name": "Продукты",
+    "address": "Амбулаторная улица",
+    "district": "Слюдянка",
+    "lat": 51.6694424,
+    "lng": 103.6818656,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976278",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6887976281",
+    "name": "Продукты",
+    "address": "улица Куприна",
+    "district": "Слюдянка",
+    "lat": 51.668392,
+    "lng": 103.6812278,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976281",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7229915448",
+    "name": "Продукты",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5052031,
+    "lng": 104.1440038,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915448",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7851987882",
+    "name": "Продукты",
+    "address": "улица Роща",
+    "district": "Култук",
+    "lat": 51.7297459,
+    "lng": 103.717241,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7851987882",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9526081643",
+    "name": "Продукты",
+    "address": "Московская улица",
+    "district": "Слюдянка",
+    "lat": 51.657871,
+    "lng": 103.715442,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081643",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527359099",
+    "name": "Продукты",
+    "address": "Магистральная улица",
+    "district": "Слюдянка",
+    "lat": 51.666759,
+    "lng": 103.692229,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527359099",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527508448",
+    "name": "Продукты (недейств.)",
+    "address": "улица Победы",
+    "district": "Култук",
+    "lat": 51.724144,
+    "lng": 103.705904,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508448",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527488865",
+    "name": "Промтовары",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725086,
+    "lng": 103.710524,
+    "category": "services",
+    "rubrics": [
+      "Товары для дома"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Товары для дома",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527488865",
+    "tags": {
+      "shop": "houseware"
+    }
+  },
+  {
+    "osm": "node/9527507866",
+    "name": "Промтовары (недейств.)",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.72469,
+    "lng": 103.710071,
+    "category": "services",
+    "rubrics": [
+      "Товары для дома"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Товары для дома",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507866",
+    "tags": {
+      "shop": "houseware"
+    }
+  },
+  {
+    "osm": "node/4459069487",
+    "name": "Профи-мебель",
+    "address": "улица Пушкина",
+    "district": "Слюдянка",
+    "lat": 51.654821,
+    "lng": 103.7192609,
+    "category": "services",
+    "rubrics": [
+      "Мебель"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Mo-Sa 08:00-17:00",
+    "about": "Мебель",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459069487",
+    "tags": {
+      "shop": "furniture",
+      "opening_hours": "Mo-Sa 08:00-17:00"
+    }
+  },
+  {
+    "osm": "node/11204981810",
+    "name": "Р-лайн",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6582113,
+    "lng": 103.7166399,
+    "category": "services",
+    "rubrics": [
+      "Связь"
+    ],
+    "phones": [
+      "+7 800 2227011",
+      "+7 924 8227011"
+    ],
+    "sites": [
+      "https://rline1.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Fr 09:00-13:00,14:00-18:00; Sa 10:00-15:00",
+    "about": "Связь",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11204981810",
+    "tags": {
+      "office": "telecommunication",
+      "opening_hours": "Mo-Fr 09:00-13:00,14:00-18:00; Sa 10:00-15:00"
+    }
+  },
+  {
+    "osm": "node/4937710892",
+    "name": "Резинотехника",
+    "address": "Магистральный переулок",
+    "district": "Слюдянка",
+    "lat": 51.664175,
+    "lng": 103.6936551,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710892",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/12372805101",
+    "name": "Ретро",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6555026,
+    "lng": 103.7203694,
+    "category": "food",
+    "rubrics": [
+      "Алкогольные напитки"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Алкогольные напитки",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12372805101",
+    "tags": {
+      "shop": "alcohol"
+    }
+  },
+  {
+    "osm": "node/9680537944",
+    "name": "Росгосстрах",
+    "address": "микрорайон Гагарина, 173",
+    "district": "Байкальск",
+    "lat": 51.5200679,
+    "lng": 104.1506776,
+    "category": "services",
+    "rubrics": [
+      "Страхование"
+    ],
+    "phones": [
+      "+7 395 2436188"
+    ],
+    "sites": [
+      "https://www.rgs.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Fr 09:00-13:00,14:00-18:00",
+    "about": "Страхование",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9680537944",
+    "tags": {
+      "office": "insurance",
+      "opening_hours": "Mo-Fr 09:00-13:00,14:00-18:00"
+    }
+  },
+  {
+    "osm": "node/7979965541",
+    "name": "Роснефть. Иркутск-терминал. Култукский цех.",
+    "address": "улица Суворова",
+    "district": "Култук",
+    "lat": 51.72102,
+    "lng": 103.681802,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979965541",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/9526081818",
+    "name": "Росреестр",
+    "address": "улица Ржанова",
+    "district": "Слюдянка",
+    "lat": 51.65664,
+    "lng": 103.716859,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081818",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/7221434954",
+    "name": "Русская Баня",
+    "address": "Строительная улица",
+    "district": "Байкальск",
+    "lat": 51.523513,
+    "lng": 104.133285,
+    "category": "salon",
+    "rubrics": [
+      "Сауна"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Сауна",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434954",
+    "tags": {
+      "leisure": "sauna"
+    }
+  },
+  {
+    "osm": "node/7229808791",
+    "name": "Русь",
+    "address": "улица 0-я",
+    "district": "Байкальск",
+    "lat": 51.513682,
+    "lng": 104.121259,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229808791",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/6717762465",
+    "name": "Русэнергосбыт",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.659274,
+    "lng": 103.715533,
+    "category": "services",
+    "rubrics": [
+      "Энергоснабжение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Энергоснабжение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762465",
+    "tags": {
+      "office": "energy_supplier"
+    }
+  },
+  {
+    "osm": "node/4229476889",
+    "name": "рыбалка м. Б",
+    "address": "дорога к Иркуту",
+    "district": "Быстрая",
+    "lat": 51.7428652,
+    "lng": 103.4193037,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4229476889",
+    "tags": {
+      "tourism": "caravan_site"
+    }
+  },
+  {
+    "osm": "node/4229476890",
+    "name": "рыблка Тиб",
+    "address": "Тункинский тракт",
+    "district": "Тибельти",
+    "lat": 51.7622799,
+    "lng": 103.2605816,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4229476890",
+    "tags": {
+      "tourism": "caravan_site"
+    }
+  },
+  {
+    "osm": "node/1449005926",
+    "name": "Рыбный рынок",
+    "address": "Железнодорожная улица",
+    "district": "Култук",
+    "lat": 51.728101,
+    "lng": 103.7158783,
+    "category": "services",
+    "rubrics": [
+      "Рынок"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Рынок",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1449005926",
+    "tags": {
+      "amenity": "marketplace"
+    }
+  },
+  {
+    "osm": "node/12809615203",
+    "name": "Рыжая сова",
+    "address": "улица Мира, 15",
+    "district": "Мангутай",
+    "lat": 51.6020488,
+    "lng": 103.9065075,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [
+      "+7 914 926 26 21",
+      "+7 914 006 44 07"
+    ],
+    "sites": [
+      "https://ryzhaya-sova.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "24/7",
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12809615203",
+    "tags": {
+      "tourism": "guest_house",
+      "opening_hours": "24/7",
+      "website": "https://ryzhaya-sova.ru/",
+      "phone": "+7 914 926 26 21;+7 914 006 44 07",
+      "addr": "улица Мира, 15"
+    }
+  },
+  {
+    "osm": "node/7229915434",
+    "name": "Сбербанк",
+    "address": "«Байкал», 26",
+    "district": "Байкальск",
+    "lat": 51.50682,
+    "lng": 104.1460938,
+    "category": "services",
+    "rubrics": [
+      "Банк"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Сбербанк",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915434",
+    "tags": {
+      "amenity": "bank",
+      "brand": "Сбербанк"
+    }
+  },
+  {
+    "osm": "node/9567437598",
+    "name": "Светлана",
+    "address": "Полевая улица",
+    "district": "Слюдянка",
+    "lat": 51.643436,
+    "lng": 103.706012,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9567437598",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7221434944",
+    "name": "Светофор",
+    "address": "Речная улица",
+    "district": "Байкальск",
+    "lat": 51.522726,
+    "lng": 104.140123,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434944",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/11889052552",
+    "name": "СДЭК",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6626246,
+    "lng": 103.7030609,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [
+      "+7 901 6545544"
+    ],
+    "sites": [
+      "https://www.cdek.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-21:00",
+    "about": "Почта",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11889052552",
+    "tags": {
+      "amenity": "post_office",
+      "opening_hours": "Mo-Su 09:00-21:00"
+    }
+  },
+  {
+    "osm": "node/1140796240",
+    "name": "Селеста",
+    "address": "улица Кирова",
+    "district": "Слюдянка",
+    "lat": 51.6558156,
+    "lng": 103.7147115,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1140796240",
+    "tags": {
+      "amenity": "pharmacy",
+      "healthcare": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/4269783201",
+    "name": "Селеста",
+    "address": "микрорайон Гагарина, 7",
+    "district": "Байкальск",
+    "lat": 51.5229116,
+    "lng": 104.1543568,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4269783201",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/4373330189",
+    "name": "Сеть Техники",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5204028,
+    "lng": 104.1495255,
+    "category": "services",
+    "rubrics": [
+      "Электроника"
+    ],
+    "phones": [
+      "+7 924 6082551"
+    ],
+    "sites": [
+      "https://set-tehniki.com/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Sa 09:00-19:00; Su 09:00-18:00",
+    "about": "Электроника",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373330189",
+    "tags": {
+      "shop": "electronics",
+      "opening_hours": "Mo-Sa 09:00-19:00; Su 09:00-18:00"
+    }
+  },
+  {
+    "osm": "node/9526081732",
+    "name": "Сеть техники №1",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.659292,
+    "lng": 103.714432,
+    "category": "services",
+    "rubrics": [
+      "Электроника"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Электроника",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081732",
+    "tags": {
+      "shop": "electronics"
+    }
+  },
+  {
+    "osm": "node/7984363761",
+    "name": "Сибвнештранс",
+    "address": "улица Чапаева",
+    "district": "Култук",
+    "lat": 51.720195,
+    "lng": 103.675104,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7984363761",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/4373464091",
+    "name": "Сибирь",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5233101,
+    "lng": 104.1553536,
+    "category": "services",
+    "rubrics": [
+      "Автомойка"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автомойка",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373464091",
+    "tags": {
+      "amenity": "car_wash"
+    }
+  },
+  {
+    "osm": "node/11374455170",
+    "name": "Сибирь",
+    "address": "улица Гагарина, 46",
+    "district": "Солзан",
+    "lat": 51.4962062,
+    "lng": 104.2308759,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11374455170",
+    "tags": {
+      "amenity": "cafe",
+      "addr": "улица Гагарина, 46"
+    }
+  },
+  {
+    "osm": "node/7755312625",
+    "name": "Сибтехинформ",
+    "address": "Депутатская улица",
+    "district": "Култук",
+    "lat": 51.720004,
+    "lng": 103.691575,
+    "category": "services",
+    "rubrics": [
+      "Компания"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компания",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7755312625",
+    "tags": {
+      "office": "company"
+    }
+  },
+  {
+    "osm": "node/10589207240",
+    "name": "Славянка",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.664365,
+    "lng": 103.700011,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207240",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "way/503469275",
+    "name": "Слюдянка 665902",
+    "address": "улица Куприна, 57А",
+    "district": "Слюдянка",
+    "lat": 51.6702863,
+    "lng": 103.6859737,
+    "category": "services",
+    "rubrics": [
+      "Почта"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АО \"Почта России\"",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503469275",
+    "tags": {
+      "amenity": "post_office",
+      "operator": "АО \"Почта России\"",
+      "addr": "улица Куприна, 57А"
+    }
+  },
+  {
+    "osm": "node/7877747085",
+    "name": "Слюдянка берег",
+    "address": "Белая дорога",
+    "district": "Слюдянка",
+    "lat": 51.6775396,
+    "lng": 103.7063802,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг",
+      "По всему берегу множества мест для палаток"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "По всему берегу множества мест для палаток",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7877747085",
+    "tags": {
+      "tourism": "camp_site",
+      "description": "По всему берегу множества мест для палаток"
+    }
+  },
+  {
+    "osm": "way/210544450",
+    "name": "Слюдянская районная больница",
+    "address": "улица Геологов",
+    "district": "Слюдянка",
+    "lat": 51.645511,
+    "lng": 103.7111346,
+    "category": "health",
+    "rubrics": [
+      "Больница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Больница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/210544450",
+    "tags": {
+      "amenity": "hospital"
+    }
+  },
+  {
+    "osm": "node/6888096239",
+    "name": "Слюдянский областной детский дом",
+    "address": "улица Ленина, 23А",
+    "district": "Слюдянка",
+    "lat": 51.665043,
+    "lng": 103.702438,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6888096239",
+    "tags": {
+      "amenity": "school",
+      "addr": "улица Ленина, 23А"
+    }
+  },
+  {
+    "osm": "node/10734775376",
+    "name": "Снежные гуси",
+    "address": "Трактовая улица",
+    "district": "Новоснежная",
+    "lat": 51.4722783,
+    "lng": 104.6260267,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [
+      "+7 904 1400220"
+    ],
+    "sites": [
+      "https://snowgoose.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 08:00-22:00",
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10734775376",
+    "tags": {
+      "tourism": "hotel",
+      "opening_hours": "Mo-Su 08:00-22:00"
+    }
+  },
+  {
+    "osm": "node/9526081789",
+    "name": "Снежный барс",
+    "address": "улица Ржанова",
+    "district": "Слюдянка",
+    "lat": 51.656116,
+    "lng": 103.71554,
+    "category": "services",
+    "rubrics": [
+      "Компьютеры"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Компьютеры",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081789",
+    "tags": {
+      "shop": "computer"
+    }
+  },
+  {
+    "osm": "node/7229808790",
+    "name": "Соболиная",
+    "address": "улица 0-я",
+    "district": "Байкальск",
+    "lat": 51.513901,
+    "lng": 104.121962,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229808790",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/9648067136",
+    "name": "Совкомбанк",
+    "address": "микрорайон Гагарина, 151А",
+    "district": "Байкальск",
+    "lat": 51.5209057,
+    "lng": 104.1495135,
+    "category": "services",
+    "rubrics": [
+      "Банк"
+    ],
+    "phones": [
+      "+7 800 1000006"
+    ],
+    "sites": [
+      "https://sovcombank.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-13:00,14:00-18:00",
+    "about": "Банк",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9648067136",
+    "tags": {
+      "amenity": "bank",
+      "opening_hours": "Mo-Su 09:00-13:00,14:00-18:00"
+    }
+  },
+  {
+    "osm": "node/9944729417",
+    "name": "Солзан",
+    "address": "«Байкал»",
+    "district": "Солзан",
+    "lat": 51.4955734,
+    "lng": 104.2326351,
+    "category": "services",
+    "rubrics": [
+      "АЗС"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "АЗС",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9944729417",
+    "tags": {
+      "amenity": "fuel"
+    }
+  },
+  {
+    "osm": "way/232905046",
+    "name": "Стационарный пост ГИБДД",
+    "address": "«Байкал»",
+    "district": "Слюдянка",
+    "lat": 51.6834033,
+    "lng": 103.690505,
+    "category": "services",
+    "rubrics": [
+      "Полиция"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Полиция",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/232905046",
+    "tags": {
+      "amenity": "police"
+    }
+  },
+  {
+    "osm": "node/4937710913",
+    "name": "СТО",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6637491,
+    "lng": 103.6983084,
+    "category": "services",
+    "rubrics": [
+      "Автосервис"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автосервис",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710913",
+    "tags": {
+      "shop": "car_repair"
+    }
+  },
+  {
+    "osm": "node/11374455376",
+    "name": "Столовая",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5157307,
+    "lng": 104.137,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11374455376",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/7704432185",
+    "name": "Стоянка , ночлег у Байкала",
+    "address": "Набережная улица",
+    "district": "Новоснежная",
+    "lat": 51.4768484,
+    "lng": 104.6232108,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7704432185",
+    "tags": {
+      "tourism": "caravan_site"
+    }
+  },
+  {
+    "osm": "node/6893097355",
+    "name": "Стоянка на голой",
+    "address": "Новоснежная",
+    "district": "Новоснежная",
+    "lat": 51.371517,
+    "lng": 104.3849474,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6893097355",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/6893097489",
+    "name": "Стоянка на Нитяной",
+    "address": "Новоснежная",
+    "district": "Новоснежная",
+    "lat": 51.3738502,
+    "lng": 104.276027,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6893097489",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/6893097818",
+    "name": "Стоянка у озера",
+    "address": "Новоснежная",
+    "district": "Новоснежная",
+    "lat": 51.2805051,
+    "lng": 104.1616103,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6893097818",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/11378636811",
+    "name": "Таежное лукошко",
+    "address": "Снежная улица",
+    "district": "Утулик",
+    "lat": 51.5389316,
+    "lng": 104.0581874,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636811",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/7920549937",
+    "name": "Тамир",
+    "address": "«Байкал»",
+    "district": "Слюдянка",
+    "lat": 51.683832,
+    "lng": 103.691626,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7920549937",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "relation/19660355",
+    "name": "Тёплые озёра",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3956587,
+    "lng": 104.6475595,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [
+      "+7 904 133 83 33",
+      "+7 902 762 29 59"
+    ],
+    "sites": [
+      "https://ozera.club/objects_cat/teplye-ozera/"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/relation/19660355",
+    "tags": {
+      "leisure": "resort",
+      "website": "https://ozera.club/objects_cat/teplye-ozera/",
+      "phone": "+7 904 133 83 33;+7 902 762 29 59"
+    }
+  },
+  {
+    "osm": "node/11374455156",
+    "name": "Теремок",
+    "address": "«Байкал»",
+    "district": "Солзан",
+    "lat": 51.4950786,
+    "lng": 104.2359967,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11374455156",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/4459500041",
+    "name": "Тех-стиль",
+    "address": "улица Пушкина",
+    "district": "Слюдянка",
+    "lat": 51.6555293,
+    "lng": 103.7176114,
+    "category": "services",
+    "rubrics": [
+      "Ткани"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ткани",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459500041",
+    "tags": {
+      "shop": "fabric"
+    }
+  },
+  {
+    "osm": "node/12809825601",
+    "name": "Тополь",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3953887,
+    "lng": 104.6459525,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [
+      "+7 951 630 00 55"
+    ],
+    "sites": [
+      "https://ozera.club/restaurants/letnyaya-veranda/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Th 10:00-22:00; Fr-Sa 10:00-23:00; Su 10:00-22:00",
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12809825601",
+    "tags": {
+      "amenity": "restaurant",
+      "opening_hours": "Mo-Th 10:00-22:00; Fr-Sa 10:00-23:00; Su 10:00-22:00",
+      "website": "https://ozera.club/restaurants/letnyaya-veranda/",
+      "phone": "+7 951 630 00 55"
+    }
+  },
+  {
+    "osm": "node/2064162554",
+    "name": "Точка",
+    "address": "Перевальская улица, 5Д",
+    "district": "Слюдянка",
+    "lat": 51.6748342,
+    "lng": 103.6859469,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/2064162554",
+    "tags": {
+      "amenity": "cafe",
+      "addr": "Перевальская улица, 5Д"
+    }
+  },
+  {
+    "osm": "node/9527507777",
+    "name": "Триумф (Белоречье)",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.72552,
+    "lng": 103.711283,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507777",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7625454735",
+    "name": "Турбаза Пик Черского",
+    "address": "Старо-Комарская дорога",
+    "district": "Слюдянка",
+    "lat": 51.5287107,
+    "lng": 103.5873252,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [
+      "+7 902 5436795"
+    ],
+    "sites": [
+      "https://vk.com/turbazapik"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7625454735",
+    "tags": {
+      "leisure": "resort",
+      "website": "https://vk.com/turbazapik",
+      "phone": "+7 902 5436795"
+    }
+  },
+  {
+    "osm": "node/4000257459",
+    "name": "Турбаза Свифт",
+    "address": "Горная улица, 48",
+    "district": "Култук",
+    "lat": 51.7307156,
+    "lng": 103.727315,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4000257459",
+    "tags": {
+      "tourism": "hotel",
+      "addr": "Горная улица, 48"
+    }
+  },
+  {
+    "osm": "node/11240325955",
+    "name": "Турбаза Утулик",
+    "address": "Кедровый переулок",
+    "district": "Утулик",
+    "lat": 51.5282001,
+    "lng": 104.0478069,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11240325955",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "way/494361186",
+    "name": "Турист",
+    "address": "Кругобайкальская улица",
+    "district": "Слюдянка",
+    "lat": 51.6599822,
+    "lng": 103.7280722,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/494361186",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/9526081703",
+    "name": "ТЦ Базар",
+    "address": "улица Кирова",
+    "district": "Слюдянка",
+    "lat": 51.655674,
+    "lng": 103.714883,
+    "category": "food",
+    "rubrics": [
+      "Супермаркет"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Супермаркет",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081703",
+    "tags": {
+      "shop": "supermarket"
+    }
+  },
+  {
+    "osm": "node/6717773018",
+    "name": "ТЧЭ-6",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.6619,
+    "lng": 103.7131651,
+    "category": "services",
+    "rubrics": [
+      "Администрация"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Администрация",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773018",
+    "tags": {
+      "office": "administrative"
+    }
+  },
+  {
+    "osm": "node/11378636838",
+    "name": "У Камовича",
+    "address": "Трактовая улица",
+    "district": "Утулик",
+    "lat": 51.5480036,
+    "lng": 104.0679337,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636838",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/6741890489",
+    "name": "У Озера .",
+    "address": "Байкальская улица",
+    "district": "Мурино",
+    "lat": 51.4872256,
+    "lng": 104.4007286,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6741890489",
+    "tags": {
+      "tourism": "caravan_site"
+    }
+  },
+  {
+    "osm": "node/7223419535",
+    "name": "У озерка",
+    "address": "Тункинский тракт",
+    "district": "Быстрая",
+    "lat": 51.7358862,
+    "lng": 103.4543466,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7223419535",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/6717773015",
+    "name": "Угловой",
+    "address": "Пионерский переулок",
+    "district": "Слюдянка",
+    "lat": 51.661362,
+    "lng": 103.7156351,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773015",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6888096240",
+    "name": "Угловой",
+    "address": "Солнечный переулок",
+    "district": "Слюдянка",
+    "lat": 51.665324,
+    "lng": 103.701416,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6888096240",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4905061450",
+    "name": "Удачный",
+    "address": "Безымянный переулок",
+    "district": "Култук",
+    "lat": 51.7265614,
+    "lng": 103.6594529,
+    "category": "services",
+    "rubrics": [
+      "Хозтовары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хозтовары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061450",
+    "tags": {
+      "shop": "hardware"
+    }
+  },
+  {
+    "osm": "node/6717773022",
+    "name": "Узловая больница на ст.Слюдянка",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.65784,
+    "lng": 103.7204051,
+    "category": "health",
+    "rubrics": [
+      "Больница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Больница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773022",
+    "tags": {
+      "amenity": "hospital",
+      "healthcare": "hospital"
+    }
+  },
+  {
+    "osm": "node/7857270590",
+    "name": "Укрытие / Место для ночлега",
+    "address": "туннель № 18 (Киркирей 3)",
+    "district": "Маритуй",
+    "lat": 51.7762186,
+    "lng": 104.1805755,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7857270590",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/7857274685",
+    "name": "Укрытие / Место под палатку",
+    "address": "Порт Байкал",
+    "district": "Порт Байкал",
+    "lat": 51.8591923,
+    "lng": 104.7178142,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7857274685",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/4373010595",
+    "name": "Урожай",
+    "address": "«Байкал», 25",
+    "district": "Байкальск",
+    "lat": 51.5064518,
+    "lng": 104.1456326,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373010595",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/11378636880",
+    "name": "Усадьба БайкКалина",
+    "address": "Озёрная улица",
+    "district": "Утулик",
+    "lat": 51.5510737,
+    "lng": 104.0595,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636880",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/11960105423",
+    "name": "Уютное Местечко",
+    "address": "улица Зои Космодемьянской",
+    "district": "Сухой Ручей",
+    "lat": 51.6432813,
+    "lng": 103.7556572,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11960105423",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6717762469",
+    "name": "ФНС",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.6591,
+    "lng": 103.716682,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762469",
+    "tags": {
+      "office": "government"
+    }
+  },
+  {
+    "osm": "node/9526134227",
+    "name": "Фортуна",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.662827,
+    "lng": 103.701559,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526134227",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/11378636911",
+    "name": "Хамар-Дабан",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5191871,
+    "lng": 104.1094693,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636911",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/7625454736",
+    "name": "Хамар-Дабан",
+    "address": "Старо-Комарская дорога",
+    "district": "Слюдянка",
+    "lat": 51.5285989,
+    "lng": 103.5876954,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [
+      "+7 924 530 40 00"
+    ],
+    "sites": [
+      "https://hamar-daban.com"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7625454736",
+    "tags": {
+      "leisure": "resort",
+      "website": "https://hamar-daban.com",
+      "phone": "+7 924 530 40 00"
+    }
+  },
+  {
+    "osm": "node/5063311703",
+    "name": "Хвойная",
+    "address": "галерея № 6",
+    "district": "Маритуй",
+    "lat": 51.7957264,
+    "lng": 104.5154426,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5063311703",
+    "tags": {
+      "leisure": "resort"
+    }
+  },
+  {
+    "osm": "node/6717773014",
+    "name": "Хлеб-Соль",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.65986,
+    "lng": 103.7161871,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773014",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6887976282",
+    "name": "Хлеб-Соль",
+    "address": "улица Куприна, 20",
+    "district": "Слюдянка",
+    "lat": 51.667862,
+    "lng": 103.6809258,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6887976282",
+    "tags": {
+      "shop": "convenience",
+      "addr": "улица Куприна, 20"
+    }
+  },
+  {
+    "osm": "node/7979961452",
+    "name": "Хлеб-Соль",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.723393,
+    "lng": 103.681193,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7979961452",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9526081630",
+    "name": "Хлеб-Соль",
+    "address": "улица Ржанова",
+    "district": "Слюдянка",
+    "lat": 51.656407,
+    "lng": 103.716378,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081630",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4937710918",
+    "name": "Хозтовары",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.6637275,
+    "lng": 103.7000721,
+    "category": "services",
+    "rubrics": [
+      "Хозтовары"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Хозтовары",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710918",
+    "tags": {
+      "shop": "hardware"
+    }
+  },
+  {
+    "osm": "node/9527508282",
+    "name": "Хозяйственный",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.725198,
+    "lng": 103.710728,
+    "category": "services",
+    "rubrics": [
+      "Товары для дома"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Товары для дома",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508282",
+    "tags": {
+      "shop": "houseware"
+    }
+  },
+  {
+    "osm": "way/503469286",
+    "name": "Хозяюшка",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6658584,
+    "lng": 103.6907123,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503469286",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/10589207258",
+    "name": "Хороший",
+    "address": "улица Энтузиастов",
+    "district": "Слюдянка",
+    "lat": 51.668132,
+    "lng": 103.690148,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207258",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7229915435",
+    "name": "Храм Святой троицы",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5109091,
+    "lng": 104.1456158,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915435",
+    "tags": {
+      "amenity": "place_of_worship"
+    }
+  },
+  {
+    "osm": "relation/6875525",
+    "name": "Центр деловых связей ВСЖД",
+    "address": "Шаражалгай",
+    "district": "Шаражалгай",
+    "lat": 51.7510462,
+    "lng": 103.9843968,
+    "category": "food",
+    "rubrics": [
+      "База отдыха"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "База отдыха",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/relation/6875525",
+    "tags": {
+      "leisure": "resort"
+    }
+  },
+  {
+    "osm": "way/232952159",
+    "name": "Централь",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.65468,
+    "lng": 103.7208882,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/232952159",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/9527507569",
+    "name": "Церковь Николая Чудотворца",
+    "address": "Школьная улица",
+    "district": "Култук",
+    "lat": 51.727381,
+    "lng": 103.707268,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527507569",
+    "tags": {
+      "amenity": "place_of_worship"
+    }
+  },
+  {
+    "osm": "way/312552462",
+    "name": "Церковь Спаса Преображения",
+    "address": "Горная улица, 30",
+    "district": "Порт Байкал",
+    "lat": 51.8740581,
+    "lng": 104.7981075,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/312552462",
+    "tags": {
+      "amenity": "place_of_worship",
+      "addr": "Горная улица, 30"
+    }
+  },
+  {
+    "osm": "way/311576768",
+    "name": "Часовня Николая Чудотворца",
+    "address": "галерея № 14 (Недостроенная)",
+    "district": "Култук",
+    "lat": 51.7317481,
+    "lng": 103.8302983,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/311576768",
+    "tags": {
+      "amenity": "place_of_worship"
+    }
+  },
+  {
+    "osm": "node/4337420220",
+    "name": "Часовня Святого пророка царя Соломона",
+    "address": "На п. Тальцинский",
+    "district": "Новоснежная",
+    "lat": 51.3934755,
+    "lng": 104.6436995,
+    "category": "services",
+    "rubrics": [
+      "Храм"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Храм",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4337420220",
+    "tags": {
+      "amenity": "place_of_worship"
+    }
+  },
+  {
+    "osm": "node/6372515472",
+    "name": "Чё заедем, поедим",
+    "address": "Тупиковый переулок",
+    "district": "Култук",
+    "lat": 51.7286801,
+    "lng": 103.7154401,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6372515472",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/6717762475",
+    "name": "Черемушки",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.660888,
+    "lng": 103.714176,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717762475",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/4905061444",
+    "name": "Черемушки",
+    "address": "Профсоюзная улица",
+    "district": "Култук",
+    "lat": 51.726465,
+    "lng": 103.659985,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4905061444",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/10589207236",
+    "name": "Четырнадцатый",
+    "address": "Красногвардейский переулок",
+    "district": "Слюдянка",
+    "lat": 51.672092,
+    "lng": 103.68422,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207236",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6717773020",
+    "name": "ЧОУ Школа-интернат №23 РЖД",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.658054,
+    "lng": 103.7188721,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6717773020",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/7272847185",
+    "name": "Шаурма",
+    "address": "Железнодорожная улица",
+    "district": "Култук",
+    "lat": 51.7281542,
+    "lng": 103.7156889,
+    "category": "food",
+    "rubrics": [
+      "Быстрое питание"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Быстрое питание",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7272847185",
+    "tags": {
+      "amenity": "fast_food"
+    }
+  },
+  {
+    "osm": "node/5828638290",
+    "name": "Шашлычная",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5281876,
+    "lng": 104.146822,
+    "category": "food",
+    "rubrics": [
+      "Кафе",
+      "Кухня: russian"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кухня: russian",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/5828638290",
+    "tags": {
+      "amenity": "cafe",
+      "cuisine": "russian"
+    }
+  },
+  {
+    "osm": "node/7118660319",
+    "name": "Шашлычок",
+    "address": "«Байкал»",
+    "district": "Култук",
+    "lat": 51.713165,
+    "lng": 103.688133,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7118660319",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/7229915432",
+    "name": "шиномонтаж",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5119999,
+    "lng": 104.1440496,
+    "category": "services",
+    "rubrics": [
+      "Шины и диски"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Шины и диски",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915432",
+    "tags": {
+      "shop": "tyres"
+    }
+  },
+  {
+    "osm": "node/4937355189",
+    "name": "Шиномонтаж",
+    "address": "Перевальская улица",
+    "district": "Слюдянка",
+    "lat": 51.6748661,
+    "lng": 103.6866059,
+    "category": "services",
+    "rubrics": [
+      "Автосервис"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автосервис",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937355189",
+    "tags": {
+      "shop": "car_repair"
+    }
+  },
+  {
+    "osm": "node/4937710915",
+    "name": "Шиномонтаж",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6638714,
+    "lng": 103.6982972,
+    "category": "services",
+    "rubrics": [
+      "Автосервис"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автосервис",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710915",
+    "tags": {
+      "shop": "car_repair"
+    }
+  },
+  {
+    "osm": "node/4937710919",
+    "name": "Шиномонтаж",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.6639646,
+    "lng": 103.699996,
+    "category": "services",
+    "rubrics": [
+      "Автосервис"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автосервис",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4937710919",
+    "tags": {
+      "shop": "car_repair"
+    }
+  },
+  {
+    "osm": "way/503127847",
+    "name": "Шиномонтаж",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5152721,
+    "lng": 104.1379233,
+    "category": "services",
+    "rubrics": [
+      "Автосервис"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Автосервис",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/503127847",
+    "tags": {
+      "shop": "car_repair"
+    }
+  },
+  {
+    "osm": "node/6888096241",
+    "name": "Школа бокса им.Валуева",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.664865,
+    "lng": 103.70011,
+    "category": "services",
+    "rubrics": [
+      "Спортивный центр"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Спортивный центр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6888096241",
+    "tags": {
+      "leisure": "sports_centre"
+    }
+  },
+  {
+    "osm": "way/534548191",
+    "name": "Школа № 10",
+    "address": "Советская улица, 1",
+    "district": "Байкальск",
+    "lat": 51.5208707,
+    "lng": 104.1369635,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [
+      "http://sosh10.edusluda.ru"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/534548191",
+    "tags": {
+      "amenity": "school",
+      "website": "http://sosh10.edusluda.ru"
+    }
+  },
+  {
+    "osm": "way/214212132",
+    "name": "Школа № 2",
+    "address": "улица Куприна, 2",
+    "district": "Слюдянка",
+    "lat": 51.6693015,
+    "lng": 103.6844114,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/214212132",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/701308763",
+    "name": "Школа № 7",
+    "address": "Школьная улица",
+    "district": "Култук",
+    "lat": 51.7258136,
+    "lng": 103.7057099,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/701308763",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/210541329",
+    "name": "Школа №1",
+    "address": "Гранитная улица",
+    "district": "Слюдянка",
+    "lat": 51.6466887,
+    "lng": 103.7106163,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/210541329",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/7221434940",
+    "name": "Школа №11",
+    "address": "Советская улица, 1",
+    "district": "Байкальск",
+    "lat": 51.520767,
+    "lng": 104.137641,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7221434940",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/7229915436",
+    "name": "Школа №11",
+    "address": "«Байкал», 1",
+    "district": "Байкальск",
+    "lat": 51.5080941,
+    "lng": 104.1449958,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915436",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/439843736",
+    "name": "Школа №12",
+    "address": "микрорайон Гагарина, 208",
+    "district": "Байкальск",
+    "lat": 51.5190654,
+    "lng": 104.1522163,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/439843736",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/213331595",
+    "name": "Школа №4",
+    "address": "улица Ленина, 90",
+    "district": "Слюдянка",
+    "lat": 51.6596503,
+    "lng": 103.7132842,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/213331595",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/309761507",
+    "name": "Школа №49",
+    "address": "улица Тонконога",
+    "district": "Слюдянка",
+    "lat": 51.6585352,
+    "lng": 103.7257289,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/309761507",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "way/98397963",
+    "name": "Школа №50",
+    "address": "улица Слюдянских Красногвардейцев, 9",
+    "district": "Слюдянка",
+    "lat": 51.6529558,
+    "lng": 103.718607,
+    "category": "services",
+    "rubrics": [
+      "Школа"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Школа",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/98397963",
+    "tags": {
+      "amenity": "school"
+    }
+  },
+  {
+    "osm": "node/9526081756",
+    "name": "Экохим",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.657501,
+    "lng": 103.71682,
+    "category": "health",
+    "rubrics": [
+      "Аптека"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Аптека",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9526081756",
+    "tags": {
+      "amenity": "pharmacy"
+    }
+  },
+  {
+    "osm": "node/7229915431",
+    "name": "Юбилейный",
+    "address": "«Байкал», 51",
+    "district": "Байкальск",
+    "lat": 51.5083121,
+    "lng": 104.1411738,
+    "category": "services",
+    "rubrics": [
+      "Кинотеатр"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кинотеатр",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915431",
+    "tags": {
+      "amenity": "cinema"
+    }
+  },
+  {
+    "osm": "node/7229915442",
+    "name": "Южная",
+    "address": "«Байкал», 27",
+    "district": "Байкальск",
+    "lat": 51.5075491,
+    "lng": 104.1463158,
+    "category": "food",
+    "rubrics": [
+      "Ресторан"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ресторан",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915442",
+    "tags": {
+      "amenity": "restaurant"
+    }
+  },
+  {
+    "osm": "node/7229915429",
+    "name": "Южный",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5107951,
+    "lng": 104.1433178,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915429",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/7229915441",
+    "name": "Южный берег",
+    "address": "«Байкал», 27",
+    "district": "Байкальск",
+    "lat": 51.5072511,
+    "lng": 104.1461178,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915441",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "way/210591179",
+    "name": "Южный поисково-спасательный отряд",
+    "address": "Набережная улица, 38",
+    "district": "Слюдянка",
+    "lat": 51.6363671,
+    "lng": 103.6939224,
+    "category": "services",
+    "rubrics": [
+      "Государственное учреждение"
+    ],
+    "phones": [
+      "+7 901 6609112"
+    ],
+    "sites": [
+      "https://irkobl.ru/sites/pozh/branches/PSO_Ju-Sljudjanka/PSO_Ju-Sljudjanka.php"
+    ],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Государственное учреждение",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/210591179",
+    "tags": {
+      "office": "government",
+      "website": "https://irkobl.ru/sites/pozh/branches/PSO_Ju-Sljudjanka/PSO_Ju-Sljudjanka.php",
+      "phone": "+7 901 6609112",
+      "addr": "Набережная улица, 38"
+    }
+  },
+  {
+    "osm": "node/8663700617",
+    "name": "ЮртаСолзан",
+    "address": "«Байкал»",
+    "district": "Солзан",
+    "lat": 51.4981194,
+    "lng": 104.2124316,
+    "category": "food",
+    "rubrics": [
+      "Кафе",
+      "Кухня: asian;breakfast;local"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кухня: asian;breakfast;local",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/8663700617",
+    "tags": {
+      "amenity": "cafe",
+      "cuisine": "asian;breakfast;local"
+    }
+  },
+  {
+    "osm": "node/7682236287",
+    "name": "Я создал!",
+    "address": "Привокзальная улица",
+    "district": "Мурино",
+    "lat": 51.4885577,
+    "lng": 104.4121584,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Трофим Чернов",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7682236287",
+    "tags": {
+      "tourism": "caravan_site",
+      "operator": "Трофим Чернов"
+    }
+  },
+  {
+    "osm": "node/4373031796",
+    "name": "Ягодка",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.520366,
+    "lng": 104.155708,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4373031796",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/6712216672",
+    "name": "Янта",
+    "address": "Советская улица",
+    "district": "Слюдянка",
+    "lat": 51.654518,
+    "lng": 103.724014,
+    "category": "food",
+    "rubrics": [
+      "Продуктовый магазин"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Продуктовый магазин",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/6712216672",
+    "tags": {
+      "shop": "convenience"
+    }
+  },
+  {
+    "osm": "node/1602929231",
+    "name": "Яхонт",
+    "address": "Вокзальная улица",
+    "district": "Порт Байкал",
+    "lat": 51.8709735,
+    "lng": 104.8067026,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/1602929231",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/4459451110",
+    "name": "Aurum",
+    "address": "улица Парижской Коммуны",
+    "district": "Слюдянка",
+    "lat": 51.6555264,
+    "lng": 103.7173722,
+    "category": "services",
+    "rubrics": [
+      "Ювелирные изделия"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Ювелирные изделия",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451110",
+    "tags": {
+      "shop": "jewelry"
+    }
+  },
+  {
+    "osm": "node/9527508119",
+    "name": "Baikal Craft",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.721573,
+    "lng": 103.704446,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9527508119",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/4459451111",
+    "name": "Barhat",
+    "address": "улица Пушкина",
+    "district": "Слюдянка",
+    "lat": 51.6549635,
+    "lng": 103.7190681,
+    "category": "salon",
+    "rubrics": [
+      "Косметика"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Косметика",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4459451111",
+    "tags": {
+      "shop": "beauty"
+    }
+  },
+  {
+    "osm": "node/11007203741",
+    "name": "DNS",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5223294,
+    "lng": 104.1485158,
+    "category": "services",
+    "rubrics": [
+      "Электроника"
+    ],
+    "phones": [
+      "+7 800 7707999"
+    ],
+    "sites": [
+      "https://www.dns-shop.ru/"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-19:00",
+    "about": "Электроника",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11007203741",
+    "tags": {
+      "shop": "electronics",
+      "opening_hours": "Mo-Su 10:00-19:00"
+    }
+  },
+  {
+    "osm": "node/13004170510",
+    "name": "Fix Price",
+    "address": "микрорайон Гагарина, 217",
+    "district": "Байкальск",
+    "lat": 51.5235826,
+    "lng": 104.1498757,
+    "category": "services",
+    "rubrics": [
+      "Товары для дома"
+    ],
+    "phones": [
+      "+7 499 0093515"
+    ],
+    "sites": [
+      "https://fix-price.com"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-21:00",
+    "about": "Товары для дома",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/13004170510",
+    "tags": {
+      "shop": "variety_store",
+      "opening_hours": "Mo-Su 10:00-21:00"
+    }
+  },
+  {
+    "osm": "node/12084123969",
+    "name": "Free campground by the lake, many locals camping",
+    "address": "улица 40 лет Октября",
+    "district": "Слюдянка",
+    "lat": 51.6550758,
+    "lng": 103.7337751,
+    "category": "food",
+    "rubrics": [
+      "Кемпинг"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кемпинг",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12084123969",
+    "tags": {
+      "tourism": "camp_site"
+    }
+  },
+  {
+    "osm": "node/10589207255",
+    "name": "Gobajou",
+    "address": "улица Берсенёва",
+    "district": "Слюдянка",
+    "lat": 51.664323,
+    "lng": 103.700018,
+    "category": "food",
+    "rubrics": [
+      "Кафе"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Кафе",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/10589207255",
+    "tags": {
+      "amenity": "cafe"
+    }
+  },
+  {
+    "osm": "node/11378636881",
+    "name": "House Near Baikal",
+    "address": "1-я Байкальская улица",
+    "district": "Утулик",
+    "lat": 51.5478516,
+    "lng": 104.061813,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636881",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/12096671419",
+    "name": "Neft burger",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6573043,
+    "lng": 103.7169886,
+    "category": "food",
+    "rubrics": [
+      "Быстрое питание"
+    ],
+    "phones": [
+      "+7 995 0510915"
+    ],
+    "sites": [],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-22:00",
+    "about": "Быстрое питание",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12096671419",
+    "tags": {
+      "amenity": "fast_food",
+      "opening_hours": "Mo-Su 10:00-22:00"
+    }
+  },
+  {
+    "osm": "node/4229659603",
+    "name": "Ol Terra",
+    "address": "Озёрная улица, 1А",
+    "district": "Утулик",
+    "lat": 51.5525078,
+    "lng": 104.0587331,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/4229659603",
+    "tags": {
+      "tourism": "guest_house",
+      "addr": "Озёрная улица, 1А"
+    }
+  },
+  {
+    "osm": "node/9991108257",
+    "name": "Ozon",
+    "address": "микрорайон Гагарина, 7",
+    "district": "Байкальск",
+    "lat": 51.5229268,
+    "lng": 104.1545266,
+    "category": "services",
+    "rubrics": [
+      "Пункт выдачи заказов"
+    ],
+    "phones": [
+      "+7 495 2321000"
+    ],
+    "sites": [
+      "https://www.ozon.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-21:00",
+    "about": "Пункт выдачи заказов",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9991108257",
+    "tags": {
+      "shop": "outpost",
+      "opening_hours": "Mo-Su 09:00-21:00"
+    }
+  },
+  {
+    "osm": "node/9991108288",
+    "name": "Ozon",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.6668893,
+    "lng": 103.6907458,
+    "category": "services",
+    "rubrics": [
+      "Пункт выдачи заказов"
+    ],
+    "phones": [
+      "+7 495 2321000"
+    ],
+    "sites": [
+      "https://www.ozon.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-21:00",
+    "about": "Пункт выдачи заказов",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/9991108288",
+    "tags": {
+      "shop": "outpost",
+      "opening_hours": "Mo-Su 09:00-21:00"
+    }
+  },
+  {
+    "osm": "node/12096812483",
+    "name": "Ozon",
+    "address": "улица Кирова",
+    "district": "Култук",
+    "lat": 51.7239389,
+    "lng": 103.6760205,
+    "category": "services",
+    "rubrics": [
+      "Пункт выдачи заказов"
+    ],
+    "phones": [
+      "+7 495 2321000"
+    ],
+    "sites": [
+      "https://www.ozon.ru",
+      "https://vk.com/ozon",
+      "https://www.instagram.com/ozonru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 09:00-21:00",
+    "about": "Ozon",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/12096812483",
+    "tags": {
+      "shop": "outpost",
+      "brand": "Ozon",
+      "opening_hours": "Mo-Su 09:00-21:00"
+    }
+  },
+  {
+    "osm": "node/11594187974",
+    "name": "San Sushi Sendo",
+    "address": "улица Ленина",
+    "district": "Слюдянка",
+    "lat": 51.659289,
+    "lng": 103.71518,
+    "category": "food",
+    "rubrics": [
+      "Быстрое питание",
+      "Кухня: sushi"
+    ],
+    "phones": [
+      "+7 800 2006633",
+      "+7 991 5422706"
+    ],
+    "sites": [
+      "https://san-sushi.ru"
+    ],
+    "schedule": null,
+    "openingHours": "Mo-Su 10:00-23:00",
+    "about": "Кухня: sushi",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11594187974",
+    "tags": {
+      "amenity": "fast_food",
+      "cuisine": "sushi",
+      "opening_hours": "Mo-Su 10:00-23:00"
+    }
+  },
+  {
+    "osm": "way/616585086",
+    "name": "Ski Let",
+    "address": "Байкальская улица",
+    "district": "Байкальск",
+    "lat": 51.5237834,
+    "lng": 104.1448632,
+    "category": "food",
+    "rubrics": [
+      "Гостиница"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостиница",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/way/616585086",
+    "tags": {
+      "tourism": "hotel"
+    }
+  },
+  {
+    "osm": "node/11378636899",
+    "name": "Utulitzkaya Skazka",
+    "address": "Береговая улица",
+    "district": "Утулик",
+    "lat": 51.539339,
+    "lng": 104.0478735,
+    "category": "food",
+    "rubrics": [
+      "Гостевой дом"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Гостевой дом",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/11378636899",
+    "tags": {
+      "tourism": "guest_house"
+    }
+  },
+  {
+    "osm": "node/7229915446",
+    "name": "Vitadent",
+    "address": "«Байкал»",
+    "district": "Байкальск",
+    "lat": 51.5046571,
+    "lng": 104.1446598,
+    "category": "health",
+    "rubrics": [
+      "Стоматология"
+    ],
+    "phones": [],
+    "sites": [],
+    "schedule": null,
+    "openingHours": null,
+    "about": "Стоматология",
+    "source": "osm",
+    "sourceUrl": "https://www.openstreetmap.org/node/7229915446",
+    "tags": {
+      "amenity": "dentist"
+    }
+  }
+]

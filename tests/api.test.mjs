@@ -795,13 +795,19 @@ test('Слюдянка: каталог 2ГИС, честный источник 
   assert.ok(city.places >= 290, `ожидалось >= 290 мест, пришло ${city.places}`);
   assert.ok(!cities.json().items.some(item => item.slug === 'demograd'), 'демо-город не показывается в рабочем списке');
 
-  const list = await app.inject('/api/v1/places?city=slyudyanka&limit=20');
+  const list = await app.inject('/api/v1/places?city=slyudyanka&limit=50');
   assert.equal(list.statusCode, 200, list.body);
-  const imported = list.json().items.find(item => item.source?.name === '2ГИС');
+  const imported = list.json().items.find(item => item.source?.name === '2ГИС'
+    && /^https:\/\/2gis\.ru\/slyudyanka\/firm\//.test(item.source.url));
   assert.ok(imported, 'в каталоге должны быть организации 2ГИС');
-  assert.match(imported.source.url, /^https:\/\/2gis\.ru\/slyudyanka\/firm\//);
   assert.equal(imported.offerCount, 0);
   assert.match(imported.image, /^https:\/\/i\d\.photo\.2gis\.com\//);
+
+  const map = await app.inject('/api/v1/places/map?city=slyudyanka');
+  assert.equal(map.statusCode, 200, map.body);
+  assert.equal(map.json().total, city.places, 'карта должна отдавать весь каталог города');
+  assert.equal(map.json().items.length, map.json().total);
+  assert.ok(map.json().items.some(item => item.source?.kind === 'osm'), 'на карте должен быть слой OpenStreetMap');
 
   const detail = await app.inject(`/api/v1/places/${imported.id}`);
   assert.equal(detail.statusCode, 200, detail.body);

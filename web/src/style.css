@@ -408,6 +408,22 @@ h1, h2, h3, p { margin-top: 0; }
   backdrop-filter: blur(6px);
 }
 .tile-pin:hover em, .tile-pin:focus-visible em { opacity: 1; visibility: visible; }
+.tile-cluster {
+  position: absolute; z-index: 2;
+  transform: translate(-50%, -50%);
+  min-width: 44px; height: 44px;
+  padding: 0 6px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 214, 10, 0.7);
+  background: radial-gradient(circle at 35% 25%, #ffe680, #f0b400 70%);
+  color: #171207;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(255, 214, 10, 0.13);
+  animation: pin-drop 0.35s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+.tile-cluster b { font-size: 13px; line-height: 1; font-weight: 850; letter-spacing: -0.03em; }
+.tile-cluster small { margin-top: 1px; font-size: 7px; line-height: 1; font-weight: 700; opacity: 0.72; }
+.tile-cluster:active { transform: translate(-50%, -50%) scale(0.92); }
 .map-tools { position: absolute; z-index: 3; top: 8px; right: 8px; display: grid; gap: 5px; }
 .map-tools button {
   width: 34px; height: 34px;
