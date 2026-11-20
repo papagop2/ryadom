@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { demoRequest } from './demo';
@@ -546,6 +546,26 @@ function unproject(x: number, y: number, zoom: number) {
   return { lat: 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))), lng: x / size * 360 - 180 };
 }
 
+type MapMarkerKind = 'dot' | 'pin' | 'photo' | 'cluster';
+type MapMarker = {
+  key: string; x: number; y: number; sumX: number; sumY: number;
+  items: PlaceCard[]; kind: MapMarkerKind; size: number;
+};
+
+function mapMarkerKind(count: number, item: PlaceCard, zoom: number): MapMarkerKind {
+  if (count > 1) return 'cluster';
+  if (zoom < 12) return 'dot';
+  return item.image ? 'photo' : 'pin';
+}
+
+function mapMarkerSize(kind: MapMarkerKind, count: number, zoom: number, cell: number) {
+  if (kind === 'dot') return 11;
+  if (kind === 'pin') return 28;
+  if (kind === 'photo') return zoom >= 16 ? 38 : 32;
+  const wanted = 40 + String(count).length * 4 + (zoom < 11 ? 6 : 0);
+  return Math.max(36, Math.min(cell - 4, wanted));
+}
+
 function MapView({ items, center: cityCenter, onOpen, notify }: {
   items: PlaceCard[]; center: { lat: number; lng: number };
   onOpen: (place: PlaceCard) => void; notify: (text: string) => void;
@@ -627,17 +647,66 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   };
   const endDrag = () => { drag.current = null; };
 
-  const cell = zoom < 15 ? 62 : 0;
-  const clusters = new Map<string, { x: number; y: number; items: PlaceCard[] }>();
+  // Сетка задаёт стартовые группы, а проверка пересечений доводит их до
+  // состояния, в котором ни одна метка не наезжает на соседнюю. На дальнем
+  // зуме остаются только кластеры и точки, ближе — фотографии.
+  const markerCell = zoom < 10 ? 96 : zoom < 12 ? 78 : zoom < 14 ? 62 : 48;
+  const buckets = new Map<string, { items: PlaceCard[]; sumX: number; sumY: number }>();
   for (const item of items) {
     const pos = project(item.location.lat, item.location.lng, zoom);
     const x = pos.x - left;
     const y = pos.y - top;
-    if (x < -36 || y < -36 || x > size.w + 36 || y > size.h + 36) continue;
-    const key = cell ? `${Math.floor(x / cell)}:${Math.floor(y / cell)}` : item.id;
-    const group = clusters.get(key);
-    if (group) group.items.push(item);
-    else clusters.set(key, { x, y, items: [item] });
+    if (x < -markerCell || y < -markerCell || x > size.w + markerCell || y > size.h + markerCell) continue;
+    const key = `${Math.floor(x / markerCell)}:${Math.floor(y / markerCell)}`;
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.items.push(item);
+      bucket.sumX += x;
+      bucket.sumY += y;
+    } else {
+      buckets.set(key, { items: [item], sumX: x, sumY: y });
+    }
+  }
+  const pending: MapMarker[] = [...buckets.entries()].map(([key, bucket]) => {
+    const count = bucket.items.length;
+    const item = bucket.items[0];
+    const kind = mapMarkerKind(count, item, zoom);
+    return {
+      key: count === 1 ? `p:${item.id}` : `c:${key}`,
+      x: bucket.sumX / count, y: bucket.sumY / count,
+      sumX: bucket.sumX, sumY: bucket.sumY,
+      items: bucket.items, kind, size: mapMarkerSize(kind, count, zoom, markerCell),
+    };
+  });
+  const priority = (marker: MapMarker) => marker.kind === 'cluster'
+    ? 1000 + marker.items.length
+    : marker.kind === 'photo' ? 500 : marker.kind === 'pin' ? 400 : 100;
+  pending.sort((first, second) => priority(second) - priority(first));
+  const markers: MapMarker[] = [];
+  while (pending.length) {
+    const next = pending.shift()!;
+    let hit = -1;
+    for (let index = 0; index < markers.length; index += 1) {
+      const dx = next.x - markers[index].x;
+      const dy = next.y - markers[index].y;
+      const minDistance = (next.size + markers[index].size) / 2 + 3;
+      if (dx * dx + dy * dy < minDistance * minDistance) { hit = index; break; }
+    }
+    if (hit < 0) { markers.push(next); continue; }
+    const target = markers.splice(hit, 1)[0];
+    const count = target.items.length + next.items.length;
+    const sumX = target.sumX + next.sumX;
+    const sumY = target.sumY + next.sumY;
+    target.items = [...target.items, ...next.items];
+    target.sumX = sumX;
+    target.sumY = sumY;
+    target.x = sumX / count;
+    target.y = sumY / count;
+    target.kind = 'cluster';
+    target.size = mapMarkerSize('cluster', count, zoom, markerCell);
+    target.key = target.key.startsWith('c:') ? target.key : `c:${target.key}`;
+    pending.push(target);
+    pending.sort((first, second) => priority(second) - priority(first));
   }
 
   return <div className="tile-map" ref={box} aria-label="Карта заведений"
@@ -653,31 +722,44 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
       if (x < -20 || y < -20 || x > size.w + 20 || y > size.h + 20) return null;
       return <span className="me-pin" style={{ left: `${x}px`, top: `${y}px` }} aria-label="Моё место" />;
     })()}
-    {[...clusters.entries()].map(([key, group]) => {
-      const point = group.items[0];
-      if (group.items.length === 1) {
-        return <button key={key} type="button" className="tile-pin" title={point.name}
-          aria-label={point.name} style={{ left: `${group.x}px`, top: `${group.y}px` }}
-          onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(point)}>
-          <span className={`tile-pin-photo${point.image ? ' with-photo' : ''}`}>
-            <b>{point.name.slice(0, 1)}</b>
-            {point.image && <img src={point.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-              onError={event => { event.currentTarget.style.display = 'none'; }} />}
-          </span><em>{point.name}</em>
+    {markers.map(marker => {
+      if (marker.kind === 'cluster') {
+        const count = marker.items.length;
+        return <button key={marker.key} type="button" className="tile-cluster"
+          style={{ left: `${marker.x}px`, top: `${marker.y}px`, width: `${marker.size}px`, height: `${marker.size}px` }}
+          data-count={count}
+          aria-label={`${count} организаций — приблизить`}
+          title={marker.items.slice(0, 6).map(item => item.name).join(', ')}
+          onPointerDown={event => event.stopPropagation()}
+          onClick={() => {
+            const centerPoint = {
+              lat: marker.items.reduce((sum, item) => sum + item.location.lat, 0) / count,
+              lng: marker.items.reduce((sum, item) => sum + item.location.lng, 0) / count,
+            };
+            setCenter(centerPoint);
+            setZoom(value => clamp(value + (value < 12 ? 3 : 2), 9, 18));
+            haptic(4);
+          }}>
+          <b>{count > 999 ? '999+' : count}</b>{marker.size >= 40 && <small>мест</small>}
         </button>;
       }
-      const count = group.items.length;
-      const centerPoint = {
-        lat: group.items.reduce((sum, item) => sum + item.location.lat, 0) / count,
-        lng: group.items.reduce((sum, item) => sum + item.location.lng, 0) / count,
-      };
-      return <button key={key} type="button" className="tile-cluster"
-        style={{ left: `${group.x}px`, top: `${group.y}px` }}
-        aria-label={`${count} организаций — приблизить`}
-        title={group.items.slice(0, 6).map(item => item.name).join(', ')}
-        onPointerDown={event => event.stopPropagation()}
-        onClick={() => { setCenter(centerPoint); setZoom(value => clamp(value + 2, 11, 18)); haptic(4); }}>
-        <b>{count}</b><small>мест</small>
+      const point = marker.items[0];
+      if (marker.kind === 'dot') {
+        return <button key={marker.key} type="button" className="tile-dot"
+          style={{ left: `${marker.x}px`, top: `${marker.y}px` }} data-count={1}
+          title={point.name} aria-label={`${point.name} — открыть карточку`}
+          onPointerDown={event => event.stopPropagation()}
+          onClick={() => onOpen(point)} />;
+      }
+      return <button key={marker.key} type="button" className="tile-pin" title={point.name}
+        aria-label={point.name} data-count={1}
+        style={{ left: `${marker.x}px`, top: `${marker.y}px`, '--pin-size': `${marker.size}px` } as CSSProperties}
+        onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(point)}>
+        <span className={`tile-pin-photo${point.image ? ' with-photo' : ''}`}>
+          <b>{point.name.slice(0, 1)}</b>
+          {point.image && <img src={point.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+            onError={event => { event.currentTarget.style.display = 'none'; }} />}
+        </span><em>{point.name}</em>
       </button>;
     })}
     <div className="map-tools">
