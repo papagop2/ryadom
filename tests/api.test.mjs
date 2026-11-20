@@ -790,4 +790,5 @@ test('Слюдянка: каталог 2ГИС, честный источник 
   assert.equal(shown.json().place.rating, 5);
   assert.equal(shown.json().place.source.rating, imported.source.rating);
   await pool.query('delete from reviews where place_id=$1 and author_user_id=$2', [imported.id, client.userId]);
+  await pool.query('update places set rating_avg = null, rating_count = 0 where id=$1', [imported.id]);
 });
