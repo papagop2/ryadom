@@ -1,6 +1,6 @@
-const CACHE = "ryadom-bffc6c4f713d6ffae2d6";
+const CACHE = "ryadom-d5c70fa902eff861700c";
 const BASE = "/ryadom/";
-const FILES = ["/ryadom/index.html","/ryadom/manifest.webmanifest","/ryadom/icon-192.png","/ryadom/icon-512.png","/ryadom/icon-maskable.png","/ryadom/assets/index-BPqobZrH.js","/ryadom/assets/index-D2pT6vBL.css"];
+const FILES = ["/ryadom/index.html","/ryadom/manifest.webmanifest","/ryadom/icon-192.png","/ryadom/icon-512.png","/ryadom/icon-maskable.png","/ryadom/assets/index-BIVOSOYc.css","/ryadom/assets/index-Cwhef9k1.js"];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' })))));
 });
