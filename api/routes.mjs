@@ -108,8 +108,11 @@ const BOOKING_SELECT = `
 
 const TRIP_ACTIVE = ['requested', 'assigned', 'arrived', 'in_progress'];
 const TRIP_SELECT = `
-  select t.*, c.display_name as client_name,
-         d.display_name as driver_name, dp.car_model, dp.plate
+  select t.*, t.created_at + interval '3 minutes' as offers_until,
+    greatest(0, floor(extract(epoch from (t.created_at + interval '3 minutes' - now()))))::int as offers_left,
+         c.display_name as client_name,
+         d.display_name as driver_name, dp.car_model, dp.plate,
+         dp.rating_avg as driver_rating, dp.rides_count as driver_rides, dp.is_verified as driver_verified
   from trips t
   join users c on c.id = t.client_user_id
   left join users d on d.id = t.driver_user_id
@@ -123,7 +126,12 @@ function tripOfferView(row) {
     message: row.message,
     status: row.status,
     createdAt: row.created_at,
-    driver: { id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate },
+    driver: {
+      id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate,
+      rating: row.driver_rating == null ? null : Number(row.driver_rating),
+      ridesCount: Number(row.driver_rides ?? 0),
+      verified: Boolean(row.driver_verified),
+    },
   };
 }
 
@@ -131,7 +139,8 @@ async function tripOffersForTrips(db, tripIds, driverId = null) {
   const byTrip = new Map();
   if (!tripIds.length) return byTrip;
   const params = [tripIds];
-  let sql = `select o.*, u.display_name as driver_name, dp.car_model, dp.plate
+  let sql = `select o.*, u.display_name as driver_name, dp.car_model, dp.plate,
+                    dp.rating_avg as driver_rating, dp.rides_count as driver_rides, dp.is_verified as driver_verified
              from trip_offers o
              join users u on u.id = o.driver_user_id
              left join driver_profiles dp on dp.user_id = o.driver_user_id
@@ -150,15 +159,36 @@ function tripView(row, offers = []) {
   return {
     id: row.id,
     status: row.status,
-    from: { label: row.from_label, lat: Number(row.from_lat), lng: Number(row.from_lng) },
-    to: { label: row.to_label, lat: Number(row.to_lat), lng: Number(row.to_lng) },
+    from: { label: row.from_label, address: row.from_address ?? undefined, lat: Number(row.from_lat), lng: Number(row.from_lng) },
+    to: { label: row.to_label, address: row.to_address ?? undefined, lat: Number(row.to_lat), lng: Number(row.to_lng) },
     distanceKm: Number(row.distance_km),
     durationMin: row.duration_min,
     price: row.price_cents == null ? null : money(row.price_cents, row.currency),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     client: { id: row.client_user_id, name: row.client_name },
-    driver: row.driver_user_id ? { id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate } : null,
+    stops: Array.isArray(row.stops) ? row.stops : [],
+    scheduledFor: row.scheduled_for,
+    requirements: {
+      passengers: Number(row.passengers ?? 1),
+      childSeat: Boolean(row.child_seat),
+      luggage: Boolean(row.luggage),
+      pets: Boolean(row.pets),
+      comment: row.ride_comment ?? '',
+    },
+    arrivedAt: row.arrived_at,
+    cash: {
+      client: Boolean(row.cash_confirmed_client_at),
+      driver: Boolean(row.cash_confirmed_driver_at),
+    },
+    offersUntil: row.offers_until,
+    offersLeft: row.offers_left,
+    driver: row.driver_user_id ? {
+      id: row.driver_user_id, name: row.driver_name, car: row.car_model, plate: row.plate,
+      rating: row.driver_rating == null ? null : Number(row.driver_rating),
+      ridesCount: Number(row.driver_rides ?? 0),
+      verified: Boolean(row.driver_verified),
+    } : null,
     offers: offers.map(tripOfferView),
   };
 }
@@ -166,11 +196,94 @@ function tripView(row, offers = []) {
 const POINT_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['label', 'lat', 'lng'],
   properties: {
-    label: { type: 'string', minLength: 1, maxLength: 160 },
+    label: { type: 'string', minLength: 1, maxLength: 200 },
+    address: { type: 'string', maxLength: 500 },
     lat: { type: 'number', minimum: -90, maximum: 90 },
     lng: { type: 'number', minimum: -180, maximum: 180 },
   },
 };
+
+const GEOCODER_BASE = (process.env.GEOCODER_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
+const GEO_CACHE = new Map();
+let geoChain = Promise.resolve();
+let geoLast = 0;
+
+function cleanGeoText(value, max = 500) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function geoView(row) {
+  const address = cleanGeoText(row.display_name);
+  const details = row.address ?? {};
+  const street = details.road || details.pedestrian || details.footway || details.square
+    || details.neighbourhood || details.suburb || details.city_district;
+  const house = details.house_number;
+  const streetHouse = cleanGeoText([street, house].filter(Boolean).join(', '));
+  const placeName = cleanGeoText(row.name);
+  const label = placeName && streetHouse && !streetHouse.startsWith(placeName)
+    ? cleanGeoText(`${placeName}, ${streetHouse}`)
+    : streetHouse || placeName || address.split(',').slice(0, 2).join(', ');
+  if (!label || !address) return null;
+  return {
+    label,
+    address,
+    name: cleanGeoText(row.name) || null,
+    kind: row.type ?? row.class ?? null,
+    lat: Number(row.lat),
+    lng: Number(row.lon),
+  };
+}
+
+async function geocoderJson(path, params) {
+  const search = new URLSearchParams({ format: 'jsonv2', addressdetails: '1', 'accept-language': 'ru', ...params });
+  const key = `${path}?${search}`;
+  if (GEO_CACHE.has(key)) return GEO_CACHE.get(key);
+  const task = async () => {
+    const wait = Math.max(0, 1100 - (Date.now() - geoLast));
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    geoLast = Date.now();
+    const response = await fetch(`${GEOCODER_BASE}${path}?${search}`, {
+      headers: {
+        'User-Agent': 'Ryadom/1.0 (+https://github.com/papagop2/ryadom)',
+        'Accept-Language': 'ru',
+      },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!response.ok) throw new Error(`geocoder ${response.status}`);
+    return response.json();
+  };
+  const pending = geoChain.then(task, task);
+  geoChain = pending.catch(() => undefined);
+  const data = await pending;
+  if (GEO_CACHE.size > 600) GEO_CACHE.clear();
+  GEO_CACHE.set(key, data);
+  return data;
+}
+
+async function searchGeo(query, citySlug, db) {
+  const params = {
+    q: query,
+    limit: '6',
+    countrycodes: 'ru',
+    dedupe: '1',
+  };
+  if (citySlug) {
+    const city = await db.query('select lat, lng from cities where slug = $1', [citySlug]);
+    if (city.rows[0]) {
+      const { lat, lng } = city.rows[0];
+      params.viewbox = `${Number(lng) - 0.35},${Number(lat) + 0.3},${Number(lng) + 0.35},${Number(lat) - 0.3}`;
+      params.bounded = '1';
+    }
+  }
+  let rows = await geocoderJson('/search', params);
+  if (!rows.length && params.bounded) {
+    const relaxed = { ...params };
+    delete relaxed.bounded;
+    delete relaxed.viewbox;
+    rows = await geocoderJson('/search', relaxed);
+  }
+  return rows.map(geoView).filter(Boolean);
+}
 
 function distanceKm(from, to) {
   const radius = 6371;
@@ -182,10 +295,11 @@ function distanceKm(from, to) {
 }
 
 const ROUTE_CACHE = new Map();
-async function roadRoute(from, to) {
-  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)};${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
+async function roadRoute(from, to, stops = []) {
+  const points = [from, ...stops, to];
+  const key = points.map(point => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`).join(';');
   if (ROUTE_CACHE.has(key)) return ROUTE_CACHE.get(key);
-  const path = `${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+  const path = `${points.map(point => `${point.lng},${point.lat}`).join(';')}?overview=false`;
   const bases = [
     process.env.OSRM_URL,
     'https://router.project-osrm.org',
@@ -209,8 +323,8 @@ async function roadRoute(from, to) {
 
 // Оценка поездки — только дорожный километраж и время. Стоимость не считаем:
 // цену предлагает водитель, клиент выбирает предложение.
-async function routeQuote(from, to) {
-  const road = await roadRoute(from, to);
+async function routeQuote(from, to, stops = []) {
+  const road = await roadRoute(from, to, stops);
   const straight = distanceKm(from, to);
   const km = Math.max(0.3, Math.round((road?.distanceKm ?? straight * 1.35) * 10) / 10);
   const minutes = Math.max(4, Math.round(road?.durationMin ?? (km / 24 * 60 + 3)));
@@ -465,6 +579,52 @@ export function routes(app, { pool, demoLogin = false }) {
       return { ok: true, database: 'ok', migrations: Number(rows[0].migrations) };
     } catch (error) {
       return reply.code(503).send({ ok: false, reason: 'database_unavailable' });
+    }
+  });
+
+  app.get('/api/v1/geo/search', {
+    schema: { querystring: {
+      type: 'object', additionalProperties: false, required: ['q'],
+      properties: {
+        q: { type: 'string', minLength: 3, maxLength: 120 },
+        city: { type: 'string', maxLength: 60 },
+      },
+    } },
+  }, async (request, reply) => {
+    const q = request.query.q.trim();
+    if (q.length < 3) return { items: [] };
+    try {
+      const items = await searchGeo(q, request.query.city || null, pool);
+      reply.header('Cache-Control', 'private, max-age=300');
+      return { items };
+    } catch (error) {
+      request.log.error({ err: error }, 'geo search failed');
+      return { items: [] };
+    }
+  });
+
+  app.get('/api/v1/geo/reverse', {
+    schema: { querystring: {
+      type: 'object', additionalProperties: false, required: ['lat', 'lng'],
+      properties: {
+        lat: { type: 'string', maxLength: 30 },
+        lng: { type: 'string', maxLength: 30 },
+      },
+    } },
+  }, async (request, reply) => {
+    const lat = Number(request.query.lat);
+    const lng = Number(request.query.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return reply.code(400).send({ error: 'invalid_point', message: 'Некорректная точка' });
+    }
+    try {
+      const row = await geocoderJson('/reverse', { lat: String(lat), lon: String(lng), zoom: '18' });
+      const place = row?.error ? null : geoView(row);
+      if (!place) return reply.code(404).send({ error: 'address_not_found', message: 'Адрес не найден' });
+      reply.header('Cache-Control', 'private, max-age=600');
+      return place;
+    } catch {
+      return reply.code(502).send({ error: 'geocoder_unavailable', message: 'Геокодер недоступен' });
     }
   });
 
@@ -1339,9 +1499,13 @@ export function routes(app, { pool, demoLogin = false }) {
   app.post('/api/v1/trips/estimate', {
     schema: { body: {
       type: 'object', additionalProperties: false, required: ['from', 'to'],
-      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA },
+      properties: {
+        from: POINT_SCHEMA,
+        to: POINT_SCHEMA,
+        stops: { type: 'array', maxItems: 3, items: POINT_SCHEMA },
+      },
     } },
-  }, async (request) => routeQuote(request.body.from, request.body.to));
+  }, async (request) => routeQuote(request.body.from, request.body.to, request.body.stops ?? []));
 
   app.post('/api/v1/trips', {
     schema: { body: {
@@ -1349,13 +1513,37 @@ export function routes(app, { pool, demoLogin = false }) {
       properties: {
         from: POINT_SCHEMA,
         to: POINT_SCHEMA,
+        stops: { type: 'array', maxItems: 3, items: POINT_SCHEMA },
+        scheduledFor: { type: 'string', maxLength: 40 },
+        passengers: { type: 'integer', minimum: 1, maximum: 6 },
+        childSeat: { type: 'boolean' },
+        luggage: { type: 'boolean' },
+        pets: { type: 'boolean' },
+        comment: { type: 'string', maxLength: 300 },
         idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
       },
     } },
   }, async (request, reply) => {
     const auth = requireUser(request);
-    const { from, to, idempotencyKey = null } = request.body;
-    const quote = await routeQuote(from, to);
+    const {
+      from, to, stops = [], idempotencyKey = null,
+      passengers = 1, childSeat = false, luggage = false, pets = false, comment = '',
+    } = request.body;
+    let scheduledFor = null;
+    if (request.body.scheduledFor) {
+      const date = new Date(request.body.scheduledFor);
+      if (!Number.isFinite(date.getTime())) fail(400, 'invalid_time', 'Некорректное время поездки');
+      if (date.getTime() < Date.now() - 60_000) fail(400, 'time_in_past', 'Время поездки уже прошло');
+      if (date.getTime() > Date.now() + 7 * 86400_000) fail(400, 'time_too_far', 'Предзаказ доступен на 7 дней');
+      scheduledFor = date.toISOString();
+    }
+    const cleanStops = stops.map(stop => ({
+      label: String(stop.label).trim().slice(0, 200),
+      address: stop.address ? String(stop.address).slice(0, 500) : undefined,
+      lat: Number(stop.lat),
+      lng: Number(stop.lng),
+    })).filter(stop => stop.label && Number.isFinite(stop.lat) && Number.isFinite(stop.lng));
+    const quote = await routeQuote(from, to, cleanStops);
     const attempt = async () => withTransaction(pool, async (client) => {
       if (idempotencyKey) {
         const existing = await client.query(
@@ -1363,17 +1551,22 @@ export function routes(app, { pool, demoLogin = false }) {
         if (existing.rows[0]) return { trip: tripView(existing.rows[0]), created: false };
       }
       const inserted = await client.query(
-        `insert into trips (client_user_id, from_label, from_lat, from_lng, to_label, to_lat, to_lng,
-                            distance_km, duration_min, idempotency_key)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
-        [auth.userId, from.label, from.lat, from.lng, to.label, to.lat, to.lng,
-          quote.distanceKm, quote.durationMin, idempotencyKey]);
+        `insert into trips (client_user_id, from_label, from_address, from_lat, from_lng,
+                            to_label, to_address, to_lat, to_lng,
+                            distance_km, duration_min, idempotency_key, stops, scheduled_for,
+                            passengers, child_seat, luggage, pets, ride_comment)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19)
+         returning id`,
+        [auth.userId, from.label, from.address ?? null, from.lat, from.lng,
+          to.label, to.address ?? null, to.lat, to.lng,
+          quote.distanceKm, quote.durationMin, idempotencyKey, JSON.stringify(cleanStops), scheduledFor,
+          passengers, childSeat, luggage, pets, String(comment).trim().slice(0, 300)]);
       const tripId = inserted.rows[0].id;
       await client.query(
         `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'requested', $2)`, [tripId, auth.userId]);
       await client.query(
         `insert into notifications (user_id, kind, payload) values ($1, 'trip_requested', $2)`,
-        [auth.userId, JSON.stringify({ tripId, from: from.label, to: to.label })]);
+        [auth.userId, JSON.stringify({ tripId, from: from.label, to: to.label, scheduledFor })]);
       const drivers = await client.query(
         `select m.user_id from memberships m join driver_profiles dp on dp.user_id = m.user_id
          where m.role = 'driver' and dp.is_online`);
@@ -1486,12 +1679,16 @@ export function routes(app, { pool, demoLogin = false }) {
     const mine = await pool.query(
       `${TRIP_SELECT} where t.driver_user_id = $1 and t.status in ('assigned', 'arrived', 'in_progress')
        order by t.created_at desc limit 50`, [auth.userId]);
-    const allIds = [...available.rows, ...mine.rows].map(row => row.id);
+    const completed = await pool.query(
+      `${TRIP_SELECT} where t.driver_user_id = $1 and t.status = 'completed'
+       order by t.completed_at desc limit 10`, [auth.userId]);
+    const allIds = [...available.rows, ...mine.rows, ...completed.rows].map(row => row.id);
     const offers = await tripOffersForTrips(pool, allIds, auth.userId);
     reply.header('Cache-Control', 'no-store');
     return {
       available: available.rows.map(row => tripView(row, offers.get(row.id) ?? [])),
       mine: mine.rows.map(row => tripView(row, offers.get(row.id) ?? [])),
+      completed: completed.rows.map(row => tripView(row, offers.get(row.id) ?? [])),
     };
   });
 
@@ -1598,11 +1795,36 @@ export function routes(app, { pool, demoLogin = false }) {
   });
 
   app.post('/api/v1/trips/:id/arrive', async (request) =>
-    driverTransition(request, ['assigned'], 'arrived', 'updated_at'));
+    driverTransition(request, ['assigned'], 'arrived', 'arrived_at'));
   app.post('/api/v1/trips/:id/start', async (request) =>
     driverTransition(request, ['arrived'], 'in_progress', 'started_at'));
   app.post('/api/v1/trips/:id/complete', async (request) =>
     driverTransition(request, ['in_progress'], 'completed', 'completed_at'));
+
+  app.post('/api/v1/trips/:id/cash', async (request) => {
+    const auth = requireUser(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from trips where id = $1 for update', [uuidParam(request)]);
+      const trip = rows[0];
+      if (!trip) fail(404, 'trip_not_found', 'Поездка не найдена');
+      if (trip.status !== 'completed') fail(409, 'trip_not_completed', 'Поездка ещё не завершена');
+      if (trip.price_cents == null) fail(409, 'price_not_agreed', 'Цена не согласована');
+      const isClient = trip.client_user_id === auth.userId;
+      const isDriver = trip.driver_user_id === auth.userId;
+      if (!isClient && !isDriver) fail(403, 'forbidden', 'Нет доступа к поездке');
+      const column = isClient ? 'cash_confirmed_client_at' : 'cash_confirmed_driver_at';
+      await client.query(`update trips set ${column} = coalesce(${column}, now()), updated_at = now() where id = $1`, [trip.id]);
+      const target = isClient ? trip.driver_user_id : trip.client_user_id;
+      if (target) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'trip_cash', $2)`,
+          [target, JSON.stringify({ tripId: trip.id, by: isClient ? 'client' : 'driver' })]);
+      }
+      const view = await client.query(`${TRIP_SELECT} where t.id = $1`, [trip.id]);
+      const offers = await tripOffersForTrips(client, [trip.id]);
+      return tripView(view.rows[0], offers.get(trip.id) ?? []);
+    });
+  });
 
   app.get('/api/v1/operator/trips', async (request, reply) => {
     requireRole(request, 'operator');

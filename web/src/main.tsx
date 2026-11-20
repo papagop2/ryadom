@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { demoRequest } from './demo';
 import { roadRoute, type RoadRoute } from './routing';
+import { reverseAddress, searchAddress, type GeoPlace } from './geocoding';
 import './style.css';
 
 type Money = { cents: number; currency: string };
@@ -57,18 +58,24 @@ type Booking = {
   review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
 };
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
-type TripPoint = { label: string; lat: number; lng: number };
+type TripPoint = { label: string; address?: string; lat: number; lng: number };
 type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 type TripOffer = {
   id: string; price: Money; etaMin: number | null; message: string;
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn'; createdAt: string;
-  driver: { id: string; name: string; car: string; plate: string };
+  driver: { id: string; name: string; car: string; plate: string; rating?: number | null; ridesCount?: number; verified?: boolean };
+};
+type TripRequirements = {
+  passengers: number; childSeat: boolean; luggage: boolean; pets: boolean; comment: string;
 };
 type Trip = {
-  id: string; status: TripStatus; from: TripPoint; to: TripPoint; distanceKm: number; durationMin: number;
+  id: string; status: TripStatus; from: TripPoint; to: TripPoint; stops?: TripPoint[];
+  scheduledFor?: string | null; requirements?: TripRequirements;
+  distanceKm: number; durationMin: number;
   price: Money | null; createdAt: string; client: { id: string; name: string };
-  driver: { id: string; name: string; car: string; plate: string } | null;
-  offers?: TripOffer[];
+  driver: { id: string; name: string; car: string; plate: string; rating?: number | null; ridesCount?: number; verified?: boolean } | null;
+  offers?: TripOffer[]; offersUntil?: string | null; offersLeft?: number;
+  arrivedAt?: string | null; cash?: { client: boolean; driver: boolean };
 };
 type Estimate = { distanceKm: number; durationMin: number; route?: 'osrm' | 'straight' };
 type ServiceCategory = 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
@@ -166,7 +173,7 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
 type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
   | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
   | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
-  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download' | 'refresh';
+  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download' | 'refresh' | 'child' | 'bag' | 'paw';
 
 const iconPaths: Record<IconName, ReactNode> = {
   home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
@@ -203,6 +210,9 @@ const iconPaths: Record<IconName, ReactNode> = {
   car: <><path d="M5 15.5 6.6 10A3 3 0 0 1 9.5 8h5a3 3 0 0 1 2.9 2l1.6 5.5" /><path d="M4 15.5h16V19H4z" /><circle cx="7.5" cy="19" r="1.6" /><circle cx="16.5" cy="19" r="1.6" /></>,
   download: <><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M5 20h14" /></>,
   refresh: <><path d="M20 11a8 8 0 1 0-2.4 5.7" /><path d="M20 4v7h-7" /></>,
+  child: <><circle cx="12" cy="6" r="2.2" /><path d="M8 21v-4.5L10 14V9h4v5l2 2.5V21M10 12v3h4" /></>,
+  bag: <><rect x="5" y="8" width="14" height="12" rx="2" /><path d="M9 8V6a3 3 0 0 1 6 0v2M9 13v3M15 13v3" /></>,
+  paw: <><circle cx="7" cy="10" r="1.8" /><circle cx="12" cy="7" r="1.8" /><circle cx="17" cy="10" r="1.8" /><path d="M12 12c-3 0-5 2.2-5 4.2 0 1.5 1.3 2.3 2.6 2.3 1 0 1.7-.5 2.4-.5s1.4.5 2.4.5c1.3 0 2.6-.8 2.6-2.3 0-2-2-4.2-5-4.2z" /></>,
 };
 
 function Icon({ name, size = 20, stroke = 1.8, className = '' }: {
@@ -354,6 +364,7 @@ function PwaUpdate() {
     setWaiting(null);
     haptic(12);
     waiting.postMessage({ type: 'SKIP_WAITING' });
+    window.setTimeout(() => window.location.reload(), 1200);
   };
   return <div className="update-bar" role="status">
     <span><strong>Есть обновление</strong><small>Приложение обновится за секунду</small></span>
@@ -666,10 +677,19 @@ const tripStatusLabel: Record<TripStatus, string> = {
 };
 const TRIP_ACTIVE: TripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
 
-function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: TripPoint | null; onPick: (point: TripPoint) => void; readOnly?: boolean }) {
+function TripMap({ from, to, stops = [], center: mapCenter, onPick, readOnly = false, busy = false }: {
+  from: TripPoint | null; to: TripPoint | null; stops?: TripPoint[];
+  center: { lat: number; lng: number }; onPick: (point: { lat: number; lng: number }) => void;
+  readOnly?: boolean; busy?: boolean;
+}) {
   const box = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 360, h: 220 });
   const [route, setRoute] = useState<RoadRoute | null>(null);
+  const [view, setView] = useState<{ center: { lat: number; lng: number }; zoom: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; center: { lat: number; lng: number }; zoom: number; moved: boolean } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number; center: { lat: number; lng: number } } | null>(null);
+
   useEffect(() => {
     const element = box.current;
     if (!element) return;
@@ -680,33 +700,46 @@ function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: 
     return () => observer.disconnect();
   }, []);
 
+  const stopKey = stops.map(point => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`).join(';');
   useEffect(() => {
-    if (!to) { setRoute(null); return; }
+    if (!from || !to) { setRoute(null); return; }
     let cancelled = false;
     setRoute(null);
-    void roadRoute(from, to).then(value => { if (!cancelled) setRoute(value); });
+    void roadRoute(from, to, stops).then(value => { if (!cancelled) setRoute(value); });
     return () => { cancelled = true; };
-  }, [from.lat, from.lng, to?.lat, to?.lng]);
+  }, [from?.lat, from?.lng, to?.lat, to?.lng, stopKey]);
 
-  const routePoints = route?.points ?? (to ? [[from.lat, from.lng], [to.lat, to.lng]] as [number, number][] : []);
-  const bounds = routePoints.length ? routePoints : [[from.lat, from.lng]];
+  useEffect(() => { setView(null); }, [from?.lat, from?.lng, to?.lat, to?.lng, stopKey]);
+
+  const routePoints = route?.points ?? (from && to
+    ? [[from.lat, from.lng], ...stops.map(point => [point.lat, point.lng] as [number, number]), [to.lat, to.lng]]
+    : []);
+  const bounds = routePoints.length
+    ? routePoints
+    : from ? [[from.lat, from.lng] as [number, number]]
+      : to ? [[to.lat, to.lng] as [number, number]]
+        : [[mapCenter.lat, mapCenter.lng] as [number, number]];
   const lats = bounds.map(point => point[0]);
   const lngs = bounds.map(point => point[1]);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
-  let zoom = 14;
-  if (to) {
+  const fitCenter = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+  let fitZoom = 14;
+  if (from && to) {
     const latSpan = Math.max(maxLat - minLat, 0.002);
     const lngSpan = Math.max(maxLng - minLng, 0.002);
     const fitX = Math.log2((size.w * 0.82) * 360 / lngSpan / TILE);
-    const mercator = 1 / Math.cos(center.lat * Math.PI / 180);
+    const mercator = 1 / Math.cos(fitCenter.lat * Math.PI / 180);
     const fitY = Math.log2((size.h * 0.72) * 360 / latSpan / mercator / TILE);
-    zoom = clamp(Math.floor(Math.min(fitX, fitY)), 9, 16);
+    fitZoom = clamp(Math.floor(Math.min(fitX, fitY)), 9, 16);
+  } else if (from || to) {
+    fitZoom = 16;
   }
-  const world = project(center.lat, center.lng, zoom);
+  const activeCenter = view?.center ?? fitCenter;
+  const zoom = view?.zoom ?? fitZoom;
+  const world = project(activeCenter.lat, activeCenter.lng, zoom);
   const left = world.x - size.w / 2;
   const top = world.y - size.h / 2;
   const tiles: { key: string; src: string; left: number; top: number }[] = [];
@@ -719,32 +752,94 @@ function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: 
         left: tx * TILE - left, top: ty * TILE - top });
     }
   }
-  const start = project(from.lat, from.lng, zoom);
-  const end = to ? project(to.lat, to.lng, zoom) : null;
   const routePath = routePoints.map(([lat, lng], index) => {
     const point = project(lat, lng, zoom);
     return `${index ? 'L' : 'M'}${point.x - left} ${point.y - top}`;
   }).join(' ');
+  const pointStyle = (point: TripPoint) => {
+    const projected = project(point.lat, point.lng, zoom);
+    return { left: `${projected.x - left}px`, top: `${projected.y - top}px` };
+  };
+
+  function pickAt(clientX: number, clientY: number) {
+    if (readOnly || !box.current) return;
+    const rect = box.current.getBoundingClientRect();
+    const point = unproject(left + clientX - rect.left, top + clientY - rect.top, zoom);
+    onPick({ lat: point.lat, lng: point.lng });
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLDivElement>, cancelled = false) {
+    const wasTap = !cancelled && drag.current && !drag.current.moved && pointers.current.size === 1 && !pinch.current;
+    pointers.current.delete(event.pointerId);
+    if (wasTap) pickAt(event.clientX, event.clientY);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 0) drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
 
   return <div className={`tile-map trip-map${readOnly ? ' readonly' : ''}`} ref={box} aria-label="Карта маршрута"
-    onClick={event => {
-      if (readOnly) return;
-      const rect = event.currentTarget.getBoundingClientRect();
-      const point = unproject(left + event.clientX - rect.left, top + event.clientY - rect.top, zoom);
-      onPick({ label: 'Точка на карте', lat: point.lat, lng: point.lng });
+    onPointerDown={event => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pointers.current.size === 1) {
+        drag.current = { x: event.clientX, y: event.clientY, center: activeCenter, zoom, moved: false };
+      } else if (pointers.current.size === 2) {
+        const [a, b] = [...pointers.current.values()];
+        pinch.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom, center: activeCenter };
+        drag.current = null;
+      }
+    }}
+    onPointerMove={event => {
+      if (!pointers.current.has(event.pointerId)) return;
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinch.current && pointers.current.size >= 2) {
+        const [a, b] = [...pointers.current.values()];
+        const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+        const nextZoom = clamp(Math.round(pinch.current.zoom + Math.log2(distance / pinch.current.distance)), 5, 19);
+        setView({ center: pinch.current.center, zoom: nextZoom });
+        return;
+      }
+      if (!drag.current || pointers.current.size !== 1) return;
+      const dx = event.clientX - drag.current.x;
+      const dy = event.clientY - drag.current.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) drag.current.moved = true;
+      if (!drag.current.moved) return;
+      const start = project(drag.current.center.lat, drag.current.center.lng, drag.current.zoom);
+      const next = unproject(start.x - dx, start.y - dy, drag.current.zoom);
+      setView({ center: next, zoom: drag.current.zoom });
+    }}
+    onPointerUp={event => endDrag(event)}
+    onPointerCancel={event => endDrag(event, true)}
+    onWheel={event => {
+      event.preventDefault();
+      const nextZoom = clamp(zoom + (event.deltaY < 0 ? 1 : -1), 5, 19);
+      setView({ center: activeCenter, zoom: nextZoom });
+    }}
+    onDoubleClick={event => {
+      event.preventDefault();
+      setView({ center: activeCenter, zoom: clamp(zoom + 1, 5, 19) });
     }}>
     <div className="tile-layer">
       {tiles.map(tile => <img key={tile.key} src={tile.src} alt="" draggable={false} loading="lazy"
         style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
     </div>
-    {end && <svg className="route-line" width={size.w} height={size.h} aria-hidden="true">
+    {from && to && <svg className="route-line" width={size.w} height={size.h} aria-hidden="true">
       <path className="route-casing" d={routePath} />
       <path className="route-path" d={routePath} />
     </svg>}
-    <span className="trip-pin from" style={{ left: `${start.x - left}px`, top: `${start.y - top}px` }}><span /></span>
-    {end && <span className="trip-pin to" style={{ left: `${end.x - left}px`, top: `${end.y - top}px` }}><span /></span>}
+    {stops.map((stop, index) => <span className="trip-pin stop" key={`${stop.lat}-${stop.lng}-${index}`}
+      style={pointStyle(stop)}><span>{index + 1}</span></span>)}
+    {from && <span className="trip-pin from" style={pointStyle(from)}><span /></span>}
+    {to && <span className="trip-pin to" style={pointStyle(to)}><span /></span>}
+    <div className="trip-map-tools" onPointerDown={event => event.stopPropagation()}>
+      <button type="button" aria-label="Приблизить" onClick={() => setView({ center: activeCenter, zoom: clamp(zoom + 1, 5, 19) })}>+</button>
+      <button type="button" aria-label="Отдалить" onClick={() => setView({ center: activeCenter, zoom: clamp(zoom - 1, 5, 19) })}>−</button>
+      <button type="button" aria-label="Показать весь маршрут" onClick={() => setView(null)}>⌖</button>
+    </div>
+    {busy && <div className="map-geo-busy"><Icon name="pin" size={14} />Определяем адрес…</div>}
     <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
-    {!readOnly && <span className="trip-map-hint">{to ? 'Ткните карту, чтобы изменить точку' : 'Ткните карту, чтобы выбрать куда'}</span>}
+    {!readOnly && !busy && <span className="trip-map-hint">Тяните и масштабируйте · тап по адресу</span>}
   </div>;
 }
 
@@ -765,7 +860,22 @@ function TripProgress({ status }: { status: TripStatus }) {
   </div>;
 }
 
-function TripSummary({ trip, children, showClient = false }: { trip: Trip; children?: ReactNode; showClient?: boolean }) {
+function formatRideTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  }).format(date);
+}
+
+function TripSummary({ trip, children, showClient = false, onRepeat, onCash, cashLabel = 'Наличные переданы' }: {
+  trip: Trip; children?: ReactNode; showClient?: boolean;
+  onRepeat?: () => void; onCash?: () => void; cashLabel?: string;
+}) {
+  const requirements = trip.requirements;
+  const stops = trip.stops ?? [];
+  const hasRequirements = requirements && (requirements.passengers > 1 || requirements.childSeat
+    || requirements.luggage || requirements.pets || requirements.comment);
   return <div className="trip-card">
     <div className="trip-card-head">
       <span className={`status ${trip.status}`}><span className="dot" />{tripStatusLabel[trip.status]}</span>
@@ -777,33 +887,95 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
       <span className="route-dot to" />
       <p>{trip.to.label}</p>
     </div>
-    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин</p>
+    {stops.length > 0 && <p className="meta trip-stops"><Icon name="pin" size={12} />через {stops.map(stop => stop.label).join(' → ')}</p>}
+    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин
+      {trip.scheduledFor ? ` · на ${formatRideTime(trip.scheduledFor)}` : ''}</p>
+    {hasRequirements && <div className="ride-tags">
+      {requirements.passengers > 1 && <span><Icon name="user" size={11} />{requirements.passengers}</span>}
+      {requirements.childSeat && <span><Icon name="child" size={11} />Ребёнок</span>}
+      {requirements.luggage && <span><Icon name="bag" size={11} />Багаж</span>}
+      {requirements.pets && <span><Icon name="paw" size={11} />Питомец</span>}
+      {requirements.comment && <span className="ride-comment">{requirements.comment}</span>}
+    </div>}
     {showClient && <p className="meta trip-client"><Icon name="user" size={13} />{trip.client.name}</p>}
     {trip.driver && <div className="driver-line">
       <span className="mini-avatar">{trip.driver.name.slice(0, 1)}</span>
       <strong>{trip.driver.name}</strong>
       <span className="meta">{trip.driver.car} · {trip.driver.plate}</span>
+      {trip.driver.rating != null && <span className="driver-rating"><Icon name="star" size={10} />{trip.driver.rating.toFixed(1)}</span>}
+      {trip.driver.verified && <span className="driver-verified">Проверен</span>}
     </div>}
-    {children && <div className="trip-actions">{children}</div>}
+    {trip.status === 'completed' && <p className="meta cash-state">
+      <Icon name="receipt" size={12} />
+      {trip.cash?.client ? 'клиент передал' : 'клиент не подтвердил'} · {trip.cash?.driver ? 'водитель получил' : 'водитель не подтвердил'}
+    </p>}
+    {(children || onRepeat || onCash) && <div className="trip-actions">
+      {children}
+      {onRepeat && <button type="button" className="ghost-mini" onClick={onRepeat}>Повторить</button>}
+      {onCash && <button type="button" className="ghost-mini accent" onClick={onCash}>{cashLabel}</button>}
+    </div>}
   </div>;
 }
 
-function TripOffers({ offers, busyOffer, onChoose }: {
-  offers: TripOffer[]; busyOffer: string | null; onChoose: (offer: TripOffer) => void;
+type AddressTarget = { kind: 'from' | 'to' | 'stop'; id?: string };
+type StopDraft = { id: string; query: string; point: TripPoint | null };
+
+function pointFromPlace(place: GeoPlace): TripPoint {
+  return { label: place.label, address: place.address, lat: place.lat, lng: place.lng };
+}
+
+function localDateTimeValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function WaitingTimer({ since }: { since: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  return <span className="wait-timer"><Icon name="clock" size={12} />Ожидание {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>;
+}
+
+function TripOffers({ offers, offersLeft, busyOffer, onChoose }: {
+  offers: TripOffer[]; offersLeft?: number; busyOffer: string | null; onChoose: (offer: TripOffer) => void;
 }) {
-  const pending = offers.filter(offer => offer.status === 'pending');
+  const [secondsLeft, setSecondsLeft] = useState(offersLeft ?? 0);
+  useEffect(() => { setSecondsLeft(offersLeft ?? 0); }, [offersLeft]);
+  useEffect(() => {
+    const timer = setInterval(() => setSecondsLeft(value => Math.max(0, value - 1)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const pending = offers.filter(offer => offer.status === 'pending')
+    .sort((a, b) => a.price.cents - b.price.cents
+      || (b.driver.rating ?? 0) - (a.driver.rating ?? 0)
+      || (a.etaMin ?? 999) - (b.etaMin ?? 999));
+  const shown = pending.slice(0, 3);
+  const windowSeconds = secondsLeft;
   return <div className="trip-offers">
-    <div className="section-title"><h2>Предложения водителей</h2><span className="count-chip">{pending.length}</span></div>
-    {pending.length === 0
+    <div className="section-title"><h2>Предложения водителей</h2>
+      {windowSeconds > 0
+        ? <span className="offer-window"><Icon name="clock" size={11} />{Math.floor(windowSeconds / 60)}:{String(windowSeconds % 60).padStart(2, '0')}</span>
+        : <span className="count-chip">{pending.length}</span>}
+    </div>
+    {shown.length === 0
       ? <div className="trip-offers-empty">
         <span className="taxi-empty-icon"><Icon name="car" size={19} /></span>
         <div><strong>Ждём предложения</strong><span>Водители увидят заказ и предложат цену</span></div>
       </div>
-      : pending.map(offer => <div className="trip-offer" key={offer.id}>
+      : shown.map(offer => <div className="trip-offer" key={offer.id}>
         <span className="mini-avatar">{offer.driver.name.slice(0, 1)}</span>
         <div className="trip-offer-info">
           <strong>{offer.driver.name}</strong>
           <span>{offer.driver.car} · {offer.driver.plate}{offer.etaMin ? ` · ${offer.etaMin} мин` : ''}</span>
+          {(offer.driver.rating != null || offer.driver.ridesCount) && <em>
+            {offer.driver.rating != null ? `★ ${offer.driver.rating.toFixed(1)}` : ''}
+            {offer.driver.rating != null && offer.driver.ridesCount ? ' · ' : ''}
+            {offer.driver.ridesCount ? `${offer.driver.ridesCount} поездок` : ''}
+            {offer.driver.verified ? ' · проверен' : ''}
+          </em>}
           {offer.message && <p>{offer.message}</p>}
         </div>
         <div className="trip-offer-price">
@@ -812,6 +984,7 @@ function TripOffers({ offers, busyOffer, onChoose }: {
             onClick={() => onChoose(offer)}>{busyOffer === offer.id ? 'Выбираем…' : 'Выбрать'}</button>
         </div>
       </div>)}
+    {pending.length > shown.length && <p className="offer-more">Ещё {pending.length - shown.length} предложения</p>}
   </div>;
 }
 
@@ -820,13 +993,34 @@ function TaxiScreen({ me, city, notify, onLogin }: {
 }) {
   const cityPoint = city?.center ?? CITY;
   const destinations = destinationsFor(city);
-  const [from, setFrom] = useState<TripPoint>({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
+  const [from, setFrom] = useState<TripPoint | null>(null);
   const [to, setTo] = useState<TripPoint | null>(null);
+  const [fromText, setFromText] = useState('');
+  const [toText, setToText] = useState('');
+  const [stops, setStops] = useState<StopDraft[]>([]);
+  const [active, setActive] = useState<AddressTarget | null>(null);
+  const [suggestions, setSuggestions] = useState<GeoPlace[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [pickBusy, setPickBusy] = useState(false);
+  const [preorder, setPreorder] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState('');
+  const [passengers, setPassengers] = useState(1);
+  const [childSeat, setChildSeat] = useState(false);
+  const [luggage, setLuggage] = useState(false);
+  const [pets, setPets] = useState(false);
+  const [comment, setComment] = useState('');
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [trips, setTrips] = useState<Trip[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
+
+  const stopKey = stops.map(stop => stop.point ? `${stop.point.lat.toFixed(5)},${stop.point.lng.toFixed(5)}` : stop.id).join(';');
+  const activeText = active?.kind === 'from' ? fromText
+    : active?.kind === 'to' ? toText
+      : active?.kind === 'stop' ? stops.find(stop => stop.id === active.id)?.query ?? ''
+        : '';
 
   const load = useCallback(() => {
     if (!me) { setTrips([]); return; }
@@ -834,41 +1028,151 @@ function TaxiScreen({ me, city, notify, onLogin }: {
   }, [me]);
   useEffect(load, [load]);
 
-  const active = trips?.find(trip => TRIP_ACTIVE.includes(trip.status)) ?? null;
+  const activeTrip = trips?.find(trip => TRIP_ACTIVE.includes(trip.status)) ?? null;
   useEffect(() => {
-    if (!active) return;
+    if (!activeTrip) return;
     const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
-  }, [active?.id, load]);
+  }, [activeTrip?.id, load]);
 
   useEffect(() => {
-    setFrom({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
-    setTo(null);
+    setFrom(null); setTo(null); setFromText(''); setToText(''); setStops([]);
+    setActive(null); setSuggestions([]); setPreorder(false); setScheduledFor('');
   }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!to) { setEstimate(null); setQuoteLoading(false); return; }
+    const query = activeText.trim();
+    if (!active || query.length < 3) { setSuggestions([]); setSearching(false); return; }
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void searchAddress(query, city?.slug)
+        .then(items => { if (!cancelled) setSuggestions(items); })
+        .catch(() => { if (!cancelled) setSuggestions([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [active, activeText, city?.slug]);
+
+  useEffect(() => {
+    if (!from || !to) { setEstimate(null); setQuoteLoading(false); return; }
     let cancelled = false;
     setQuoteLoading(true);
     setEstimate(null);
-    void api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to } })
+    const selectedStops = stops.map(stop => stop.point).filter(Boolean) as TripPoint[];
+    void api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to, stops: selectedStops } })
       .then(data => { if (!cancelled) setEstimate(data); })
       .catch(() => { if (!cancelled) setEstimate(null); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [from, to]);
+  }, [from?.lat, from?.lng, to?.lat, to?.lng, stopKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function setAddressText(target: AddressTarget, value: string) {
+    setActive(target);
+    if (target.kind === 'from') {
+      setFromText(value);
+      if (from && value !== from.label) setFrom(null);
+    } else if (target.kind === 'to') {
+      setToText(value);
+      if (to && value !== to.label) setTo(null);
+    } else {
+      setStops(current => current.map(stop => stop.id === target.id ? { ...stop, query: value, point: null } : stop));
+    }
+  }
+
+  function applyPlace(place: GeoPlace, target: AddressTarget) {
+    const point = pointFromPlace(place);
+    haptic(4);
+    if (target.kind === 'from') { setFrom(point); setFromText(point.label); }
+    else if (target.kind === 'to') { setTo(point); setToText(point.label); }
+    else setStops(current => current.map(stop => stop.id === target.id ? { ...stop, query: point.label, point } : stop));
+    setActive(null);
+    setSuggestions([]);
+  }
+
+  async function pickOnMap(point: { lat: number; lng: number }) {
+    const target = active ?? (!from ? { kind: 'from' as const } : { kind: 'to' as const });
+    setPickBusy(true);
+    try {
+      const place = await reverseAddress(point.lat, point.lng);
+      if (!place) { notify('Адрес не найден — введите улицу и дом вручную'); return; }
+      applyPlace(place, target);
+    } catch {
+      notify('Не удалось определить адрес — введите его вручную');
+    } finally { setPickBusy(false); }
+  }
+
+  async function locateFrom() {
+    if (!navigator.geolocation) return notify('Геолокация недоступна');
+    notify('Определяем адрес…');
+    navigator.geolocation.getCurrentPosition(async position => {
+      setPickBusy(true);
+      try {
+        const place = await reverseAddress(position.coords.latitude, position.coords.longitude);
+        if (!place) { notify('Адрес не найден — введите его вручную'); return; }
+        applyPlace(place, { kind: 'from' });
+      } catch {
+        notify('Не удалось определить адрес');
+      } finally { setPickBusy(false); }
+    }, () => notify('Не удалось определить положение'), { timeout: 10000, enableHighAccuracy: true, maximumAge: 30000 });
+  }
+
+  async function quickDestination(point: TripPoint) {
+    setActive({ kind: 'to' });
+    setTo(null);
+    setToText(point.label);
+    try {
+      const items = await searchAddress(point.label, city?.slug);
+      if (items[0]) applyPlace(items[0], { kind: 'to' });
+      else notify('Уточните адрес в строке «Куда»');
+    } catch {
+      notify('Не удалось найти адрес');
+    }
+  }
+
+  function addStop() {
+    if (stops.length >= 2) return;
+    const id = `stop-${Date.now()}`;
+    setStops(current => [...current, { id, query: '', point: null }]);
+    setActive({ kind: 'stop', id });
+    haptic(3);
+  }
+
+  function removeStop(id: string) {
+    setStops(current => current.filter(stop => stop.id !== id));
+    if (active?.kind === 'stop' && active.id === id) setActive(null);
+  }
 
   async function order() {
     if (!me) { onLogin(); return; }
-    if (!to) return;
+    if (!from || !to) {
+      setActive({ kind: !from ? 'from' : 'to' });
+      notify(!from ? 'Укажите адрес отправления' : 'Укажите адрес назначения');
+      return;
+    }
+    if (preorder && !scheduledFor) { notify('Укажите время поездки'); return; }
+    if (preorder && new Date(scheduledFor).getTime() <= Date.now() + 60_000) {
+      notify('Время поездки должно быть в будущем'); return;
+    }
     setBusy(true);
     try {
-      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, idempotencyKey: `taxi-${Date.now()}` } });
-      notify('Заказ создан, ждём предложения водителей');
+      const selectedStops = stops.map(stop => stop.point).filter(Boolean) as TripPoint[];
+      await api<Trip>('/api/v1/trips', {
+        method: 'POST',
+        body: {
+          from, to, stops: selectedStops,
+          scheduledFor: preorder && scheduledFor ? new Date(scheduledFor).toISOString() : undefined,
+          passengers, childSeat, luggage, pets, comment,
+          idempotencyKey: `taxi-${Date.now()}`,
+        },
+      });
+      notify(preorder ? 'Предзаказ создан — ждём предложения водителей' : 'Заказ создан, ждём предложения водителей');
       load();
     } catch (error) {
       const code = (error as { code?: string }).code;
-      notify(code === 'active_trip' ? 'У вас уже есть активная поездка' : 'Не удалось заказать такси');
+      notify(code === 'active_trip' ? 'У вас уже есть активная поездка'
+        : code === 'time_in_past' ? 'Время поездки уже прошло'
+          : 'Не удалось заказать такси');
     } finally { setBusy(false); }
   }
 
@@ -892,7 +1196,35 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     } finally { setBusyOffer(null); }
   }
 
-  const history = (trips ?? []).filter(trip => !TRIP_ACTIVE.includes(trip.status)).slice(0, 3);
+  async function confirmCash(trip: Trip) {
+    try {
+      await api(`/api/v1/trips/${trip.id}/cash`, { method: 'POST' });
+      notify('Передача наличных отмечена');
+      load();
+    } catch { notify('Не удалось отметить оплату'); }
+  }
+
+  function repeatTrip(trip: Trip) {
+    setFrom(trip.from); setFromText(trip.from.label);
+    setTo(trip.to); setToText(trip.to.label);
+    setStops((trip.stops ?? []).map(stop => ({ id: `stop-${Math.random()}`, query: stop.label, point: stop })));
+    if (trip.requirements) {
+      setPassengers(trip.requirements.passengers);
+      setChildSeat(trip.requirements.childSeat);
+      setLuggage(trip.requirements.luggage);
+      setPets(trip.requirements.pets);
+      setComment(trip.requirements.comment);
+    }
+    setActive(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const detailsLabel = [passengers > 1 ? `${passengers}` : '', childSeat ? 'ребёнок' : '',
+    luggage ? 'багаж' : '', pets ? 'питомец' : ''].filter(Boolean).join(' · ') || 'Детали';
+  const history = (trips ?? []).filter(trip => !TRIP_ACTIVE.includes(trip.status)).slice(0, 5);
+  const scheduleMin = localDateTimeValue(new Date(Date.now() + 5 * 60000));
+  const scheduleMax = localDateTimeValue(new Date(Date.now() + 7 * 86400_000));
+  const suggestionsOpen = !!active && activeText.trim().length >= 3;
 
   return <section className="taxi">
     <div className="taxi-head">
@@ -900,25 +1232,28 @@ function TaxiScreen({ me, city, notify, onLogin }: {
       <div><h1>Такси</h1><span className="meta">по городу · цена договорная · наличными</span></div>
     </div>
 
-    {active ? <>
+    {activeTrip ? <>
       <div className="taxi-map-shell active">
-        <TripMap from={active.from} to={active.to} onPick={() => {}} readOnly />
-        <div className="taxi-map-badge"><span><Icon name="car" size={13} />{tripStatusLabel[active.status]}</span><span>наличными</span></div>
+        <TripMap from={activeTrip.from} to={activeTrip.to} stops={activeTrip.stops ?? []} center={cityPoint}
+          onPick={() => {}} readOnly />
+        <div className="taxi-map-badge"><span><Icon name="car" size={13} />{tripStatusLabel[activeTrip.status]}</span><span>наличными</span></div>
       </div>
-      <TripSummary trip={active}>
-        {(active.status === 'requested' || active.status === 'assigned' || active.status === 'arrived') &&
-          <button type="button" className="ghost-mini" onClick={() => void cancel(active.id)}>Отменить поездку</button>}
-        {active.status === 'in_progress' && <span className="meta"><Icon name="shield" size={13} /> В пути, отмена через поддержку</span>}
+      <TripSummary trip={activeTrip}>
+        {(activeTrip.status === 'requested' || activeTrip.status === 'assigned' || activeTrip.status === 'arrived') &&
+          <button type="button" className="ghost-mini" onClick={() => void cancel(activeTrip.id)}>Отменить поездку</button>}
+        {activeTrip.status === 'arrived' && activeTrip.arrivedAt && <WaitingTimer since={activeTrip.arrivedAt} />}
+        {activeTrip.status === 'in_progress' && <span className="meta"><Icon name="shield" size={13} /> В пути</span>}
       </TripSummary>
-      {active.status === 'requested' && <TripOffers offers={active.offers ?? []} busyOffer={busyOffer}
-        onChoose={offer => void chooseOffer(active, offer)} />}
-      <TripProgress status={active.status} />
-      <p className="hint">{active.status === 'requested'
+      {activeTrip.status === 'requested' && <TripOffers offers={activeTrip.offers ?? []} offersLeft={activeTrip.offersLeft}
+        busyOffer={busyOffer} onChoose={offer => void chooseOffer(activeTrip, offer)} />}
+      <TripProgress status={activeTrip.status} />
+      <p className="hint">{activeTrip.status === 'requested'
         ? 'Водители предлагают цену, вы выбираете. Оплата наличными водителю.'
         : 'Статус обновляется автоматически. Водитель подтвердит посадку.'}</p>
     </> : <>
       <div className="taxi-map-shell">
-        <TripMap from={from} to={to} onPick={setTo} />
+        <TripMap from={from} to={to} stops={stops.map(stop => stop.point).filter(Boolean) as TripPoint[]}
+          center={cityPoint} onPick={point => void pickOnMap(point)} busy={pickBusy} />
         <div className="taxi-map-badge">
           <span><Icon name="pin" size={13} />{city?.name ?? 'Город'}</span>
           <span>наличными</span>
@@ -927,33 +1262,95 @@ function TaxiScreen({ me, city, notify, onLogin }: {
 
       <div className="taxi-panel">
         <div className="route-card">
-          <span className="route-dot from" />
-          <div className="route-field">
-            <span className="meta">Откуда</span>
-            <input value={from.label} onChange={event => setFrom({ ...from, label: event.target.value })} maxLength={120} />
+          <div className="route-line-row">
+            <span className="route-dot from" />
+            <div className="route-field">
+              <span className="meta">Откуда</span>
+              <input value={fromText} onChange={event => setAddressText({ kind: 'from' }, event.target.value)}
+                onFocus={() => setActive({ kind: 'from' })} placeholder="Улица и дом" autoComplete="off" />
+            </div>
+            <button type="button" className="round-btn locate" aria-label="Моё место" onClick={() => void locateFrom()}>
+              <Icon name="pin" size={17} />
+            </button>
           </div>
-          <button type="button" className="round-btn locate" aria-label="Моё место" onClick={() => {
-            if (!navigator.geolocation) return notify('Геолокация недоступна');
-            navigator.geolocation.getCurrentPosition(
-              position => setFrom({ label: 'Моё место', lat: position.coords.latitude, lng: position.coords.longitude }),
-              () => notify('Не удалось определить положение'), { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 });
-          }}><Icon name="pin" size={17} /></button>
-          <span className="route-dot to" />
-          <div className="route-field to">
-            <span className="meta">Куда</span>
-            <input value={to?.label ?? ''} readOnly placeholder="Куда едем?" />
+          {stops.map((stop, index) => <div className="route-line-row stop-row" key={stop.id}>
+            <span className="route-dot stop" />
+            <div className="route-field">
+              <span className="meta">Заезд {index + 1}</span>
+              <input value={stop.query} onChange={event => setAddressText({ kind: 'stop', id: stop.id }, event.target.value)}
+                onFocus={() => setActive({ kind: 'stop', id: stop.id })} placeholder="Промежуточный адрес" autoComplete="off" />
+            </div>
+            <button type="button" className="route-remove" aria-label="Убрать заезд" onClick={() => removeStop(stop.id)}>
+              <Icon name="close" size={14} />
+            </button>
+          </div>)}
+          <div className="route-line-row">
+            <span className="route-dot to" />
+            <div className="route-field to">
+              <span className="meta">Куда</span>
+              <input value={toText} onChange={event => setAddressText({ kind: 'to' }, event.target.value)}
+                onFocus={() => setActive({ kind: 'to' })} placeholder="Адрес или место" autoComplete="off" />
+            </div>
+            <button type="button" className="route-add" aria-label="Добавить заезд" onClick={addStop} disabled={stops.length >= 2}>
+              <Icon name="plus" size={15} />
+            </button>
           </div>
         </div>
 
-        <div className="dest-chips">
-          {destinations.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
-            onClick={() => { haptic(4); setTo(point); }}><Icon name="pin" size={13} />{point.label}</button>)}
-        </div>
-
-        {!to && <div className="taxi-empty">
-          <span className="taxi-empty-icon"><Icon name="map" size={20} /></span>
-          <div><strong>Куда едем?</strong><span>Выберите точку или ткните на карту</span></div>
+        {suggestionsOpen && <div className="address-suggestions">
+          <div className="address-suggestions-head">
+            <span>{searching ? 'Ищем адрес…' : suggestions.length ? 'Выберите адрес' : 'Ничего не найдено'}</span>
+            <button type="button" aria-label="Закрыть подсказки" onClick={() => setActive(null)}><Icon name="close" size={12} /></button>
+          </div>
+          {suggestions.map((place, index) => <button type="button" key={`${place.lat}-${place.lng}-${index}`}
+            className="address-suggestion" onMouseDown={event => event.preventDefault()}
+            onClick={() => applyPlace(place, active!)}>
+            <span className="address-suggestion-icon"><Icon name="pin" size={14} /></span>
+            <span><strong>{place.label}</strong><small>{place.address}</small></span>
+          </button>)}
         </div>}
+
+        {!to && <div className="quick-dest">
+          {destinations.map(point => <button key={point.label} type="button" onClick={() => void quickDestination(point)}>
+            <Icon name="pin" size={12} />{point.label}
+          </button>)}
+        </div>}
+
+        {to && <>
+          <div className="ride-details-row">
+            <div className="segmented two compact">
+              <button type="button" className={!preorder ? 'active' : ''} onClick={() => setPreorder(false)}>Сейчас</button>
+              <button type="button" className={preorder ? 'active' : ''} onClick={() => {
+                setPreorder(true);
+                if (!scheduledFor) setScheduledFor(localDateTimeValue(new Date(Date.now() + 30 * 60000)));
+              }}>Предзаказ</button>
+            </div>
+            <button type="button" className={`details-toggle${detailsOpen ? ' open' : ''}`}
+              aria-expanded={detailsOpen} onClick={() => setDetailsOpen(value => !value)}>
+              <Icon name="user" size={11} />{detailsLabel}<Icon name="chevron" size={11} />
+            </button>
+          </div>
+          {preorder && <input className="preorder-time" type="datetime-local" value={scheduledFor} min={scheduleMin} max={scheduleMax}
+            onChange={event => setScheduledFor(event.target.value)} aria-label="Время поездки" />}
+          {detailsOpen && <div className="ride-details">
+            <div className="ride-options">
+              <label className="passenger-picker" title="Пассажиры">
+                <Icon name="user" size={14} />
+                <select value={passengers} onChange={event => setPassengers(Number(event.target.value))} aria-label="Пассажиры">
+                  {[1, 2, 3, 4, 5, 6].map(value => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <button type="button" className={childSeat ? 'active' : ''} aria-pressed={childSeat}
+                onClick={() => setChildSeat(value => !value)}><Icon name="child" size={13} />Ребёнок</button>
+              <button type="button" className={luggage ? 'active' : ''} aria-pressed={luggage}
+                onClick={() => setLuggage(value => !value)}><Icon name="bag" size={13} />Багаж</button>
+              <button type="button" className={pets ? 'active' : ''} aria-pressed={pets}
+                onClick={() => setPets(value => !value)}><Icon name="paw" size={13} />Питомец</button>
+            </div>
+            <input className="ride-comment-input" value={comment} maxLength={300}
+              onChange={event => setComment(event.target.value)} placeholder="Комментарий водителю (необязательно)" />
+          </div>}
+        </>}
 
         {quoteLoading && <div className="estimate-card estimate-loading">
           <span><Icon name="refresh" size={14} />Строим маршрут по дорогам…</span>
@@ -965,8 +1362,8 @@ function TaxiScreen({ me, city, notify, onLogin }: {
             <div><strong>Маршрут готов</strong>
               <span>{estimate.distanceKm.toFixed(1)} км · {estimate.durationMin} мин · {estimate.route === 'osrm' ? 'по дорогам' : 'напрямую'}</span></div>
           </div>
-          <button type="button" className="primary" disabled={busy || !to} onClick={() => void order()}>
-            {busy ? 'Заказываем…' : me ? 'Заказать поездку' : 'Войти и заказать'}<Icon name="chevron" size={16} />
+          <button type="button" className="primary" disabled={busy || !to || !from} onClick={() => void order()}>
+            {busy ? 'Заказываем…' : me ? (preorder ? 'Оформить предзаказ' : 'Заказать поездку') : 'Войти и заказать'}<Icon name="chevron" size={16} />
           </button>
           <p className="hint">Цену предложат водители — вы выберете подходящую.</p>
         </div>}
@@ -975,17 +1372,19 @@ function TaxiScreen({ me, city, notify, onLogin }: {
 
     {history.length > 0 && <>
       <div className="section-title"><h2>История</h2><span className="count-chip">{history.length}</span></div>
-      <div className="trip-history">{history.map(trip => <TripSummary key={trip.id} trip={trip} />)}</div>
+      <div className="trip-history">{history.map(trip => <TripSummary key={trip.id} trip={trip}
+        onRepeat={() => repeatTrip(trip)}
+        onCash={trip.status === 'completed' && !trip.cash?.client ? () => void confirmCash(trip) : undefined} />)}</div>
     </>}
   </section>;
 }
 
 function DriverPanel({ notify }: { notify: (text: string) => void }) {
-  const [data, setData] = useState<{ available: Trip[]; mine: Trip[] } | null>(null);
+  const [data, setData] = useState<{ available: Trip[]; mine: Trip[]; completed: Trip[] } | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { price: string; eta: string }>>({});
   const load = useCallback(() => {
-    void api<{ available: Trip[]; mine: Trip[] }>('/api/v1/driver/trips')
-      .then(setData).catch(() => setData({ available: [], mine: [] }));
+    void api<{ available: Trip[]; mine: Trip[]; completed: Trip[] }>('/api/v1/driver/trips')
+      .then(setData).catch(() => setData({ available: [], mine: [], completed: [] }));
   }, []);
   useEffect(load, [load]);
   useEffect(() => {
@@ -1028,6 +1427,14 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
     }
   }
 
+  async function confirmCash(trip: Trip) {
+    try {
+      await api(`/api/v1/trips/${trip.id}/cash`, { method: 'POST' });
+      notify('Получение наличных отмечено');
+      load();
+    } catch { notify('Не удалось отметить оплату'); }
+  }
+
   function actions(trip: Trip) {
     if (trip.status === 'assigned') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'arrive')}>Я на месте</button>;
     if (trip.status === 'arrived') return <button type="button" className="primary mini" onClick={() => void act(trip.id, 'start')}>В путь</button>;
@@ -1062,6 +1469,12 @@ function DriverPanel({ notify }: { notify: (text: string) => void }) {
       {data.available.map(trip => <TripSummary key={trip.id} trip={trip} showClient>
         {offerControls(trip)}
       </TripSummary>)}
+    </>}
+    {data && data.completed.length > 0 && <>
+      <h3 className="sub-title">Завершённые</h3>
+      {data.completed.map(trip => <TripSummary key={trip.id} trip={trip} showClient
+        onCash={!trip.cash?.driver ? () => void confirmCash(trip) : undefined}
+        cashLabel="Наличные получены" />)}
     </>}
   </div>;
 }

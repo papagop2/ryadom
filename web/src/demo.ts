@@ -61,18 +61,21 @@ const seedReviews: Record<string, { author: string; rating: number; body: string
 
 type DemoRole = { role: string; partner_id: string | null };
 type DemoMe = { user: { id: string; phone: string; displayName: string }; roles: DemoRole[]; partnerIds: string[] };
-type DemoTripPoint = { label: string; lat: number; lng: number };
+type DemoTripPoint = { label: string; address?: string; lat: number; lng: number };
 type DemoTripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 type DemoTripOffer = {
   id: string; price: Money; etaMin: number | null; message: string;
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn'; createdAt: string;
-  driver: { id: string; name: string; car: string; plate: string };
+  driver: { id: string; name: string; car: string; plate: string; rating?: number | null; ridesCount?: number; verified?: boolean };
 };
 type DemoTrip = {
   id: string; status: DemoTripStatus; from: DemoTripPoint; to: DemoTripPoint; distanceKm: number; durationMin: number;
   price: Money | null; createdAt: string; client: { id: string; name: string };
-  driver: { id: string; name: string; car: string; plate: string } | null;
-  offers?: DemoTripOffer[];
+  driver: { id: string; name: string; car: string; plate: string; rating?: number | null; ridesCount?: number; verified?: boolean } | null;
+  offers?: DemoTripOffer[]; offersUntil?: string | null; offersLeft?: number;
+  stops?: DemoTripPoint[]; scheduledFor?: string | null;
+  requirements?: { passengers: number; childSeat: boolean; luggage: boolean; pets: boolean; comment: string };
+  arrivedAt?: string | null; cash?: { client: boolean; driver: boolean };
 };
 type DemoServiceOffer = {
   id: string; price: Money; message: string; etaMin: number | null;
@@ -634,8 +637,17 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       return fail('У вас уже есть активная поездка', 'active_trip');
     }
     const quote = tripQuote(from, to);
+    const stops = Array.isArray(body.stops) ? body.stops as DemoTripPoint[] : [];
     const trip: DemoTrip & { key?: string | null } = {
-      id: `t-${Date.now()}`, status: 'requested', from, to, ...quote, price: null,
+      id: `t-${Date.now()}`, status: 'requested', from, to, stops, ...quote, price: null,
+      scheduledFor: typeof body.scheduledFor === 'string' ? body.scheduledFor : null,
+      requirements: {
+        passengers: Number(body.passengers) || 1,
+        childSeat: Boolean(body.childSeat), luggage: Boolean(body.luggage), pets: Boolean(body.pets),
+        comment: String(body.comment ?? '').slice(0, 300),
+      },
+      offersUntil: new Date(Date.now() + 3 * 60000).toISOString(), offersLeft: 180,
+      arrivedAt: null, cash: { client: false, driver: false },
       createdAt: new Date().toISOString(), client: { id: me.user.id, name: me.user.displayName }, driver: null,
       offers: [], key,
     };
@@ -660,6 +672,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
         ...item, offers: (item.offers ?? []).filter(offer => offer.driver.id === me.user.id),
       })),
       mine: trips.filter(item => item.driver?.id === me.user.id && TRIP_ACTIVE.includes(item.status)),
+      completed: trips.filter(item => item.driver?.id === me.user.id && item.status === 'completed').slice(0, 10),
     } as T;
   }
 
@@ -685,7 +698,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!Number.isInteger(priceCents) || priceCents < 5000 || priceCents > 10000000) {
       return fail('Укажите цену от 50 ₽', 'invalid_price');
     }
-    const driver = { id: me.user.id, name: me.user.displayName, car: 'Kia Rio', plate: 'A123ВС77' };
+    const driver = { id: me.user.id, name: me.user.displayName, car: 'Kia Rio', plate: 'A123ВС77',
+      rating: 4.9, ridesCount: 128, verified: true };
     const existing = (trip.offers ?? []).find(offer => offer.driver.id === me.user.id);
     if (existing && existing.status !== 'pending') return fail('Предложение уже обработано', 'offer_locked');
     const offer: DemoTripOffer = existing ?? {
@@ -722,6 +736,22 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return trip as T;
   }
 
+  const cashMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/cash$/);
+  if (cashMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const trips = getTrips();
+    const trip = trips.find(item => item.id === cashMatch[1]);
+    if (!trip) return fail('Поездка не найдена', 'not_found');
+    if (trip.status !== 'completed') return fail('Поездка ещё не завершена', 'trip_not_completed');
+    if (trip.client.id !== me.user.id && trip.driver?.id !== me.user.id) return fail('Нет доступа к поездке', 'forbidden');
+    trip.cash = trip.cash ?? { client: false, driver: false };
+    if (trip.client.id === me.user.id) trip.cash.client = true;
+    else trip.cash.driver = true;
+    saveTrips(trips);
+    return trip as T;
+  }
+
   const tripActionMatch = url.pathname.match(/^\/api\/v1\/trips\/([^/]+)\/(arrive|start|complete|cancel)$/);
   if (tripActionMatch && method === 'POST') {
     const me = getMe();
@@ -746,6 +776,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       if (trip.status !== allowed[action]) return fail('Поездка уже в другом состоянии', 'invalid_transition');
       if (action === 'complete' && !trip.price) return fail('Сначала согласуйте цену с клиентом', 'price_not_agreed');
       trip.status = next[action];
+      if (action === 'arrive') trip.arrivedAt = new Date().toISOString();
+      if (action === 'complete') trip.cash = trip.cash ?? { client: false, driver: false };
     }
     saveTrips(trips);
     return trip as T;

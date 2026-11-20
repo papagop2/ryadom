@@ -47,7 +47,7 @@ const demoCouriers = [
 ];
 
 const demoDrivers = [
-  { phone: '+79000000004', name: 'Водитель Демо', car: 'Kia Rio', plate: 'А123ВС77' },
+  { phone: '+79000000004', name: 'Водитель Демо', car: 'Kia Rio', plate: 'А123ВС77', rating: 4.9, rides: 128, verified: true },
 ];
 
 const demoUsers = [
@@ -212,9 +212,11 @@ export async function seed(pool, { reset = false } = {}) {
         `insert into memberships (user_id, role) values ($1, 'driver') on conflict (user_id, role) do nothing`,
         [rows[0].id]);
       await client.query(
-        `insert into driver_profiles (user_id, car_model, plate) values ($1, $2, $3)
-         on conflict (user_id) do update set car_model = excluded.car_model, plate = excluded.plate`,
-        [rows[0].id, driver.car, driver.plate]);
+        `insert into driver_profiles (user_id, car_model, plate, rating_avg, rides_count, is_verified)
+         values ($1, $2, $3, $4, $5, $6)
+         on conflict (user_id) do update set car_model = excluded.car_model, plate = excluded.plate,
+           rating_avg = excluded.rating_avg, rides_count = excluded.rides_count, is_verified = excluded.is_verified`,
+        [rows[0].id, driver.car, driver.plate, driver.rating, driver.rides, driver.verified]);
     }
 
     for (const courier of demoCouriers) {

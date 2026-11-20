@@ -357,8 +357,8 @@ async function makeDriver() {
 test('такси: оценка, заказ, принятие водителем и завершение', async (t) => {
   if (!ready) return t.skip(skipReason);
   const client = await login();
-  const from = { label: 'Центр', lat: 55.7601, lng: 37.6186 };
-  const to = { label: 'Аэропорт', lat: 55.9726, lng: 37.4146 };
+  const from = { label: 'Центр', address: 'Москва, Красная площадь, 1', lat: 55.7601, lng: 37.6186 };
+  const to = { label: 'Аэропорт', address: 'Москва, Шереметьевское шоссе', lat: 55.9726, lng: 37.4146 };
   const estimate = await app.inject({ method: 'POST', url: '/api/v1/trips/estimate', payload: { from, to } });
   assert.equal(estimate.statusCode, 200, estimate.body);
   assert.ok(estimate.json().distanceKm > 10);
@@ -366,11 +366,21 @@ test('такси: оценка, заказ, принятие водителем 
   assert.equal(estimate.json().tariff, undefined);
 
   const key = `trip-${Date.now()}`;
+  const scheduledFor = new Date(Date.now() + 3600_000).toISOString();
+  const stops = [{ label: 'Набережная', address: 'Москва, набережная, 1', lat: 55.7502, lng: 37.6203 }];
   const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
-    payload: { from, to, idempotencyKey: key } });
+    payload: { from, to, stops, scheduledFor, passengers: 3, childSeat: true, luggage: true,
+      comment: 'Один чемодан', idempotencyKey: key } });
   assert.equal(created.statusCode, 201, created.body);
   assert.equal(created.json().status, 'requested');
   assert.equal(created.json().price, null);
+  assert.equal(created.json().from.address, from.address);
+  assert.equal(created.json().stops.length, 1);
+  assert.equal(created.json().stops[0].address, 'Москва, набережная, 1');
+  assert.equal(created.json().scheduledFor, scheduledFor);
+  assert.deepEqual(created.json().requirements, { passengers: 3, childSeat: true, luggage: true, pets: false, comment: 'Один чемодан' });
+  assert.ok(created.json().offersUntil);
+  assert.ok(created.json().offersLeft > 0);
   const tripId = created.json().id;
 
   const again = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
@@ -416,6 +426,21 @@ test('такси: оценка, заказ, принятие водителем 
   const seen = mine.json().items.find(item => item.id === tripId);
   assert.equal(seen.status, 'completed');
   assert.equal(seen.price.cents, 50000);
+  assert.equal(seen.stops.length, 1);
+  assert.equal(seen.cash.client, false);
+  assert.equal(seen.cash.driver, false);
+
+  const cashClient = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/cash`, headers: client.headers });
+  assert.equal(cashClient.statusCode, 200, cashClient.body);
+  assert.equal(cashClient.json().cash.client, true);
+  assert.equal(cashClient.json().cash.driver, false);
+  const cashDriver = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/cash`, headers: driver.headers });
+  assert.equal(cashDriver.statusCode, 200, cashDriver.body);
+  assert.equal(cashDriver.json().cash.client, true);
+  assert.equal(cashDriver.json().cash.driver, true);
+
+  const driverHistory = await app.inject({ url: '/api/v1/driver/trips', headers: driver.headers });
+  assert.ok(driverHistory.json().completed.some(item => item.id === tripId));
 });
 
 test('такси: чужая поездка недоступна, отмена освобождает клиента', async (t) => {

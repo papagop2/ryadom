@@ -1113,9 +1113,8 @@ h1, h2, h3, p { margin-top: 0; }
 .trip-map:active { cursor: crosshair; }
 .route-line { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: visible; }
 .route-line path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.route-line .route-casing { stroke: rgba(5, 6, 8, 0.9); stroke-width: 8; }
-.route-line .route-path { stroke: var(--yellow); stroke-width: 4; stroke-dasharray: 1 8; filter: drop-shadow(0 0 6px rgba(255, 214, 10, 0.55)); animation: route-flow 9s linear infinite; }
-@keyframes route-flow { to { stroke-dashoffset: -180; } }
+.route-line .route-casing { stroke: rgba(5, 6, 8, 0.88); stroke-width: 7; }
+.route-line .route-path { stroke: var(--yellow); stroke-width: 3.5; filter: drop-shadow(0 0 5px rgba(255, 214, 10, 0.42)); }
 .trip-pin {
   position: absolute; z-index: 3;
   width: 23px; height: 23px;
@@ -1731,7 +1730,7 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .photo-viewer .ghost-mini:disabled { opacity: 0.35; }
 
 .taxi-map-shell { position: relative; margin: 0 0 9px; }
-.taxi-map-shell .trip-map { height: 225px; border-radius: 22px; border-color: rgba(255, 214, 10, 0.16); }
+.taxi-map-shell .trip-map { height: 208px; border-radius: 22px; border-color: rgba(255, 214, 10, 0.16); }
 .taxi-map-shell.active .trip-map { height: 210px; }
 .taxi-map-badge {
   position: absolute; z-index: 4; top: 9px; left: 9px; right: 9px;
@@ -1827,3 +1826,106 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .driver-offer-form input:first-child { flex: 1; }
 .driver-offer-form input + input { width: 55px; flex: none; }
 .driver-offer-form .primary { flex: none; min-height: 30px; padding: 0 9px; font-size: 10px; }
+
+/* ---- такси: адреса, карта, детали поездки ---- */
+.route-card { display: grid; grid-template-columns: none; gap: 6px; padding: 9px; }
+.route-line-row { display: grid; grid-template-columns: 13px minmax(0, 1fr) 37px; align-items: center; gap: 7px 6px; }
+.route-line-row .route-field { min-width: 0; }
+.route-line-row + .route-line-row { border-top: 1px solid rgba(255, 255, 255, 0.055); padding-top: 6px; }
+.route-dot.stop { width: 7px; height: 7px; background: #c7ccd4; box-shadow: 0 0 0 3px rgba(199, 204, 212, 0.1); }
+.route-remove, .route-add {
+  width: 31px; height: 31px; display: grid; place-items: center;
+  border-radius: 10px; border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.05); color: #aeb4bd;
+}
+.route-remove:active, .route-add:active { transform: scale(0.92); }
+.route-add { color: var(--yellow); border-color: rgba(255, 214, 10, 0.24); background: rgba(255, 214, 10, 0.08); }
+.route-add:disabled { opacity: 0.3; }
+.address-suggestions {
+  margin-top: 5px; padding: 5px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 214, 10, 0.22);
+  background: #111217f7;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px);
+  animation: rise 0.18s ease both;
+}
+.address-suggestions-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 5px; color: #8d949e; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+.address-suggestions-head button { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: rgba(255, 255, 255, 0.07); color: #b9c0c9; }
+.address-suggestion {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 7px 6px; border-radius: 10px; text-align: left;
+}
+.address-suggestion:active { background: rgba(255, 214, 10, 0.1); }
+.address-suggestion-icon { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--yellow); background: rgba(255, 214, 10, 0.1); }
+.address-suggestion > span:last-child { min-width: 0; display: grid; gap: 1px; }
+.address-suggestion strong { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.address-suggestion small { font-size: 9.5px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quick-dest { display: flex; gap: 5px; overflow-x: auto; padding: 7px 1px 0; scrollbar-width: none; }
+.quick-dest::-webkit-scrollbar { display: none; }
+.quick-dest button { display: inline-flex; align-items: center; gap: 3px; flex: none; height: 27px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--line-soft); background: rgba(255, 255, 255, 0.045); color: #b9c0c9; font-size: 10px; }
+.quick-dest button:active { transform: scale(0.95); color: var(--yellow); }
+.ride-options { display: flex; align-items: center; gap: 5px; overflow-x: auto; padding: 8px 1px 0; scrollbar-width: none; }
+.ride-options::-webkit-scrollbar { display: none; }
+.ride-options > button, .passenger-picker {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; height: 27px; padding: 0 8px;
+  border-radius: 9px; border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.045); color: #aeb4bd; font-size: 10px; font-weight: 600;
+}
+.ride-options > button.active { color: var(--yellow); border-color: rgba(255, 214, 10, 0.48); background: rgba(255, 214, 10, 0.12); }
+.passenger-picker select { border: 0; outline: 0; background: transparent; color: #e9ebee; font: inherit; font-size: 11px; font-weight: 700; }
+.passenger-picker option { background: #15171c; color: #fff; }
+.ride-details-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.ride-details-row .segmented { flex: 1; margin: 0; }
+.details-toggle {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; height: 31px; padding: 0 7px; max-width: 48%; overflow: hidden; white-space: nowrap;
+  border-radius: 9px; border: 1px solid var(--line-soft); background: rgba(255, 255, 255, 0.045);
+  color: #aeb4bd; font-size: 9.5px; font-weight: 600;
+}
+.details-toggle .icon:last-child { transition: transform 0.16s ease; }
+.details-toggle.open { color: var(--yellow); border-color: rgba(255, 214, 10, 0.35); }
+.details-toggle.open .icon:last-child { transform: rotate(180deg); }
+.preorder-time {
+  width: 100%; height: 31px; margin-top: 6px; padding: 0 7px;
+  border-radius: 9px; border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.05); color: #dfe3e9; font: inherit; font-size: 10px; color-scheme: dark;
+}
+.ride-details { margin-top: 6px; }
+.segmented.compact { gap: 2px; padding: 2px; }
+.segmented.compact button { height: 25px; font-size: 10px; }
+.ride-comment-input {
+  width: 100%; height: 32px; margin-top: 7px; padding: 0 9px;
+  border-radius: 10px; border: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, 0.18); color: #eef0f3; font: inherit; font-size: 10.5px; outline: 0;
+}
+.ride-comment-input::placeholder { color: #6f7680; }
+.trip-map { touch-action: none; }
+.trip-map-tools { position: absolute; z-index: 4; top: 38px; right: 7px; display: grid; gap: 4px; }
+.trip-map-tools button {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(8, 9, 12, 0.72); color: #f1f2f4; font-size: 14px;
+  backdrop-filter: blur(8px);
+}
+.trip-map-tools button:active { background: rgba(255, 214, 10, 0.18); }
+.map-geo-busy {
+  position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 10px; border-radius: 10px;
+  background: rgba(8, 9, 12, 0.82); border: 1px solid rgba(255, 214, 10, 0.3);
+  color: #f1f2f4; font-size: 10px; backdrop-filter: blur(10px);
+}
+.trip-pin.stop { z-index: 4; width: 18px; height: 18px; background: #08090c; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55); }
+.trip-pin.stop span { width: 14px; height: 14px; display: grid; place-items: center; background: #e8ebef; color: #15171c; font-size: 9px; font-weight: 800; }
+.offer-window { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; color: var(--yellow); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.offer-more { margin: 2px 2px 0; color: var(--muted); font-size: 9.5px; }
+.trip-offer-info em { font-style: normal; font-size: 9px; color: var(--yellow-soft); }
+.driver-rating { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; color: var(--yellow); font-size: 9.5px; font-weight: 700; }
+.driver-rating .icon { fill: currentColor; }
+.driver-verified { padding: 1px 5px; border-radius: 999px; background: rgba(126, 226, 168, 0.1); border: 1px solid rgba(126, 226, 168, 0.24); color: #9fe7bd; font-size: 8px; font-weight: 700; }
+.ride-tags { display: flex; gap: 4px; overflow: hidden; }
+.ride-tags span { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: #b8bec6; font-size: 8.5px; white-space: nowrap; }
+.ride-tags .ride-comment { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.trip-stops { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cash-state { color: #9aa1ab; }
+.wait-timer { display: inline-flex; align-items: center; gap: 3px; color: var(--yellow); font-size: 10px; font-weight: 700; }
