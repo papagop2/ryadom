@@ -1826,7 +1826,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
-  const [mapView, setMapView] = useState<(MapViewport & { citySlug: string }) | null>(null);
+  const mapViewRef = useRef<(MapViewport & { citySlug: string }) | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -2027,8 +2027,8 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     </div>
 
     {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify}
-      initialView={mapView?.citySlug === city?.slug ? mapView : null}
-      onViewChange={view => setMapView({ citySlug: city?.slug ?? '', ...view })} />}
+      initialView={mapViewRef.current?.citySlug === city?.slug ? mapViewRef.current : null}
+      onViewChange={view => { mapViewRef.current = { citySlug: city?.slug ?? '', ...view }; }} />}
 
     <section aria-labelledby="catalogue">
       <div className="section-title">
