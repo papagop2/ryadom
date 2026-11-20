@@ -233,11 +233,18 @@ function card(place: typeof places[number], bookings = getBookings()) {
   const list = activeOffers(place.id);
   const reviews = reviewsFor(place.id, bookings);
   const rating = reviews.length ? reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length : null;
+  const photos = [0, 1, 2].map(index => ({
+    small: `https://picsum.photos/seed/rjadom-${place.id}-${index}/328/170`,
+    large: `https://picsum.photos/seed/rjadom-${place.id}-${index}/656/340`,
+    full: `https://picsum.photos/seed/rjadom-${place.id}-${index}/1200/800`,
+    author: null,
+  }));
   return {
     id: place.id, name: place.name, category: place.category as Category, district: place.district,
     address: place.address, about: place.about, location: { lat: place.lat, lng: place.lng },
     city: (place as { city?: string }).city ?? 'demograd',
-    image: null,
+    image: photos[0].small,
+    photos,
     rating: rating === null ? null : Math.round(rating * 10) / 10,
     ratingCount: reviews.length, source: null,
     priceFrom: list.length ? money(Math.min(...list.map(item => item.price))) : null,
