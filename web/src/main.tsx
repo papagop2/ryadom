@@ -8,11 +8,12 @@ type Money = { cents: number; currency: string };
 type PlaceSource = { name: string; url: string | null; reviewsUrl?: string | null; rating: number | null; ratingCount: number };
 type PlaceCard = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
-  location: { lat: number; lng: number }; city: string; rating: number | null; ratingCount: number;
-  source: PlaceSource | null;
+  location: { lat: number; lng: number }; city: string; image: string | null;
+  rating: number | null; ratingCount: number; source: PlaceSource | null;
   priceFrom: Money | null; offerCount: number; distanceKm: number | null;
 };
 type City = { slug: string; name: string; region: string; center: { lat: number; lng: number }; places: number };
+type PlacePhoto = { small: string; large: string; full: string; author: string | null };
 type Offer = { id: string; title: string; description: string; durationMin: number; price: Money; nextSlot: string | null };
 type ShopProduct = { id: string; title: string; description: string; price: Money; stockQty: number; unit: string; isActive: boolean };
 type ShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
@@ -40,7 +41,7 @@ type DeliveryJob = {
   };
 };
 type CourierInfo = { id: string; display_name: string; transport: string; is_online: boolean; deliveries_count: number; active_jobs: number };
-type PlaceDetail = { place: PlaceCard & { phone: string | null; bookable: boolean;
+type PlaceDetail = { place: PlaceCard & { phone: string | null; bookable: boolean; photos?: PlacePhoto[];
   info?: { schedule: string | null; sites: string[] } }; offers: Offer[]; products: ShopProduct[];
   delivery: { available: boolean; zones: DeliveryZone[] }; reviews: Review[] };
 type Slot = { id: string; startsAt: string; endsAt: string };
@@ -1032,6 +1033,43 @@ function OperatorDeliveries({ notify }: { notify: (text: string) => void }) {
   </div>;
 }
 
+function PlaceThumb({ place }: { place: PlaceCard }) {
+  const [failed, setFailed] = useState(false);
+  if (place.image && !failed) return <img className="place-thumb" src={place.image} alt=""
+    loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return <span className={`cat-avatar ${place.category}`} aria-hidden="true">
+    <Icon name={categoryIcon[place.category]} size={21} />
+  </span>;
+}
+
+function PlaceCover({ place, photos, onOpen }: {
+  place: PlaceCard; photos?: PlacePhoto[]; onOpen?: (index: number) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = photos?.[0]?.large ?? place.image;
+  if (!src || failed) return null;
+  const content = <>
+    <img src={src} alt={place.name} loading="eager" decoding="async"
+      referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+    <span className="cover-source">{place.source ? `2ГИС · ${photos?.length ?? 1} фото` : 'Фото'}</span>
+  </>;
+  return onOpen
+    ? <button type="button" className="place-cover" onClick={() => onOpen(0)}
+      aria-label={`Фотографии: ${place.name}`}>{content}</button>
+    : <a className="place-cover" href={place.source ? `${place.source.url ?? '#'}/tab/photos` : src}
+      target="_blank" rel="noopener noreferrer" aria-label={`Фотографии: ${place.name}`}>{content}</a>;
+}
+
+function PhotoRail({ photos, onOpen }: { photos: PlacePhoto[]; onOpen: (index: number) => void }) {
+  if (photos.length < 2) return null;
+  return <div className="photo-rail" aria-label="Фотографии организации">
+    {photos.map((photo, index) => <button key={photo.small + index} type="button" className="photo-rail-item"
+      onClick={() => onOpen(index)} aria-label={`Фото ${index + 1}`}>
+      <img src={photo.small} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+    </button>)}
+  </div>;
+}
+
 function Catalogue({ me, notify, withMap = false, onPick, city }: {
   me: Me | null; notify: (text: string) => void; withMap?: boolean; onPick?: () => void; city: City | null;
 }) {
@@ -1266,9 +1304,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
               const rating = place.rating ?? place.source?.rating ?? null;
               return <li key={place.id} style={{ animationDelay: `${index * 45}ms` }}>
                 <button type="button" className="place-button" onClick={() => setOpen(place)}>
-                  <span className={`cat-avatar ${place.category}`} aria-hidden="true">
-                    <Icon name={categoryIcon[place.category]} size={21} />
-                  </span>
+                  <PlaceThumb place={place} />
                   <span className="details">
                     <span className="title-row">
                       <strong className="title">{place.name}</strong>
@@ -1329,6 +1365,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [reviewBody, setReviewBody] = useState('');
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewSent, setReviewSent] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
 
   const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
@@ -1455,6 +1492,9 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
       </div>
       {(place.rating ?? place.source?.rating) !== null && <span className="score"><Icon name="star" size={12} stroke={0} />{(place.rating ?? place.source?.rating)!.toFixed(1)}</span>}
     </div>
+
+    <PlaceCover place={place} photos={detail?.place.photos} onOpen={setPhotoIndex} />
+    <PhotoRail photos={detail?.place.photos ?? []} onOpen={setPhotoIndex} />
 
     <div className="chips-row">
       <span className="chip"><Icon name={categoryIcon[place.category]} size={14} />{categories[place.category]}</span>
@@ -1660,6 +1700,22 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           {reviewBusy ? 'Отправляем…' : 'Отправить отзыв'}<Icon name="chevron" size={16} />
         </button>
       </div>
+    </Sheet>
+
+    <Sheet open={photoIndex !== null} onClose={() => setPhotoIndex(null)}
+      title={`Фото · ${detail?.place.photos?.length ?? 0}`}>
+      {photoIndex !== null && detail?.place.photos?.[photoIndex] && <div className="photo-viewer">
+        <img src={detail.place.photos[photoIndex].large} alt={`${place.name}, фото ${photoIndex + 1}`}
+          referrerPolicy="no-referrer" />
+        <div className="photo-viewer-bar">
+          <button type="button" className="ghost-mini" disabled={photoIndex === 0}
+            onClick={() => setPhotoIndex(photoIndex - 1)}>Назад</button>
+          <span>{photoIndex + 1} / {detail.place.photos.length}</span>
+          <button type="button" className="ghost-mini" disabled={photoIndex === detail.place.photos.length - 1}
+            onClick={() => setPhotoIndex(photoIndex + 1)}>Дальше</button>
+        </div>
+        <p className="hint">Источник фото — 2ГИС{detail.place.photos[photoIndex].author ? ` · ${detail.place.photos[photoIndex].author}` : ''}</p>
+      </div>}
     </Sheet>
   </section>;
 }

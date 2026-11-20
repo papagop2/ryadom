@@ -531,7 +531,7 @@ export function routes(app, { pool, demoLogin = false }) {
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.lat, p.lng, p.about,
               p.rating_avg, p.rating_count, p.source, p.source_url, p.source_rating,
-              p.source_rating_count, p.city_slug, oo.min_price_cents, oo.offer_count,
+              p.source_rating_count, p.city_slug, p.image_url, oo.min_price_cents, oo.offer_count,
               count(*) over()::int as total,
               case when $7::numeric is null or $8::numeric is null
                    then null else round((point(p.lng, p.lat) <-> point($7, $8))::numeric * 111.32, 2) end as distance_km
@@ -563,6 +563,7 @@ export function routes(app, { pool, demoLogin = false }) {
         about: row.about,
         location: { lat: Number(row.lat), lng: Number(row.lng) },
         city: row.city_slug,
+        image: row.image_url,
         rating: row.rating_avg === null ? null : Number(row.rating_avg),
         ratingCount: row.rating_count,
         source: row.source === '2gis' ? {
@@ -610,7 +611,7 @@ export function routes(app, { pool, demoLogin = false }) {
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.about, p.phone,
               p.lat, p.lng, p.rating_avg, p.rating_count, p.city_slug, p.source,
-              p.source_url, p.source_reviews_url, p.source_rating, p.source_rating_count,
+              p.source_url, p.source_reviews_url, p.source_rating, p.source_rating_count, p.image_url, p.photos,
               p.metadata, (p.partner_id is not null) as bookable
        from places p where p.id = $1 and p.is_published`, [uuidParam(request)]);
     if (!rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
@@ -644,6 +645,8 @@ export function routes(app, { pool, demoLogin = false }) {
         phone: place.phone,
         location: { lat: Number(place.lat), lng: Number(place.lng) },
         city: place.city_slug,
+        image: place.image_url,
+        photos: Array.isArray(place.photos) ? place.photos : [],
         bookable: place.bookable,
         rating: place.rating_avg === null ? null : Number(place.rating_avg),
         ratingCount: place.rating_count,

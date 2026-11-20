@@ -79,19 +79,20 @@ export async function importCity(pool, { city = SLYUDYANKA, file = FILE, verbose
       const inserted = await client.query(
         `insert into places (city, city_slug, partner_id, name, category, district, address, lat, lng,
             about, phone, is_published, source, source_id, source_url, source_reviews_url,
-            source_rating, source_rating_count, metadata)
-         values ($1, $2, null, $3, $4, $5, $6, $7, $8, $9, $10, true, '2gis', $11, $12, $13, $14, $15, $16::jsonb)
+            source_rating, source_rating_count, metadata, image_url, photos)
+         values ($1, $2, null, $3, $4, $5, $6, $7, $8, $9, $10, true, '2gis', $11, $12, $13, $14, $15, $16::jsonb, $17, $18::jsonb)
          on conflict (source, source_id) where source_id is not null do update set
            city = excluded.city, city_slug = excluded.city_slug, name = excluded.name,
            category = excluded.category, district = excluded.district, address = excluded.address,
            lat = excluded.lat, lng = excluded.lng, about = excluded.about, phone = excluded.phone,
            source_url = excluded.source_url, source_reviews_url = excluded.source_reviews_url,
            source_rating = excluded.source_rating, source_rating_count = excluded.source_rating_count,
-           metadata = excluded.metadata
+           metadata = excluded.metadata, image_url = excluded.image_url,
+           photos = excluded.photos
          returning id`,
         [CITY.name, CITY.slug, name, category, CITY.name, address, lat, lng, about, phoneOf(org),
           String(org.id), sourceUrl, `${sourceUrl}/tab/reviews`, org.rating ?? null, org.ratingCount ?? 0,
-          JSON.stringify(metadata)]);
+          JSON.stringify(metadata), org.image ?? null, JSON.stringify(org.photos ?? [])]);
       const placeId = inserted.rows[0].id;
       places += 1;
 

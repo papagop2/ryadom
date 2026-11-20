@@ -759,11 +759,14 @@ test('Слюдянка: каталог 2ГИС, честный источник 
   assert.ok(imported, 'в каталоге должны быть организации 2ГИС');
   assert.match(imported.source.url, /^https:\/\/2gis\.ru\/slyudyanka\/firm\//);
   assert.equal(imported.offerCount, 0);
+  assert.match(imported.image, /^https:\/\/i\d\.photo\.2gis\.com\//);
 
   const detail = await app.inject(`/api/v1/places/${imported.id}`);
   assert.equal(detail.statusCode, 200, detail.body);
   assert.equal(detail.json().place.bookable, false);
   assert.equal(detail.json().place.source.name, '2ГИС');
+  assert.ok(detail.json().place.photos.length > 0, 'у карточки должна быть фотолента');
+  assert.match(detail.json().place.photos[0].large, /_656x340\.jpg$/);
   assert.ok(detail.json().reviews.some(review => review.source === '2gis'));
   assert.ok(detail.json().reviews.every(review => review.source === '2gis'));
 

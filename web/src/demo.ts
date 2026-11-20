@@ -237,6 +237,7 @@ function card(place: typeof places[number], bookings = getBookings()) {
     id: place.id, name: place.name, category: place.category as Category, district: place.district,
     address: place.address, about: place.about, location: { lat: place.lat, lng: place.lng },
     city: (place as { city?: string }).city ?? 'demograd',
+    image: null,
     rating: rating === null ? null : Math.round(rating * 10) / 10,
     ratingCount: reviews.length, source: null,
     priceFrom: list.length ? money(Math.min(...list.map(item => item.price))) : null,
