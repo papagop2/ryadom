@@ -592,7 +592,7 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
     const mercator = 1 / Math.cos(next.lat * Math.PI / 180);
     const fitY = Math.log2((size.h * 0.7) * 360 / latSpan / mercator / TILE);
     setCenter(next);
-    setZoom(clamp(Math.floor(Math.min(fitX, fitY)), 9, 16));
+    setZoom(clamp(Math.floor(Math.min(fitX, fitY)) - 1, 8, 16));
   }, [items, size.w, size.h]);
 
   const world = project(center.lat, center.lng, zoom);
