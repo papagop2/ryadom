@@ -375,17 +375,25 @@ h1, h2, h3, p { margin-top: 0; }
   padding: 0;
   animation: pin-drop 0.38s cubic-bezier(0.2, 1.2, 0.4, 1) both;
 }
-.tile-pin span {
-  width: 29px; height: 29px;
+.tile-pin-photo {
+  position: relative;
+  width: 34px; height: 34px;
   display: grid; place-items: center;
   border-radius: 50%;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--yellow-soft), var(--amber));
   color: #15120a;
   font-size: 12px;
   font-weight: 800;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(255, 214, 10, 0.16);
 }
+.tile-pin-photo.with-photo { border: 2px solid rgba(255, 214, 10, 0.88); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.58), 0 0 0 3px rgba(255, 214, 10, 0.12); }
+.tile-pin-photo img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; }
+.tile-pin-photo b { font-weight: 800; }
 .tile-pin em {
+  position: absolute; top: calc(100% + 1px); left: 50%; transform: translateX(-50%);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.15s ease;
   font-style: normal;
   font-size: 8.5px;
   font-weight: 600;
@@ -399,6 +407,7 @@ h1, h2, h3, p { margin-top: 0; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   backdrop-filter: blur(6px);
 }
+.tile-pin:hover em, .tile-pin:focus-visible em { opacity: 1; visibility: visible; }
 .map-tools { position: absolute; z-index: 3; top: 8px; right: 8px; display: grid; gap: 5px; }
 .map-tools button {
   width: 34px; height: 34px;
@@ -1103,7 +1112,9 @@ h1, h2, h3, p { margin-top: 0; }
 .trip-map.readonly { height: 166px; cursor: default; }
 .trip-map:active { cursor: crosshair; }
 .route-line { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: visible; }
-.route-line line { stroke: var(--yellow); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 1 8; filter: drop-shadow(0 0 5px rgba(255, 214, 10, 0.55)); animation: route-flow 9s linear infinite; }
+.route-line path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.route-line .route-casing { stroke: rgba(5, 6, 8, 0.9); stroke-width: 8; }
+.route-line .route-path { stroke: var(--yellow); stroke-width: 4; stroke-dasharray: 1 8; filter: drop-shadow(0 0 6px rgba(255, 214, 10, 0.55)); animation: route-flow 9s linear infinite; }
 @keyframes route-flow { to { stroke-dashoffset: -180; } }
 .trip-pin {
   position: absolute; z-index: 3;
@@ -1718,3 +1729,84 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .photo-viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0 4px; }
 .photo-viewer-bar span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .photo-viewer .ghost-mini:disabled { opacity: 0.35; }
+
+.taxi-map-shell { position: relative; margin: 0 0 9px; }
+.taxi-map-shell .trip-map { height: 225px; border-radius: 22px; border-color: rgba(255, 214, 10, 0.16); }
+.taxi-map-shell.active .trip-map { height: 210px; }
+.taxi-map-badge {
+  position: absolute; z-index: 4; top: 9px; left: 9px; right: 9px;
+  display: flex; justify-content: space-between; gap: 8px;
+  pointer-events: none;
+}
+.taxi-map-badge span {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px; padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(8, 9, 12, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #f1f2f4;
+  font-size: 9.5px; font-weight: 700;
+  backdrop-filter: blur(12px);
+}
+.taxi-map-badge .icon { color: var(--yellow); }
+.taxi-panel {
+  padding: 8px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.065), rgba(10, 11, 15, 0.6)), rgba(12, 13, 17, 0.72);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
+}
+.taxi-panel .route-card { background: rgba(255, 255, 255, 0.035); }
+.taxi-panel .dest-chips { padding-top: 7px; }
+.taxi-empty {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 9px; padding: 10px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 214, 10, 0.25);
+  background: rgba(255, 214, 10, 0.04);
+}
+.taxi-empty-icon {
+  width: 36px; height: 36px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  color: #15120a;
+  background: linear-gradient(135deg, var(--yellow-soft), var(--amber));
+}
+.taxi-empty div { display: grid; gap: 2px; }
+.taxi-empty strong { font-size: 13px; }
+.taxi-empty span { font-size: 10.5px; color: var(--muted); }
+.estimate-loading { display: flex; align-items: center; gap: 7px; padding: 13px 11px; color: #bcc2ca; font-size: 11px; }
+.estimate-loading .icon { color: var(--yellow); animation: refresh-spin 1s linear infinite; }
+.tariff-line { display: flex; align-items: center; gap: 9px; }
+.tariff-line > div { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.tariff-line > div strong { font-size: 13px; color: #f3f4f6; }
+.tariff-line > div span { font-size: 10px; color: #aeb4bd; }
+.tariff-line > strong { font-size: 20px; font-weight: 750; letter-spacing: -0.03em; color: #fff; }
+.tariff-icon {
+  width: 38px; height: 38px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  color: #15120a;
+  background: linear-gradient(135deg, var(--yellow-soft), var(--amber));
+  box-shadow: 0 8px 18px rgba(255, 179, 0, 0.22);
+}
+.taxi .estimate-card .cash-line { justify-content: center; margin: 5px 0 0; }
+
+.tariff-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 7px; }
+.tariff-options button {
+  display: grid; gap: 1px; padding: 6px 7px;
+  border-radius: 13px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.045);
+  color: #aeb4bd;
+  text-align: left;
+  transition: background 0.18s, border-color 0.18s, transform 0.14s;
+}
+.tariff-options button:active { transform: scale(0.96); }
+.tariff-options button span { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; }
+.tariff-options button span .icon { color: #8d949e; }
+.tariff-options button em { font-style: normal; font-size: 11.5px; font-weight: 750; color: #fff; font-variant-numeric: tabular-nums; }
+.tariff-options button.active { border-color: rgba(255, 214, 10, 0.62); background: rgba(255, 214, 10, 0.13); color: var(--yellow); }
+.tariff-options button.active span .icon { color: var(--yellow); }
+.tariff-options button.active em { color: var(--yellow-soft); }

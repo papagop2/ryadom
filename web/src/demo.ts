@@ -63,9 +63,10 @@ type DemoRole = { role: string; partner_id: string | null };
 type DemoMe = { user: { id: string; phone: string; displayName: string }; roles: DemoRole[]; partnerIds: string[] };
 type DemoTripPoint = { label: string; lat: number; lng: number };
 type DemoTripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+type DemoTripTariff = 'economy' | 'comfort' | 'minivan';
 type DemoTrip = {
   id: string; status: DemoTripStatus; from: DemoTripPoint; to: DemoTripPoint; distanceKm: number; durationMin: number;
-  price: Money; createdAt: string; client: { id: string; name: string };
+  price: Money; tariff?: DemoTripTariff; createdAt: string; client: { id: string; name: string };
   driver: { id: string; name: string; car: string; plate: string } | null;
 };
 type DemoServiceOffer = {
@@ -188,7 +189,7 @@ const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p
 const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
 const saveServices = (items: DemoServiceRequest[]) => write(SERVICE_KEY, items);
 
-function tripQuote(from: DemoTripPoint, to: DemoTripPoint) {
+function tripQuote(from: DemoTripPoint, to: DemoTripPoint, tariff: DemoTripTariff = 'economy') {
   const rad = (value: number) => value * Math.PI / 180;
   const dLat = rad(to.lat - from.lat);
   const dLng = rad(to.lng - from.lng);
@@ -196,8 +197,14 @@ function tripQuote(from: DemoTripPoint, to: DemoTripPoint) {
   const straight = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(a)));
   const distanceKm = Math.max(0.3, Math.round(straight * 1.35 * 10) / 10);
   const durationMin = Math.max(4, Math.round(distanceKm / 24 * 60 + 3));
-  const cents = Math.max(14900, Math.round((9900 + distanceKm * 2500 + durationMin * 500) / 1000) * 1000);
-  return { distanceKm, durationMin, price: money(cents) };
+  const config = {
+    economy: { minCents: 14900, multiplier: 1 },
+    comfort: { minCents: 21900, multiplier: 1.45 },
+    minivan: { minCents: 27900, multiplier: 1.8 },
+  }[tariff];
+  const raw = (9900 + distanceKm * 2500 + durationMin * 500) * config.multiplier;
+  const cents = Math.max(config.minCents, Math.round(raw / 1000) * 1000);
+  return { distanceKm, durationMin, price: money(cents), tariff };
 }
 
 const placeById = (id: string) => places.find(item => item.id === id);
@@ -610,7 +617,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const from = body.from as unknown as DemoTripPoint;
     const to = body.to as unknown as DemoTripPoint;
     if (!from || !to) return fail('Укажите маршрут', 'invalid_route');
-    return tripQuote(from, to) as T;
+    const tariff = (body.tariff === 'comfort' || body.tariff === 'minivan' ? body.tariff : 'economy') as DemoTripTariff;
+    return tripQuote(from, to, tariff) as T;
   }
 
   if (url.pathname === '/api/v1/trips' && method === 'POST') {
@@ -628,7 +636,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (trips.some(item => item.client.id === me.user.id && TRIP_ACTIVE.includes(item.status))) {
       return fail('У вас уже есть активная поездка', 'active_trip');
     }
-    const quote = tripQuote(from, to);
+    const tariff = (body.tariff === 'comfort' || body.tariff === 'minivan' ? body.tariff : 'economy') as DemoTripTariff;
+    const quote = tripQuote(from, to, tariff);
     const trip: DemoTrip & { key?: string | null } = {
       id: `t-${Date.now()}`, status: 'requested', from, to, ...quote,
       createdAt: new Date().toISOString(), client: { id: me.user.id, name: me.user.displayName }, driver: null, key,

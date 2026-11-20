@@ -363,12 +363,21 @@ test('такси: оценка, заказ, принятие водителем 
   assert.equal(estimate.statusCode, 200, estimate.body);
   assert.ok(estimate.json().distanceKm > 10);
   assert.ok(estimate.json().price.cents >= 14900);
+  assert.equal(estimate.json().tariff, 'economy');
+
+  const comfort = await app.inject({ method: 'POST', url: '/api/v1/trips/estimate',
+    payload: { from, to, tariff: 'comfort' } });
+  assert.equal(comfort.statusCode, 200, comfort.body);
+  assert.equal(comfort.json().tariff, 'comfort');
+  assert.ok(comfort.json().price.cents > estimate.json().price.cents);
 
   const key = `trip-${Date.now()}`;
   const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,
-    payload: { from, to, idempotencyKey: key } });
+    payload: { from, to, tariff: 'comfort', idempotencyKey: key } });
   assert.equal(created.statusCode, 201, created.body);
   assert.equal(created.json().status, 'requested');
+  assert.equal(created.json().tariff, 'comfort');
+  assert.ok(created.json().price.cents >= comfort.json().price.cents);
   const tripId = created.json().id;
 
   const again = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: client.headers,

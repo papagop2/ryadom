@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerE
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { demoRequest } from './demo';
+import { roadRoute, type RoadRoute } from './routing';
 import './style.css';
 
 type Money = { cents: number; currency: string };
@@ -58,12 +59,13 @@ type Booking = {
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
 type TripPoint = { label: string; lat: number; lng: number };
 type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+type TripTariff = 'economy' | 'comfort' | 'minivan';
 type Trip = {
   id: string; status: TripStatus; from: TripPoint; to: TripPoint; distanceKm: number; durationMin: number;
-  price: Money; createdAt: string; client: { id: string; name: string };
+  price: Money; tariff?: TripTariff; createdAt: string; client: { id: string; name: string };
   driver: { id: string; name: string; car: string; plate: string } | null;
 };
-type Estimate = { distanceKm: number; durationMin: number; price: Money };
+type Estimate = { distanceKm: number; durationMin: number; price: Money; route?: 'osrm' | 'straight'; tariff?: TripTariff };
 type ServiceCategory = 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
 type ServiceStatus = 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
 type ServiceOffer = {
@@ -615,7 +617,11 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
       return <button key={item.id} type="button" className="tile-pin" title={item.name}
         aria-label={item.name} style={{ left: `${pos.x - left}px`, top: `${pos.y - top}px` }}
         onPointerDown={event => event.stopPropagation()} onClick={() => onOpen(item)}>
-        <span>{item.name.slice(0, 1)}</span><em>{item.name}</em>
+        <span className={`tile-pin-photo${item.image ? ' with-photo' : ''}`}>
+          <b>{item.name.slice(0, 1)}</b>
+          {item.image && <img src={item.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+            onError={event => { event.currentTarget.style.display = 'none'; }} />}
+        </span><em>{item.name}</em>
       </button>;
     })}
     <div className="map-tools">
@@ -654,10 +660,16 @@ const tripStatusLabel: Record<TripStatus, string> = {
   in_progress: 'В пути', completed: 'Завершена', cancelled: 'Отменена',
 };
 const TRIP_ACTIVE: TripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
+const TRIP_TARIFFS: { id: TripTariff; label: string; hint: string }[] = [
+  { id: 'economy', label: 'Эконом', hint: 'до 4 мест' },
+  { id: 'comfort', label: 'Комфорт', hint: 'просторнее' },
+  { id: 'minivan', label: 'Минивэн', hint: 'багаж' },
+];
 
 function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: TripPoint | null; onPick: (point: TripPoint) => void; readOnly?: boolean }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 360, h: 220 });
+  const [route, setRoute] = useState<RoadRoute | null>(null);
   useEffect(() => {
     const element = box.current;
     if (!element) return;
@@ -668,15 +680,31 @@ function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: 
     return () => observer.disconnect();
   }, []);
 
-  const center = to ? { lat: (from.lat + to.lat) / 2, lng: (from.lng + to.lng) / 2 } : from;
+  useEffect(() => {
+    if (!to) { setRoute(null); return; }
+    let cancelled = false;
+    setRoute(null);
+    void roadRoute(from, to).then(value => { if (!cancelled) setRoute(value); });
+    return () => { cancelled = true; };
+  }, [from.lat, from.lng, to?.lat, to?.lng]);
+
+  const routePoints = route?.points ?? (to ? [[from.lat, from.lng], [to.lat, to.lng]] as [number, number][] : []);
+  const bounds = routePoints.length ? routePoints : [[from.lat, from.lng]];
+  const lats = bounds.map(point => point[0]);
+  const lngs = bounds.map(point => point[1]);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
   let zoom = 14;
   if (to) {
-    const latSpan = Math.max(Math.abs(from.lat - to.lat), 0.002);
-    const lngSpan = Math.max(Math.abs(from.lng - to.lng), 0.002);
+    const latSpan = Math.max(maxLat - minLat, 0.002);
+    const lngSpan = Math.max(maxLng - minLng, 0.002);
     const fitX = Math.log2((size.w * 0.82) * 360 / lngSpan / TILE);
     const mercator = 1 / Math.cos(center.lat * Math.PI / 180);
     const fitY = Math.log2((size.h * 0.72) * 360 / latSpan / mercator / TILE);
-    zoom = clamp(Math.floor(Math.min(fitX, fitY)), 9, 15);
+    zoom = clamp(Math.floor(Math.min(fitX, fitY)), 9, 16);
   }
   const world = project(center.lat, center.lng, zoom);
   const left = world.x - size.w / 2;
@@ -693,6 +721,10 @@ function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: 
   }
   const start = project(from.lat, from.lng, zoom);
   const end = to ? project(to.lat, to.lng, zoom) : null;
+  const routePath = routePoints.map(([lat, lng], index) => {
+    const point = project(lat, lng, zoom);
+    return `${index ? 'L' : 'M'}${point.x - left} ${point.y - top}`;
+  }).join(' ');
 
   return <div className={`tile-map trip-map${readOnly ? ' readonly' : ''}`} ref={box} aria-label="Карта маршрута"
     onClick={event => {
@@ -706,7 +738,8 @@ function TripMap({ from, to, onPick, readOnly = false }: { from: TripPoint; to: 
         style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
     </div>
     {end && <svg className="route-line" width={size.w} height={size.h} aria-hidden="true">
-      <line x1={start.x - left} y1={start.y - top} x2={end.x - left} y2={end.y - top} />
+      <path className="route-casing" d={routePath} />
+      <path className="route-path" d={routePath} />
     </svg>}
     <span className="trip-pin from" style={{ left: `${start.x - left}px`, top: `${start.y - top}px` }}><span /></span>
     {end && <span className="trip-pin to" style={{ left: `${end.x - left}px`, top: `${end.y - top}px` }}><span /></span>}
@@ -744,7 +777,7 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
       <span className="route-dot to" />
       <p>{trip.to.label}</p>
     </div>
-    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин</p>
+    <p className="meta trip-meta"><Icon name="car" size={13} />{trip.distanceKm.toFixed(1)} км · {trip.durationMin} мин · {TRIP_TARIFFS.find(item => item.id === (trip.tariff ?? 'economy'))?.label}</p>
     {showClient && <p className="meta trip-client"><Icon name="user" size={13} />{trip.client.name}</p>}
     {trip.driver && <div className="driver-line">
       <span className="mini-avatar">{trip.driver.name.slice(0, 1)}</span>
@@ -762,7 +795,9 @@ function TaxiScreen({ me, city, notify, onLogin }: {
   const destinations = destinationsFor(city);
   const [from, setFrom] = useState<TripPoint>({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
   const [to, setTo] = useState<TripPoint | null>(null);
-  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [tariff, setTariff] = useState<TripTariff>('economy');
+  const [quotes, setQuotes] = useState<Record<TripTariff, Estimate> | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [trips, setTrips] = useState<Trip[] | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -785,11 +820,19 @@ function TaxiScreen({ me, city, notify, onLogin }: {
   }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!to) { setEstimate(null); return; }
+    if (!to) { setQuotes(null); setQuoteLoading(false); return; }
     let cancelled = false;
-    void api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to } })
-      .then(data => { if (!cancelled) setEstimate(data); })
-      .catch(() => { if (!cancelled) setEstimate(null); });
+    setQuoteLoading(true);
+    setQuotes(null);
+    void Promise.all(TRIP_TARIFFS.map(option =>
+      api<Estimate>('/api/v1/trips/estimate', { method: 'POST', body: { from, to, tariff: option.id } })
+        .then(data => [option.id, data] as const)))
+      .then(entries => {
+        if (cancelled) return;
+        setQuotes(Object.fromEntries(entries) as Record<TripTariff, Estimate>);
+      })
+      .catch(() => { if (!cancelled) setQuotes(null); })
+      .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
   }, [from, to]);
 
@@ -798,7 +841,7 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     if (!to) return;
     setBusy(true);
     try {
-      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, idempotencyKey: `taxi-${Date.now()}` } });
+      await api<Trip>('/api/v1/trips', { method: 'POST', body: { from, to, tariff, idempotencyKey: `taxi-${Date.now()}` } });
       notify('Заказ создан, ищем водителя');
       load();
     } catch (error) {
@@ -815,6 +858,7 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     } catch { notify('Не удалось отменить'); }
   }
 
+  const estimate = quotes?.[tariff] ?? null;
   const history = (trips ?? []).filter(trip => !TRIP_ACTIVE.includes(trip.status)).slice(0, 3);
 
   return <section className="taxi">
@@ -824,48 +868,82 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     </div>
 
     {active ? <>
+      <div className="taxi-map-shell active">
+        <TripMap from={active.from} to={active.to} onPick={() => {}} readOnly />
+        <div className="taxi-map-badge"><span><Icon name="car" size={13} />{tripStatusLabel[active.status]}</span><span>наличными</span></div>
+      </div>
       <TripSummary trip={active}>
         {(active.status === 'requested' || active.status === 'assigned' || active.status === 'arrived') &&
           <button type="button" className="ghost-mini" onClick={() => void cancel(active.id)}>Отменить поездку</button>}
         {active.status === 'in_progress' && <span className="meta"><Icon name="shield" size={13} /> В пути, отмена через поддержку</span>}
       </TripSummary>
-      <TripMap from={active.from} to={active.to} onPick={() => {}} readOnly />
       <TripProgress status={active.status} />
       <p className="hint">Статус обновляется автоматически. Водитель подтвердит посадку.</p>
     </> : <>
-      <div className="route-card">
-        <span className="route-dot from" />
-        <div className="route-field">
-          <span className="meta">Откуда</span>
-          <input value={from.label} onChange={event => setFrom({ ...from, label: event.target.value })} maxLength={120} />
-        </div>
-        <button type="button" className="round-btn locate" aria-label="Моё место" onClick={() => {
-          if (!navigator.geolocation) return notify('Геолокация недоступна');
-          navigator.geolocation.getCurrentPosition(
-            position => setFrom({ label: 'Моё место', lat: position.coords.latitude, lng: position.coords.longitude }),
-            () => notify('Не удалось определить положение'), { timeout: 8000, maximumAge: 60000 });
-        }}><Icon name="pin" size={17} /></button>
-        <span className="route-dot to" />
-        <div className="route-field to">
-          <span className="meta">Куда</span>
-          <input value={to?.label ?? ''} readOnly placeholder="Выберите точку" />
+      <div className="taxi-map-shell">
+        <TripMap from={from} to={to} onPick={setTo} />
+        <div className="taxi-map-badge">
+          <span><Icon name="pin" size={13} />{city?.name ?? 'Город'}</span>
+          <span>наличными</span>
         </div>
       </div>
 
-      <div className="dest-chips">
-        {destinations.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
-          onClick={() => setTo(point)}><Icon name="pin" size={13} />{point.label}</button>)}
+      <div className="taxi-panel">
+        <div className="route-card">
+          <span className="route-dot from" />
+          <div className="route-field">
+            <span className="meta">Откуда</span>
+            <input value={from.label} onChange={event => setFrom({ ...from, label: event.target.value })} maxLength={120} />
+          </div>
+          <button type="button" className="round-btn locate" aria-label="Моё место" onClick={() => {
+            if (!navigator.geolocation) return notify('Геолокация недоступна');
+            navigator.geolocation.getCurrentPosition(
+              position => setFrom({ label: 'Моё место', lat: position.coords.latitude, lng: position.coords.longitude }),
+              () => notify('Не удалось определить положение'), { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 });
+          }}><Icon name="pin" size={17} /></button>
+          <span className="route-dot to" />
+          <div className="route-field to">
+            <span className="meta">Куда</span>
+            <input value={to?.label ?? ''} readOnly placeholder="Куда едем?" />
+          </div>
+        </div>
+
+        <div className="dest-chips">
+          {destinations.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
+            onClick={() => { haptic(4); setTo(point); }}><Icon name="pin" size={13} />{point.label}</button>)}
+        </div>
+
+        {!to && <div className="taxi-empty">
+          <span className="taxi-empty-icon"><Icon name="map" size={20} /></span>
+          <div><strong>Куда едем?</strong><span>Выберите точку или ткните на карту</span></div>
+        </div>}
+
+        {to && <div className="tariff-options">
+          {TRIP_TARIFFS.map(option => <button key={option.id} type="button"
+            className={tariff === option.id ? 'active' : ''}
+            aria-pressed={tariff === option.id}
+            onClick={() => { haptic(3); setTariff(option.id); }}>
+            <span><Icon name="car" size={13} />{option.label}</span>
+            <em>{quotes?.[option.id] ? price(quotes[option.id].price) : option.hint}</em>
+          </button>)}
+        </div>}
+
+        {quoteLoading && <div className="estimate-card estimate-loading">
+          <span><Icon name="refresh" size={14} />Строим маршрут по дорогам…</span>
+        </div>}
+
+        {estimate && <div className="estimate-card">
+          <div className="tariff-line">
+            <span className="tariff-icon"><Icon name="car" size={19} /></span>
+            <div><strong>{TRIP_TARIFFS.find(item => item.id === tariff)?.label} по городу</strong>
+              <span>{estimate.distanceKm.toFixed(1)} км · {estimate.durationMin} мин · {estimate.route === 'osrm' ? 'по дорогам' : 'напрямую'}</span></div>
+            <strong>{price(estimate.price)}</strong>
+          </div>
+          <button type="button" className="primary" disabled={busy || !to} onClick={() => void order()}>
+            {busy ? 'Заказываем…' : me ? 'Заказать' : 'Войти и заказать'}<Icon name="chevron" size={16} />
+          </button>
+        </div>}
       </div>
-
-      <TripMap from={from} to={to} onPick={setTo} />
-
-      {estimate && <div className="estimate-card">
-        <div><span className="meta"><Icon name="car" size={13} />{estimate.distanceKm.toFixed(1)} км · {estimate.durationMin} мин</span>
-          <strong>{price(estimate.price)}</strong></div>
-        <button type="button" className="primary" disabled={busy || !to} onClick={() => void order()}>
-          {busy ? 'Заказываем…' : me ? 'Заказать' : 'Войти и заказать'}<Icon name="chevron" size={16} />
-        </button>
-      </div>}
     </>}
 
     {history.length > 0 && <>

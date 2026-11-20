@@ -124,6 +124,7 @@ function tripView(row) {
     distanceKm: Number(row.distance_km),
     durationMin: row.duration_min,
     price: money(row.price_cents, row.currency),
+    tariff: row.tariff ?? 'economy',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     client: { id: row.client_user_id, name: row.client_name },
@@ -149,14 +150,52 @@ function distanceKm(from, to) {
   return 2 * radius * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-// Тариф закрытого пилота: посадка + километры + минуты, минимум 149 ₽.
-function quoteTrip(from, to) {
+const ROUTE_CACHE = new Map();
+async function roadRoute(from, to) {
+  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)};${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
+  if (ROUTE_CACHE.has(key)) return ROUTE_CACHE.get(key);
+  const path = `${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+  const bases = [
+    process.env.OSRM_URL,
+    'https://router.project-osrm.org',
+    'https://routing.openstreetmap.de/routed-car',
+  ].filter(Boolean);
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}/route/v1/driving/${path}`, { signal: AbortSignal.timeout(3200) });
+      if (!response.ok) continue;
+      const data = await response.json();
+      const route = data.routes?.[0];
+      if (!route || !Number.isFinite(route.distance) || !Number.isFinite(route.duration)) continue;
+      const value = { distanceKm: route.distance / 1000, durationMin: route.duration / 60 };
+      if (ROUTE_CACHE.size > 500) ROUTE_CACHE.clear();
+      ROUTE_CACHE.set(key, value);
+      return value;
+    } catch { /* пробуем следующий маршрутизатор */ }
+  }
+  return null;
+}
+
+const TRIP_TARIFFS = {
+  economy: { minCents: 14900, multiplier: 1 },
+  comfort: { minCents: 21900, multiplier: 1.45 },
+  minivan: { minCents: 27900, multiplier: 1.8 },
+};
+const TRIP_TARIFF_SCHEMA = { type: 'string', enum: Object.keys(TRIP_TARIFFS) };
+
+// Тариф закрытого пилота: посадка + километры + минуты, минимум зависит от класса.
+async function quoteTrip(from, to, tariff = 'economy') {
+  const road = await roadRoute(from, to);
   const straight = distanceKm(from, to);
-  const km = Math.max(0.3, Math.round(straight * 1.35 * 10) / 10);
-  const minutes = Math.max(4, Math.round(km / 24 * 60 + 3));
-  const raw = 9900 + km * 2500 + minutes * 500;
-  const cents = Math.max(14900, Math.round(raw / 1000) * 1000);
-  return { distanceKm: km, durationMin: minutes, price: money(cents), currency: 'RUB' };
+  const km = Math.max(0.3, Math.round((road?.distanceKm ?? straight * 1.35) * 10) / 10);
+  const minutes = Math.max(4, Math.round(road?.durationMin ?? (km / 24 * 60 + 3)));
+  const config = TRIP_TARIFFS[tariff] ?? TRIP_TARIFFS.economy;
+  const raw = (9900 + km * 2500 + minutes * 500) * config.multiplier;
+  const cents = Math.max(config.minCents, Math.round(raw / 1000) * 1000);
+  return {
+    distanceKm: km, durationMin: minutes, price: money(cents), currency: 'RUB',
+    route: road ? 'osrm' : 'straight', tariff: TRIP_TARIFFS[tariff] ? tariff : 'economy',
+  };
 }
 
 const SERVICE_CATEGORIES = ['repair', 'cleaning', 'beauty', 'tutoring', 'moving', 'other'];
@@ -1281,9 +1320,9 @@ export function routes(app, { pool, demoLogin = false }) {
   app.post('/api/v1/trips/estimate', {
     schema: { body: {
       type: 'object', additionalProperties: false, required: ['from', 'to'],
-      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA },
+      properties: { from: POINT_SCHEMA, to: POINT_SCHEMA, tariff: TRIP_TARIFF_SCHEMA },
     } },
-  }, async (request) => quoteTrip(request.body.from, request.body.to));
+  }, async (request) => quoteTrip(request.body.from, request.body.to, request.body.tariff ?? 'economy'));
 
   app.post('/api/v1/trips', {
     schema: { body: {
@@ -1291,13 +1330,14 @@ export function routes(app, { pool, demoLogin = false }) {
       properties: {
         from: POINT_SCHEMA,
         to: POINT_SCHEMA,
+        tariff: TRIP_TARIFF_SCHEMA,
         idempotencyKey: { type: 'string', minLength: 8, maxLength: 80 },
       },
     } },
   }, async (request, reply) => {
     const auth = requireUser(request);
-    const { from, to, idempotencyKey = null } = request.body;
-    const quote = quoteTrip(from, to);
+    const { from, to, tariff = 'economy', idempotencyKey = null } = request.body;
+    const quote = await quoteTrip(from, to, tariff);
     const attempt = async () => withTransaction(pool, async (client) => {
       if (idempotencyKey) {
         const existing = await client.query(
@@ -1306,10 +1346,10 @@ export function routes(app, { pool, demoLogin = false }) {
       }
       const inserted = await client.query(
         `insert into trips (client_user_id, from_label, from_lat, from_lng, to_label, to_lat, to_lng,
-                            distance_km, duration_min, price_cents, currency, idempotency_key)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
+                            distance_km, duration_min, price_cents, currency, tariff, idempotency_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
         [auth.userId, from.label, from.lat, from.lng, to.label, to.lat, to.lng,
-          quote.distanceKm, quote.durationMin, quote.price.cents, quote.currency, idempotencyKey]);
+          quote.distanceKm, quote.durationMin, quote.price.cents, quote.currency, quote.tariff, idempotencyKey]);
       const tripId = inserted.rows[0].id;
       await client.query(
         `insert into trip_events (trip_id, status, actor_user_id) values ($1, 'requested', $2)`, [tripId, auth.userId]);
