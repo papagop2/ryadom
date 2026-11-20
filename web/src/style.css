@@ -1613,3 +1613,35 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 
 .place-schedule { display: flex; align-items: flex-start; gap: 7px; margin: 2px 0 8px; line-height: 1.45; }
 .place-schedule svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+
+.me-pin {
+  position: absolute;
+  z-index: 3;
+  width: 14px; height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #57a9ff;
+  border: 2px solid #eaf4ff;
+  box-shadow: 0 0 0 5px rgba(87, 169, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.me-pin::after {
+  content: ""; position: absolute; inset: -8px;
+  border-radius: 50%; border: 1px solid rgba(87, 169, 255, 0.6);
+  animation: me-pulse 2s ease-out infinite;
+}
+@keyframes me-pulse { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(1.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .me-pin::after { animation: none; } }
+
+.title-actions { display: inline-flex; align-items: center; gap: 6px; }
+.locate-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  height: 25px; padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 10.5px; font-weight: 700;
+}
+.locate-chip:active { transform: scale(0.95); }
+.locate-chip.active { color: var(--yellow); border-color: rgba(255, 214, 10, 0.4); background: rgba(255, 214, 10, 0.1); }
+.locate-chip:disabled { opacity: 0.6; }

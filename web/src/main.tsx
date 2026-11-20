@@ -480,7 +480,7 @@ function App() {
     <div className="screen" key={tab}>
       {tab === 'home' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} onPick={() => goTab('map')} notify={setToast} />}
       {tab === 'map' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} withMap notify={setToast} />}
-      {tab === 'taxi' && <TaxiScreen me={me} notify={setToast} onLogin={() => goTab('profile')} />}
+      {tab === 'taxi' && <TaxiScreen me={me} city={city} notify={setToast} onLogin={() => goTab('profile')} />}
       {tab === 'orders' && <Orders me={me} notify={setToast} />}
       {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
     </div>
@@ -537,6 +537,7 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
   const [size, setSize] = useState({ w: 360, h: 320 });
   const [zoom, setZoom] = useState(14);
   const [center, setCenter] = useState(cityCenter);
+  const [me, setMe] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     centered.current = false;
@@ -601,6 +602,13 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
       {tiles.map(tile => <img key={tile.key} src={tile.src} alt="" draggable={false} loading="lazy"
         style={{ left: `${tile.left}px`, top: `${tile.top}px` }} />)}
     </div>
+    {me && (() => {
+      const pos = project(me.lat, me.lng, zoom);
+      const x = pos.x - left;
+      const y = pos.y - top;
+      if (x < -20 || y < -20 || x > size.w + 20 || y > size.h + 20) return null;
+      return <span className="me-pin" style={{ left: `${x}px`, top: `${y}px` }} aria-label="Моё место" />;
+    })()}
     {items.map(item => {
       const pos = project(item.location.lat, item.location.lng, zoom);
       return <button key={item.id} type="button" className="tile-pin" title={item.name}
@@ -615,21 +623,30 @@ function MapView({ items, center: cityCenter, onOpen, notify }: {
       <button type="button" aria-label="Где я" onClick={() => {
         if (!navigator.geolocation) return notify('Геолокация недоступна');
         navigator.geolocation.getCurrentPosition(
-          position => { setCenter({ lat: position.coords.latitude, lng: position.coords.longitude }); setZoom(15); },
+          position => {
+            const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+            setMe(point);
+            setCenter(point);
+            setZoom(15);
+          },
           () => notify('Не удалось определить положение. Карта работает без геолокации.'),
-          { timeout: 8000, maximumAge: 60000 });
+          { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 });
       }}>◎</button>
     </div>
     <p className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a></p>
   </div>;
 }
 
-const DESTINATIONS: TripPoint[] = [
-  { label: 'Аэропорт', lat: 55.9726, lng: 37.4146 },
-  { label: 'Вокзал', lat: 55.7761, lng: 37.6556 },
-  { label: 'Сити', lat: 55.7495, lng: 37.5390 },
-  { label: 'Парк', lat: 55.7310, lng: 37.6010 },
-];
+function destinationsFor(city: City | null): TripPoint[] {
+  if (city?.slug === 'slyudyanka') {
+    return [
+      { label: 'Вокзал', lat: 51.658634, lng: 103.724241 },
+      { label: 'Рынок', lat: 51.654955, lng: 103.717088 },
+      { label: 'Центр', lat: city.center.lat, lng: city.center.lng },
+    ];
+  }
+  return city ? [{ label: 'Центр', lat: city.center.lat, lng: city.center.lng }] : [];
+}
 
 const tripStatusLabel: Record<TripStatus, string> = {
   requested: 'Ищем водителя', assigned: 'Водитель едет', arrived: 'Водитель на месте',
@@ -737,8 +754,12 @@ function TripSummary({ trip, children, showClient = false }: { trip: Trip; child
   </div>;
 }
 
-function TaxiScreen({ me, notify, onLogin }: { me: Me | null; notify: (text: string) => void; onLogin: () => void }) {
-  const [from, setFrom] = useState<TripPoint>({ label: 'Центр', lat: CITY.lat, lng: CITY.lng });
+function TaxiScreen({ me, city, notify, onLogin }: {
+  me: Me | null; city: City | null; notify: (text: string) => void; onLogin: () => void;
+}) {
+  const cityPoint = city?.center ?? CITY;
+  const destinations = destinationsFor(city);
+  const [from, setFrom] = useState<TripPoint>({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
   const [to, setTo] = useState<TripPoint | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [trips, setTrips] = useState<Trip[] | null>(null);
@@ -756,6 +777,11 @@ function TaxiScreen({ me, notify, onLogin }: { me: Me | null; notify: (text: str
     const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
   }, [active?.id, load]);
+
+  useEffect(() => {
+    setFrom({ label: city?.name ?? 'Центр', lat: cityPoint.lat, lng: cityPoint.lng });
+    setTo(null);
+  }, [city?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!to) { setEstimate(null); return; }
@@ -826,7 +852,7 @@ function TaxiScreen({ me, notify, onLogin }: { me: Me | null; notify: (text: str
       </div>
 
       <div className="dest-chips">
-        {DESTINATIONS.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
+        {destinations.map(point => <button key={point.label} type="button" className={to?.label === point.label ? 'active' : ''}
           onClick={() => setTo(point)}><Icon name="pin" size={13} />{point.label}</button>)}
       </div>
 
@@ -1022,6 +1048,8 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [refreshing, setRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   const pullRef = useRef(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -1042,6 +1070,10 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     if (category !== 'all') params.set('category', category);
     if (district !== 'all') params.set('district', district);
     if (query.trim()) params.set('q', query.trim());
+    if (coords) {
+      params.set('lat', String(coords.lat));
+      params.set('lng', String(coords.lng));
+    }
     setError(false);
     const timer = setTimeout(() => {
       void api<{ items: PlaceCard[]; total: number }>(`/api/v1/places?${params}`, { signal: controller.signal })
@@ -1063,7 +1095,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         });
     }, 220);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [category, district, query, refreshKey, city?.slug]);
+  }, [category, district, query, refreshKey, city?.slug, coords?.lat, coords?.lng]);
 
   useEffect(() => {
     if (open || filterOpen || refreshing) return;
@@ -1111,6 +1143,20 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     };
   }, [open, filterOpen, refreshing]);
 
+  function locate() {
+    if (!navigator.geolocation) return notify('Геолокация недоступна');
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setLocating(false);
+        haptic([6, 20, 6]);
+        notify('Сортируем по расстоянию от вас');
+      },
+      () => { setLocating(false); notify('Не удалось определить положение'); },
+      { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 });
+  }
+
   async function loadMore() {
     if (!city || !items || loadingMore || items.length >= total) return;
     setLoadingMore(true);
@@ -1119,6 +1165,10 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
       if (category !== 'all') params.set('category', category);
       if (district !== 'all') params.set('district', district);
       if (query.trim()) params.set('q', query.trim());
+      if (coords) {
+        params.set('lat', String(coords.lat));
+        params.set('lng', String(coords.lng));
+      }
       const data = await api<{ items: PlaceCard[]; total: number }>(`/api/v1/places?${params}`);
       setItems(current => current ? [...current, ...data.items] : data.items);
       setTotal(data.total ?? data.items.length);
@@ -1191,7 +1241,13 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     <section aria-labelledby="catalogue">
       <div className="section-title">
         <h2 id="catalogue">{withMap ? 'На карте' : 'Рядом с вами'}</h2>
-        <span className="count-chip">{total || (items ? items.length : '—')}</span>
+        <span className="title-actions">
+          <button type="button" className={`locate-chip${coords ? ' active' : ''}`}
+            disabled={locating} onClick={locate} aria-label="Сортировать по расстоянию">
+            <Icon name="pin" size={12} />{locating ? 'Ищем…' : coords ? 'Ближе' : 'Где я'}
+          </button>
+          <span className="count-chip">{total || (items ? items.length : '—')}</span>
+        </span>
       </div>
 
       {error ? <div className="notice" role="status">
@@ -1407,6 +1463,10 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         <span className="source-badge">2ГИС</span>{place.source.rating !== null ? place.source.rating.toFixed(1) : 'карточка'}
       </a>}
       {detail?.place.phone && <a className="chip" href={`tel:${detail.place.phone}`}><Icon name="phone" size={14} />Позвонить</a>}
+      <a className="chip" href={`https://yandex.ru/maps/?rtext=~${place.location.lat},${place.location.lng}&rtt=auto`}
+        target="_blank" rel="noopener noreferrer"><Icon name="map" size={14} />Маршрут</a>
+      {place.source?.url && <a className="chip" href={`${place.source.url}/tab/photos`}
+        target="_blank" rel="noopener noreferrer"><Icon name="sparkles" size={14} />Фото</a>}
       {detail?.place.info?.sites?.[0] && <a className="chip" target="_blank" rel="noopener noreferrer"
         href={/^https?:\/\//i.test(detail.place.info.sites[0]) ? detail.place.info.sites[0] : `https://${detail.place.info.sites[0]}`}>
         Сайт
