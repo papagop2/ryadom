@@ -28,8 +28,10 @@ export async function searchAddress(query: string, citySlug?: string | null): Pr
   if (DEMO) {
     const normalize = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     const lower = normalize(text);
-    return DEMO_PLACES.filter(place =>
-      normalize(`${place.label} ${place.address} ${place.name ?? ''}`).includes(lower)).slice(0, 6);
+    const found = DEMO_PLACES.filter(place =>
+      normalize(`${place.label} ${place.address} ${place.name ?? ''}`).includes(lower));
+    return found.sort((a, b) => Number(normalize(b.label) === lower || normalize(b.name ?? '') === lower)
+      - Number(normalize(a.label) === lower || normalize(a.name ?? '') === lower)).slice(0, 6);
   }
   const key = `${citySlug ?? ''}|${text.toLowerCase()}`;
   const cached = cache.get(key);

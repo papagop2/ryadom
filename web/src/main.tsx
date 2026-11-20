@@ -1123,7 +1123,9 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     setToText(point.label);
     try {
       const items = await searchAddress(point.label, city?.slug);
-      if (items[0]) applyPlace(items[0], { kind: 'to' });
+      const exact = items.find(item => item.label.toLowerCase() === point.label.toLowerCase()
+        || item.name?.toLowerCase() === point.label.toLowerCase());
+      if (exact || items[0]) applyPlace(exact ?? items[0], { kind: 'to' });
       else if (point.address) applyPlace({ ...point, label: point.label, address: point.address, name: null, kind: null }, { kind: 'to' });
       else notify('Уточните адрес в строке «Куда»');
     } catch {
