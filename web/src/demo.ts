@@ -1,8 +1,16 @@
 // Демо-режим для GitHub Pages: тот же интерфейс и сценарии, но данные
 // хранятся в localStorage, сеть и PostgreSQL не нужны. Включается VITE_DEMO=1.
 
+import district from './demo-district.json';
+
 type Category = 'salon' | 'services' | 'health' | 'food';
 type Money = { cents: number; currency: string };
+type DemoSource = { kind: '2gis' | 'osm'; name: string; url: string | null; rating: number | null; ratingCount: number; license?: string };
+type DemoPlace = {
+  id: string; partnerId: string | null; city: string; name: string; category: Category;
+  district: string; address: string; lat: number; lng: number; about: string; phone: string | null;
+  image?: string | null; source?: DemoSource | null;
+};
 
 const ME_KEY = 'rjadom.demo.me';
 const BOOKINGS_KEY = 'rjadom.demo.bookings';
@@ -16,7 +24,7 @@ const DELIVERY_JOBS_KEY = 'rjadom.demo.delivery-jobs';
 const PLACE_REVIEWS_KEY = 'rjadom.demo.place-reviews';
 const DAY = 86400000;
 
-const places = [
+const demoPlaces: DemoPlace[] = [
   { id: 'forma', partnerId: 'p1', city: 'demograd', name: 'Форма', category: 'salon', district: 'Центр', address: 'ул. Мира, 12', lat: 55.7601, lng: 37.6186, about: 'Стрижки, укладка, окрашивание. Два мастера, окна с 10 до 19.', phone: '+79000000010' },
   { id: 'liniya', partnerId: 'p2', city: 'demograd', name: 'Линия', category: 'salon', district: 'Северный', address: 'пр. Победы, 4', lat: 55.7742, lng: 37.6011, about: 'Маникюр, педикюр, уход за руками.', phone: '+79000000011' },
   { id: 'ugol', partnerId: 'p2', city: 'demograd', name: 'Мастерская на углу', category: 'services', district: 'Центр', address: 'ул. Садовая, 3', lat: 55.7585, lng: 37.6290, about: 'Ремонт обуви и сумок, изготовление ключей.', phone: '+79000000011' },
@@ -24,6 +32,8 @@ const places = [
   { id: 'kuhnya', partnerId: 'p2', city: 'demograd', name: 'Кухня на районе', category: 'food', district: 'Южный', address: 'ул. Южная, 21', lat: 55.7402, lng: 37.6154, about: 'Домашние обеды, самовывоз с 11 до 20.', phone: '+79000000011' },
   { id: 'glaz', partnerId: 'p1', city: 'demograd', name: 'Глаз да глаз', category: 'services', district: 'Северный', address: 'ул. Северная, 15', lat: 55.7801, lng: 37.6103, about: 'Мелкий ремонт одежды, подгонка по фигуре.', phone: null },
 ];
+
+const places: DemoPlace[] = [...demoPlaces, ...(district as DemoPlace[])];
 
 const offers = [
   { id: 'forma-cut', placeId: 'forma', title: 'Стрижка и укладка', durationMin: 60, price: 120000 },
@@ -237,24 +247,28 @@ function activeOffers(placeId: string) {
   return offers.filter(item => item.placeId === placeId && (item as { isActive?: boolean }).isActive !== false);
 }
 
-function card(place: typeof places[number], bookings = getBookings()) {
+function card(place: DemoPlace, bookings = getBookings()) {
   const list = activeOffers(place.id);
   const reviews = reviewsFor(place.id, bookings);
-  const rating = reviews.length ? reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length : null;
-  const photos = [0, 1, 2].map(index => ({
-    small: `https://picsum.photos/seed/rjadom-${place.id}-${index}/328/170`,
-    large: `https://picsum.photos/seed/rjadom-${place.id}-${index}/656/340`,
-    full: `https://picsum.photos/seed/rjadom-${place.id}-${index}/1200/800`,
-    author: null,
-  }));
+  const ownRating = reviews.length ? reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length : null;
+  const photos = place.source
+    ? (place.image ? [{ small: place.image, large: place.image, full: place.image, author: null }] : [])
+    : [0, 1, 2].map(index => ({
+      small: `https://picsum.photos/seed/rjadom-${place.id}-${index}/328/170`,
+      large: `https://picsum.photos/seed/rjadom-${place.id}-${index}/656/340`,
+      full: `https://picsum.photos/seed/rjadom-${place.id}-${index}/1200/800`,
+      author: null,
+    }));
+  const rating = ownRating ?? place.source?.rating ?? null;
   return {
     id: place.id, name: place.name, category: place.category as Category, district: place.district,
     address: place.address, about: place.about, location: { lat: place.lat, lng: place.lng },
-    city: (place as { city?: string }).city ?? 'demograd',
-    image: photos[0].small,
+    city: place.city ?? 'demograd',
+    image: place.image ?? photos[0]?.small ?? null,
     photos,
     rating: rating === null ? null : Math.round(rating * 10) / 10,
-    ratingCount: reviews.length, source: null,
+    ratingCount: reviews.length || place.source?.ratingCount || 0,
+    source: place.source ?? null,
     priceFrom: list.length ? money(Math.min(...list.map(item => item.price))) : null,
     offerCount: list.length, distanceKm: null,
   };
@@ -280,13 +294,13 @@ function slotsFor(offerId: string): { id: string; startsAt: string; endsAt: stri
 }
 
 function partnerBookings(me: DemoMe): DemoBooking[] {
-  const allowed = new Set<string>(places.filter(place => me.partnerIds.includes(place.partnerId)).map(place => place.id));
+  const allowed = new Set<string>(places.filter(place => place.partnerId && place.partnerId !== null && me.partnerIds.includes(place.partnerId)).map(place => place.id));
   return getBookings().filter(item => allowed.has(item.place.id));
 }
 
 const READ_KEY = 'rjadom.demo.read';
 
-function partnerPlaceView(place: typeof places[number]) {
+function partnerPlaceView(place: DemoPlace) {
   return {
     id: place.id, name: place.name, category: place.category as Category, district: place.district,
     address: place.address, about: place.about, phone: place.phone,
@@ -362,8 +376,12 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
   const body = (init.body ?? {}) as Record<string, string>;
 
   if (url.pathname === '/api/v1/cities') {
-    return { items: [{ slug: 'demograd', name: 'Демоград', region: 'Демо-регион',
-      center: { lat: 55.7558, lng: 37.6173 }, places: places.length }] } as T;
+    return { items: [
+      { slug: 'slyudyanka', name: 'Слюдянский район', region: 'Иркутская область',
+        center: { lat: 51.6597, lng: 103.7068 }, places: places.filter(place => place.city === 'slyudyanka').length },
+      { slug: 'demograd', name: 'Демоград', region: 'Демо-регион',
+        center: { lat: 55.7558, lng: 37.6173 }, places: demoPlaces.length },
+    ] } as T;
   }
 
   if (url.pathname === '/api/v1/districts') {
@@ -375,20 +393,20 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const category = url.searchParams.get('category');
     const district = url.searchParams.get('district');
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
-    const items = places
-      .filter(place => (place as { isPublished?: boolean }).isPublished !== false)
-      .filter(place => !city || (place as { city?: string }).city === city)
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    const all = places
+      .filter(place => !city || place.city === city)
       .filter(place => (!category || place.category === category) && (!district || place.district === district))
-      .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q))
-      .map(place => card(place));
-    return { items } as T;
+      .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q));
+    return { items: all.slice(offset, offset + limit).map(place => card(place)),
+      total: all.length, limit, offset } as T;
   }
 
   if (url.pathname === '/api/v1/places/map') {
     const city = url.searchParams.get('city');
     const items = places
-      .filter(place => (place as { isPublished?: boolean }).isPublished !== false)
-      .filter(place => !city || (place as { city?: string }).city === city)
+      .filter(place => !city || place.city === city)
       .map(place => card(place));
     return { items, total: items.length } as T;
   }
@@ -514,7 +532,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me) return fail('Требуется вход', 'unauthorized');
     if (!me.partnerIds.length && !me.roles.some(role => role.role === 'operator')) return fail('Нет кабинета партнёра', 'forbidden');
     const visible = me.partnerIds.length
-      ? places.filter(place => me.partnerIds.includes(place.partnerId))
+      ? places.filter(place => place.partnerId && place.partnerId !== null && me.partnerIds.includes(place.partnerId))
       : places;
     return { items: visible.map(partnerPlaceView) } as T;
   }
@@ -525,7 +543,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me) return fail('Требуется вход', 'unauthorized');
     const place = placeById(partnerPlaceMatch[1]);
     if (!place) return fail('Заведение не найдено', 'not_found');
-    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша карточка', 'forbidden');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId))) return fail('Это не ваша карточка', 'forbidden');
     if (body.name !== undefined) place.name = String(body.name).slice(0, 120);
     if (body.category !== undefined) place.category = body.category as typeof place.category;
     if (body.district !== undefined) place.district = String(body.district).slice(0, 60);
@@ -544,7 +562,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me) return fail('Требуется вход', 'unauthorized');
     const place = placeById(partnerOffersMatch[1]);
     if (!place) return fail('Заведение не найдено', 'not_found');
-    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша карточка', 'forbidden');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId))) return fail('Это не ваша карточка', 'forbidden');
     const title = String(body.title ?? '').trim();
     if (title.length < 2) return fail('Укажите название', 'invalid_title');
     offers.push({
@@ -563,7 +581,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const offer = offerById(partnerOfferMatch[1]);
     if (!offer) return fail('Услуга не найдена', 'not_found');
     const place = placeById(offer.placeId)!;
-    if (!me.roles.some(role => role.role === 'operator') && !me.partnerIds.includes(place.partnerId)) return fail('Это не ваша услуга', 'forbidden');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId))) return fail('Это не ваша услуга', 'forbidden');
     if (body.title !== undefined) offer.title = String(body.title).slice(0, 120);
     if (body.durationMin !== undefined) offer.durationMin = Number(body.durationMin);
     if (body.priceCents !== undefined) offer.price = Number(body.priceCents);
@@ -1038,7 +1056,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
     const orders = getShopOrders().filter(order => {
       const place = placeById(order.place.id);
-      return place && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(order.status);
+      return place && place.partnerId !== null && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(order.status);
     });
     return { items: orders.map(orderView) } as T;
   }
@@ -1051,7 +1069,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const order = orders.find(item => item.id === shopStatusMatch[1]);
     if (!order) return fail('Заказ не найден', 'not_found');
     const place = placeById(order.place.id);
-    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) {
+    if (!place || ((!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId)) && !me.roles.some(role => role.role === 'operator'))) {
       return fail('Это не ваш заказ', 'forbidden');
     }
     const action = String(body.action);
@@ -1085,7 +1103,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
     const place = placeById(partnerProductAdd[1]);
     if (!place) return fail('Заведение не найдено', 'not_found');
-    if (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
+    if ((!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId)) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
     const products = getProducts();
     const product: DemoShopProduct = {
       id: `sp-${Date.now()}`, placeId: place.id, title: String(body.title ?? '').slice(0, 120),
@@ -1105,7 +1123,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const product = products.find(item => item.id === partnerProductMatch[1]);
     if (!product) return fail('Товар не найден', 'not_found');
     const place = placeById(product.placeId);
-    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваш товар', 'forbidden');
+    if (!place || ((!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId)) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваш товар', 'forbidden');
     if (body.priceCents !== undefined) product.price = money(Number(body.priceCents));
     if (body.stockQty !== undefined) product.stockQty = Math.max(0, Number(body.stockQty));
     if (body.title !== undefined) product.title = String(body.title).slice(0, 120);
@@ -1155,7 +1173,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'partner' || role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
     const place = placeById(zoneAddMatch[1]);
     if (!place) return fail('Заведение не найдено', 'not_found');
-    if (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
+    if ((!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId)) && !me.roles.some(role => role.role === 'operator')) return fail('Это не ваша карточка', 'forbidden');
     const zones = getZones();
     const district = String(body.district ?? '');
     const existing = zones.find(item => item.placeId === place.id && item.district === district);
@@ -1180,7 +1198,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const zone = zones.find(item => item.id === zoneMatch[1]);
     if (!zone) return fail('Зона не найдена', 'not_found');
     const place = placeById(zone.placeId);
-    if (!place || (!me.partnerIds.includes(place.partnerId) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваша зона', 'forbidden');
+    if (!place || ((!place.partnerId || !place.partnerId !== null && me.partnerIds.includes(place.partnerId)) && !me.roles.some(role => role.role === 'operator'))) return fail('Это не ваша зона', 'forbidden');
     if (body.feeCents !== undefined) zone.feeCents = Math.max(0, Number(body.feeCents));
     if (body.minOrderCents !== undefined) zone.minOrderCents = Math.max(0, Number(body.minOrderCents));
     if (body.etaMin !== undefined) zone.etaMin = Math.max(5, Number(body.etaMin));

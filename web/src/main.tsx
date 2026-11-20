@@ -384,7 +384,7 @@ function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [cities, setCities] = useState<City[]>([]);
-  const [citySlug, setCitySlug] = useState(() => localStorage.getItem('rjadom.city') || '');
+  const [citySlug, setCitySlug] = useState(() => localStorage.getItem(DEMO ? 'rjadom.demo.city.v2' : 'rjadom.city') || '');
   const [cityOpen, setCityOpen] = useState(false);
   const [installed, setInstalled] = useState(() =>
     window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
@@ -398,7 +398,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (citySlug) localStorage.setItem('rjadom.city', citySlug);
+    if (citySlug) localStorage.setItem(DEMO ? 'rjadom.demo.city.v2' : 'rjadom.city', citySlug);
   }, [citySlug]);
 
   useEffect(() => {
