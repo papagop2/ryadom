@@ -425,8 +425,8 @@ h1, h2, h3, p { margin-top: 0; }
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(255, 214, 10, 0.13);
   animation: marker-in 0.18s ease both;
 }
-.tile-cluster b { font-size: 13px; line-height: 1; font-weight: 850; letter-spacing: -0.03em; }
-.tile-cluster small { margin-top: 1px; font-size: 7px; line-height: 1; font-weight: 700; opacity: 0.72; }
+.tile-cluster b { font-size: 11.5px; line-height: 1; font-weight: 850; letter-spacing: -0.03em; }
+.tile-cluster small { margin-top: 1px; font-size: 6.5px; line-height: 1; font-weight: 700; opacity: 0.72; }
 .tile-cluster:active { transform: translate(-50%, -50%) scale(0.92); }
 .tile-dot {
   position: absolute; z-index: 2;
