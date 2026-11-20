@@ -560,12 +560,12 @@ function mapMarkerKind(count: number, item: PlaceCard, zoom: number): MapMarkerK
 }
 
 function mapMarkerSize(kind: MapMarkerKind, count: number, zoom: number, cell: number) {
-  if (kind === 'dot') return 10;
-  if (kind === 'pin') return zoom >= 16 ? 22 : 24;
-  if (kind === 'photo') return zoom >= 16 ? 28 : zoom >= 14 ? 26 : 24;
-  const wanted = 34 + String(count).length * 3 + (zoom < 11 ? 7 : 0);
-  const cap = cell <= 48 ? 36 : cell <= 62 ? 44 : 54;
-  return Math.max(30, Math.min(cap, wanted));
+  if (kind === 'dot') return 9;
+  if (kind === 'pin') return zoom >= 16 ? 20 : 22;
+  if (kind === 'photo') return zoom >= 16 ? 26 : zoom >= 14 ? 24 : 22;
+  const wanted = 32 + String(count).length * 3 + (zoom < 11 ? 7 : 0);
+  const cap = cell <= 48 ? 32 : cell <= 62 ? 40 : 52;
+  return Math.max(28, Math.min(cap, wanted));
 }
 
 function MapView({ items, center: cityCenter, onOpen, notify, initialView, onViewChange }: {
