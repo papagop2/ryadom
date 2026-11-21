@@ -794,6 +794,30 @@ test('доставка: зона, сбор за доставку и путь к�
   assert.deepEqual(paid.json().cash, { client: true, provider: true });
 });
 
+test('избранное: добавить, увидеть и убрать заведение', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const place = (await pool.query("select id from places where name = 'Форма'")).rows[0];
+  await pool.query('delete from favorites where user_id = $1 and place_id = $2', [client.userId, place.id]);
+
+  const added = await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${place.id}`, headers: client.headers });
+  assert.equal(added.statusCode, 200, added.body);
+  assert.equal(added.json().favorite, true);
+  const repeated = await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${place.id}`, headers: client.headers });
+  assert.equal(repeated.statusCode, 200, repeated.body);
+
+  const list = await app.inject({ url: '/api/v1/me/favorites', headers: client.headers });
+  assert.equal(list.statusCode, 200, list.body);
+  assert.equal(list.json().items.filter(item => item.id === place.id).length, 1);
+  assert.equal(list.json().items.find(item => item.id === place.id).isFavorite, true);
+
+  const removed = await app.inject({ method: 'DELETE', url: `/api/v1/me/favorites/${place.id}`, headers: client.headers });
+  assert.equal(removed.statusCode, 200, removed.body);
+  assert.equal(removed.json().favorite, false);
+  const after = await app.inject({ url: '/api/v1/me/favorites', headers: client.headers });
+  assert.equal(after.json().items.some(item => item.id === place.id), false);
+});
+
 test('живая очередь: талон, вызов и завершение визита', async (t) => {
   if (!ready) return t.skip(skipReason);
   const client = await login();

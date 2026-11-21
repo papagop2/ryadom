@@ -1111,6 +1111,56 @@ export function routes(app, { pool, demoLogin = false }) {
     return { items: rows.map(queueTicketView) };
   });
 
+  app.get('/api/v1/me/favorites', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: {
+      city: { type: 'string', maxLength: 40 },
+    } } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `select p.id, p.name, p.category, p.district, p.address, p.lat, p.lng, p.about,
+              p.rating_avg, p.rating_count, p.source, p.source_url, p.source_reviews_url,
+              p.source_rating, p.source_rating_count, p.city_slug, p.image_url,
+              oo.min_price_cents, oo.offer_count
+       from favorites f join places p on p.id = f.place_id
+       left join lateral (
+         select min(o.price_cents) as min_price_cents, count(*)::int as offer_count
+         from offers o where o.place_id = p.id and o.is_active
+       ) oo on true
+       where f.user_id = $1 and p.is_published
+         and ($2::text is null or p.city_slug = $2)
+       order by f.created_at desc`, [auth.userId, request.query.city ?? null]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      id: row.id, name: row.name, category: row.category, district: row.district,
+      address: row.address, about: row.about,
+      location: { lat: Number(row.lat), lng: Number(row.lng) },
+      city: row.city_slug, image: row.image_url,
+      rating: row.rating_avg === null ? null : Number(row.rating_avg), ratingCount: row.rating_count,
+      source: sourceView(row),
+      priceFrom: row.min_price_cents === null ? null : money(row.min_price_cents),
+      offerCount: row.offer_count, distanceKm: null, isFavorite: true,
+    })) };
+  });
+
+  app.post('/api/v1/me/favorites/:id', async (request) => {
+    const auth = requireUser(request);
+    const placeId = uuidParam(request);
+    const place = await pool.query('select id from places where id = $1 and is_published', [placeId]);
+    if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    await pool.query(
+      'insert into favorites (user_id, place_id) values ($1, $2) on conflict do nothing',
+      [auth.userId, placeId]);
+    return { favorite: true, placeId };
+  });
+
+  app.delete('/api/v1/me/favorites/:id', async (request) => {
+    const auth = requireUser(request);
+    const placeId = uuidParam(request);
+    await pool.query('delete from favorites where user_id = $1 and place_id = $2', [auth.userId, placeId]);
+    return { favorite: false, placeId };
+  });
+
   app.get('/api/v1/offers/:id/slots', {
     schema: { querystring: {
       type: 'object', additionalProperties: false,

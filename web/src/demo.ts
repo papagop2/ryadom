@@ -24,6 +24,7 @@ const DELIVERY_JOBS_KEY = 'rjadom.demo.delivery-jobs';
 const PLACE_REVIEWS_KEY = 'rjadom.demo.place-reviews';
 const QUEUE_SETTINGS_KEY = 'rjadom.demo.queue-settings';
 const QUEUE_TICKETS_KEY = 'rjadom.demo.queue-tickets';
+const FAVORITES_KEY = 'rjadom.demo.favorites';
 const DAY = 86400000;
 
 const demoPlaces: DemoPlace[] = [
@@ -167,6 +168,8 @@ const getQueueSettings = (): DemoQueueSettings[] =>
 const saveQueueSettings = (items: DemoQueueSettings[]) => write(QUEUE_SETTINGS_KEY, items);
 const getQueueTickets = (): DemoQueueTicket[] => read<DemoQueueTicket[]>(QUEUE_TICKETS_KEY, []);
 const saveQueueTickets = (items: DemoQueueTicket[]) => write(QUEUE_TICKETS_KEY, items);
+const getFavorites = (): string[] => read<string[]>(FAVORITES_KEY, []);
+const saveFavorites = (items: string[]) => write(FAVORITES_KEY, items);
 const queueDay = () => new Date().toISOString().slice(0, 10);
 function queueTicketView(ticket: DemoQueueTicket) {
   const place = placeById(ticket.placeId);
@@ -600,6 +603,31 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     ticket.closedAt = new Date().toISOString();
     saveQueueTickets(tickets);
     return queueTicketView(ticket) as T;
+  }
+
+  if (url.pathname === '/api/v1/me/favorites') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const city = url.searchParams.get('city');
+    const items = getFavorites().map(id => placeById(id)).filter((place): place is DemoPlace => Boolean(place))
+      .filter(place => !city || place.city === city)
+      .map(place => ({ ...card(place), isFavorite: true }));
+    return { items } as T;
+  }
+
+  const meFavoriteMatch = url.pathname.match(/^\/api\/v1\/me\/favorites\/([^/]+)$/);
+  if (meFavoriteMatch && (method === 'POST' || method === 'DELETE')) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(meFavoriteMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    const items = getFavorites();
+    if (method === 'POST') {
+      if (!items.includes(place.id)) saveFavorites([place.id, ...items]);
+      return { favorite: true, placeId: place.id } as T;
+    }
+    saveFavorites(items.filter(id => id !== place.id));
+    return { favorite: false, placeId: place.id } as T;
   }
 
   if (url.pathname === '/api/v1/me/queue') {

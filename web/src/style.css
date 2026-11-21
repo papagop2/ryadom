@@ -2057,3 +2057,15 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .queue-ticket-line strong { color: var(--yellow); font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
 .queue-ticket-line .meta { margin-left: auto; }
 .accent-hint { display: inline-flex; align-items: center; gap: 4px; color: var(--yellow); }
+.favorites-strip-wrap { margin-top: 10px; }
+.favorites-strip { display: flex; gap: 6px; overflow-x: auto; padding: 1px 1px 3px; scrollbar-width: none; }
+.favorites-strip::-webkit-scrollbar { display: none; }
+.favorite-card { display: flex; align-items: center; gap: 6px; min-width: 178px; max-width: 220px; padding: 5px; border: 1px solid var(--line-soft); border-radius: 13px; background: rgba(255,255,255,.025); color: var(--text); text-align: left; }
+.favorite-card .place-thumb, .favorite-card .cat-avatar { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px; }
+.favorite-copy { display: grid; gap: 1px; min-width: 0; }
+.favorite-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
+.favorite-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 9px; }
+.fav-btn { color: var(--muted); }
+.fav-btn.on { color: #ffcf4a; background: rgba(255, 207, 74, .12); }
+.fav-btn.on .icon { fill: currentColor; }
+.fav-btn:disabled { opacity: .6; }

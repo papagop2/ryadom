@@ -1838,6 +1838,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [items, setItems] = useState<PlaceCard[] | null>(null);
   const [mapItems, setMapItems] = useState<PlaceCard[] | null>(null);
   const [queues, setQueues] = useState<QueuePlace[]>([]);
+  const [favorites, setFavorites] = useState<PlaceCard[]>([]);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<PlaceCard | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -1871,8 +1872,13 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     void api<{ items: QueuePlace[] }>(`/api/v1/queues?city=${encodeURIComponent(city.slug)}`)
       .then(data => { if (!cancelled) setQueues(data.items); })
       .catch(() => { if (!cancelled) setQueues([]); });
+    if (me) {
+      void api<{ items: PlaceCard[] }>(`/api/v1/me/favorites?city=${encodeURIComponent(city.slug)}`)
+        .then(data => { if (!cancelled) setFavorites(data.items); })
+        .catch(() => { if (!cancelled) setFavorites([]); });
+    } else setFavorites([]);
     return () => { cancelled = true; };
-  }, [city?.slug, refreshKey]);
+  }, [city?.slug, refreshKey, me?.user.id]);
 
 
   useEffect(() => {
@@ -2049,6 +2055,18 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         </button>)}
     </div>
 
+    {favorites.length > 0 && <section className="favorites-strip-wrap" aria-labelledby="favorites-title">
+      <div className="section-title">
+        <h2 id="favorites-title"><Icon name="heart" size={14} stroke={0} />Избранное</h2>
+        <span className="count-chip">{favorites.length}</span>
+      </div>
+      <div className="favorites-strip">{favorites.map(place => <button type="button" className="favorite-card" key={place.id}
+        onClick={() => { haptic(); setOpen(place); }}>
+        <PlaceThumb place={place} />
+        <span className="favorite-copy"><strong>{place.name}</strong><small>{place.district}</small></span>
+      </button>)}</div>
+    </section>}
+
     {queues.length > 0 && <section className="queue-strip-wrap" aria-labelledby="queues-title">
       <div className="section-title">
         <h2 id="queues-title"><span className="pulse" aria-hidden="true" />Живая очередь</h2>
@@ -2161,6 +2179,27 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [favorite, setFavorite] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+
+  useEffect(() => {
+    if (!me) { setFavorite(false); return; }
+    void api<{ items: PlaceCard[] }>('/api/v1/me/favorites')
+      .then(data => setFavorite(data.items.some(item => item.id === place.id)))
+      .catch(() => setFavorite(false));
+  }, [me?.user.id, place.id]);
+
+  async function toggleFavorite() {
+    if (!me) { notify('Войдите, чтобы добавить в избранное'); return; }
+    setFavoriteBusy(true);
+    try {
+      await api(`/api/v1/me/favorites/${place.id}`, { method: favorite ? 'DELETE' : 'POST' });
+      setFavorite(value => !value);
+      notify(favorite ? 'Убрали из избранного' : 'Добавили в избранное');
+      haptic([6, 20, 8]);
+    } catch (error) { notify((error as Error).message || 'Не удалось обновить избранное'); }
+    finally { setFavoriteBusy(false); }
+  }
 
   const loadQueue = useCallback(() => {
     void api<QueueInfo>(`/api/v1/places/${place.id}/queue`).then(setQueueInfo).catch(() => setQueueInfo(null));
@@ -2314,6 +2353,10 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
         <h1>{place.name}</h1>
         <span className="meta"><Icon name="pin" size={12} />{place.district} · {place.address}</span>
       </div>
+      <button type="button" className={`round-btn fav-btn${favorite ? ' on' : ''}`} disabled={favoriteBusy}
+        onClick={() => void toggleFavorite()} aria-label={favorite ? 'Убрать из избранного' : 'В избранное'}>
+        <Icon name="heart" size={17} stroke={1.8} />
+      </button>
       {(place.rating ?? place.source?.rating) !== null && <span className="score"><Icon name="star" size={12} stroke={0} />{(place.rating ?? place.source?.rating)!.toFixed(1)}</span>}
     </div>
 
