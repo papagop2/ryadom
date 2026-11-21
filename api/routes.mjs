@@ -105,6 +105,7 @@ function bookingView(row) {
     price: money(row.price_cents, row.currency),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cash: { client: Boolean(row.cash_confirmed_client_at), provider: Boolean(row.cash_confirmed_provider_at) },
     slot: { id: row.slot_id, startsAt: row.starts_at, endsAt: row.ends_at },
     offer: { id: row.offer_id, title: row.offer_title, durationMin: row.duration_min },
     place: { id: row.place_id, name: row.place_name, address: row.place_address, district: row.place_district },
@@ -114,6 +115,7 @@ function bookingView(row) {
 
 const BOOKING_SELECT = `
   select b.id, b.client_user_id, b.status, b.note, b.price_cents, b.currency, b.created_at, b.updated_at,
+         b.cash_confirmed_client_at, b.cash_confirmed_provider_at,
          s.id as slot_id, s.starts_at, s.ends_at,
          o.id as offer_id, o.title as offer_title, o.duration_min,
          p.id as place_id, p.name as place_name, p.address as place_address, p.district as place_district,
@@ -1082,6 +1084,9 @@ export function routes(app, { pool, demoLogin = false }) {
       const isClient = booking.client_user_id === auth.userId;
       if (requireManager && !canManage) fail(403, 'forbidden', 'Действие доступно партнёру');
       if (!requireManager && !isClient && !canManage) fail(403, 'forbidden', 'Нет доступа к записи');
+      if (to === 'cancelled' && booking.cash_confirmed_provider_at) {
+        fail(409, 'cash_confirmed', 'Исполнитель уже подтвердил получение наличных');
+      }
       if (!from.includes(booking.status)) {
         fail(409, 'invalid_transition', 'Запись уже в другом состоянии');
       }
@@ -1104,8 +1109,66 @@ export function routes(app, { pool, demoLogin = false }) {
   app.post('/api/v1/bookings/:id/confirm', async (request) =>
     transition(request, { from: ['requested'], to: 'confirmed', requireManager: true }));
 
-  app.post('/api/v1/bookings/:id/complete', async (request) =>
-    transition(request, { from: ['confirmed'], to: 'completed', requireManager: true }));
+  app.post('/api/v1/bookings/:id/complete', async (request) => {
+    const auth = requireUser(request);
+    const bookingId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `${BOOKING_SELECT} where b.id = $1 for update of b`, [bookingId]);
+      const booking = rows[0];
+      if (!booking) fail(404, 'booking_not_found', 'Запись не найдена');
+      const partnerId = (await client.query(
+        `select p.partner_id from offers o join places p on p.id = o.place_id where o.id = $1`,
+        [booking.offer_id])).rows[0]?.partner_id;
+      if (!isOperator(auth) && !partnerIdsOf(auth).includes(partnerId)) {
+        fail(403, 'forbidden', 'Действие доступно партнёру');
+      }
+      if (booking.cash_confirmed_provider_at) return bookingView(booking);
+      if (booking.status !== 'confirmed') fail(409, 'invalid_transition', 'Запись уже в другом состоянии');
+      await client.query(
+        `update bookings set cash_confirmed_provider_at = now(), updated_at = now() where id = $1`,
+        [bookingId]);
+      await client.query(
+        `insert into booking_events (booking_id, status, actor_user_id, note)
+         values ($1, 'confirmed', $2, 'cash_confirmed_provider')`, [bookingId, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'booking_awaiting_cash', $2)`,
+        [booking.client_user_id, JSON.stringify({ bookingId, price: booking.price_cents })]);
+      const view = await client.query(`${BOOKING_SELECT} where b.id = $1`, [bookingId]);
+      return bookingView(view.rows[0]);
+    });
+  });
+
+  app.post('/api/v1/bookings/:id/cash', async (request) => {
+    const auth = requireUser(request);
+    const bookingId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `${BOOKING_SELECT} where b.id = $1 for update of b`, [bookingId]);
+      const booking = rows[0];
+      if (!booking) fail(404, 'booking_not_found', 'Запись не найдена');
+      if (booking.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша запись');
+      if (booking.cash_confirmed_client_at) return bookingView(booking);
+      if (booking.status !== 'confirmed' || !booking.cash_confirmed_provider_at) {
+        fail(409, 'cash_not_ready', 'Исполнитель ещё не подтвердил получение наличных');
+      }
+      await client.query(
+        `update bookings set status = 'completed', cash_confirmed_client_at = now(), updated_at = now()
+         where id = $1`, [bookingId]);
+      await client.query(
+        `insert into booking_events (booking_id, status, actor_user_id, note)
+         values ($1, 'completed', $2, 'cash_confirmed_client')`, [bookingId, auth.userId]);
+      const partnerId = (await client.query(
+        `select p.partner_id from offers o join places p on p.id = o.place_id where o.id = $1`,
+        [booking.offer_id])).rows[0]?.partner_id;
+      if (partnerId) {
+        await notifyPartner(client, partnerId, 'booking_cash_confirmed',
+          { bookingId, price: booking.price_cents });
+      }
+      const view = await client.query(`${BOOKING_SELECT} where b.id = $1`, [bookingId]);
+      return bookingView(view.rows[0]);
+    });
+  });
 
   app.get('/api/v1/partner/bookings', async (request, reply) => {
     const auth = requireRole(request, 'partner', 'operator');

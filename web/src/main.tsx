@@ -53,6 +53,7 @@ type Review = { id: string; source: 'own' | '2gis'; rating: number | null; body:
 type Booking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
+  cash: { client: boolean; provider: boolean };
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
@@ -2845,6 +2846,15 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
     } catch { notify('Не удалось отменить'); }
   }
 
+  async function confirmCash(id: string) {
+    try {
+      await api(`/api/v1/bookings/${id}/cash`, { method: 'POST' });
+      notify('Оплата подтверждена');
+      haptic([8, 40, 12]);
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось подтвердить оплату'); }
+  }
+
   return <section>
     <div className="section-title"><h2>Заказы</h2>{view === 'bookings' && <span className="count-chip">{items ? items.length : '—'}</span>}</div>
     <div className="segmented">
@@ -2866,7 +2876,7 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
         <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))}</p>
         <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
         <div className="order-actions">
-          {(item.status === 'requested' || item.status === 'confirmed') &&
+          {(item.status === 'requested' || (item.status === 'confirmed' && !item.cash.provider)) &&
             <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
           {item.status === 'completed' && !item.review && (reviewing === item.id
             ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
@@ -2874,6 +2884,13 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
           {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
             {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
         </div>
+        {item.status === 'confirmed' && item.cash.provider && !item.cash.client &&
+          <div className="cash-confirm">
+            <span><Icon name="receipt" size={14} />Партнёр отметил оплату наличными</span>
+            <button type="button" className="primary wide" onClick={() => void confirmCash(item.id)}>
+              Передал наличные · {price(item.price)}
+            </button>
+          </div>}
       </li>)}</ul>
     </>}
   </section>;
@@ -2970,7 +2987,8 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
             {item.note && <p className="order-offer">{item.note}</p>}
             <div className="order-actions">
               {item.status === 'requested' && <button type="button" className="primary mini" onClick={() => void api(`/api/v1/bookings/${item.id}/confirm`, { method: 'POST' }).then(() => { notify('Подтверждено'); loadPartner(); })}>Подтвердить</button>}
-              {item.status === 'confirmed' && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Запись закрыта, оплата получена'); loadPartner(); })}>Завершить · оплата</button>}
+              {item.status === 'confirmed' && !item.cash.provider && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Отмечено: наличные получены'); loadPartner(); })}>Завершить · наличные</button>}
+              {item.status === 'confirmed' && item.cash.provider && <span className="cash-wait"><Icon name="clock" size={13} />Ждём подтверждения клиента</span>}
             </div>
           </li>)}</ul>}
     </div>}

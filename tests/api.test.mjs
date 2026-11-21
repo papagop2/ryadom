@@ -209,7 +209,14 @@ test('отзыв можно оставить один раз и только п�
   const partner = await login();
   await addPartnerRole(partner.userId, 'Студия «Форма»');
   await app.inject({ method: 'POST', url: `/api/v1/bookings/${id}/confirm`, headers: partner.headers });
-  await app.inject({ method: 'POST', url: `/api/v1/bookings/${id}/complete`, headers: partner.headers });
+  const completed = await app.inject({ method: 'POST', url: `/api/v1/bookings/${id}/complete`, headers: partner.headers });
+  assert.equal(completed.statusCode, 200, completed.body);
+  assert.equal(completed.json().status, 'confirmed');
+  assert.deepEqual(completed.json().cash, { client: false, provider: true });
+  const paid = await app.inject({ method: 'POST', url: `/api/v1/bookings/${id}/cash`, headers: client.headers });
+  assert.equal(paid.statusCode, 200, paid.body);
+  assert.equal(paid.json().status, 'completed');
+  assert.deepEqual(paid.json().cash, { client: true, provider: true });
 
   const review = await app.inject({ method: 'POST', url: '/api/v1/reviews', headers: client.headers, payload: { bookingId: id, rating: 5, body: 'Хорошо' } });
   assert.equal(review.statusCode, 201, review.body);
@@ -256,6 +263,8 @@ async function completeBooking(placeName) {
   await addPartnerRole(partner.userId, 'Студия «Форма»');
   await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/confirm`, headers: partner.headers });
   await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/complete`, headers: partner.headers });
+  const paid = await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/cash`, headers: client.headers });
+  assert.equal(paid.statusCode, 200, paid.body);
   return { client, booking: booking.json(), placeId: (await pool.query(
     'select o.place_id from bookings b join availability_slots s on s.id=b.slot_id join offers o on o.id=s.offer_id where b.id=$1',
     [booking.json().id])).rows[0].place_id };

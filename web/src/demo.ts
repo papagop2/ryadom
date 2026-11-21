@@ -128,6 +128,7 @@ type DemoReview = { id: string; rating: number; body: string; createdAt: string;
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
+  cash?: { client: boolean; provider: boolean };
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
@@ -145,7 +146,7 @@ const pause = (ms = 160) => new Promise(resolve => setTimeout(resolve, ms));
 const fail = (message: string, code?: string) => Promise.reject(Object.assign(new Error(message), { code }));
 
 const getMe = () => read<DemoMe | null>(ME_KEY, null);
-const getBookings = () => read<DemoBooking[]>(BOOKINGS_KEY, []);
+const getBookings = (): DemoBooking[] => read<DemoBooking[]>(BOOKINGS_KEY, []).map(item => ({ ...item, cash: item.cash ?? { client: false, provider: false } }));
 const saveBookings = (items: DemoBooking[]) => write(BOOKINGS_KEY, items);
 const getTrips = () => read<DemoTrip[]>(TRIPS_KEY, []);
 const saveTrips = (items: DemoTrip[]) => write(TRIPS_KEY, items);
@@ -509,10 +510,28 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       slot: { id: slot.id, startsAt: slot.startsAt, endsAt: slot.endsAt },
       offer: { id: offer.id, title: offer.title, durationMin: offer.durationMin },
       place: { id: place.id, name: place.name, address: place.address, district: place.district },
+      cash: { client: false, provider: false },
       review: null,
     };
     saveBookings([...getBookings(), booking]);
     return booking as T;
+  }
+
+  const bookingCashMatch = url.pathname.match(/^\/api\/v1\/bookings\/([^/]+)\/cash$/);
+  if (bookingCashMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getBookings();
+    const target = items.find(item => item.id === bookingCashMatch[1]);
+    if (!target) return fail('Запись не найдена', 'not_found');
+    if (target.cash?.client) return target as T;
+    if (target.status !== 'confirmed' || !target.cash?.provider) {
+      return fail('Исполнитель ещё не подтвердил получение наличных', 'cash_not_ready');
+    }
+    target.cash = { ...target.cash, client: true };
+    target.status = 'completed';
+    saveBookings(items);
+    return target as T;
   }
 
   const actionMatch = url.pathname.match(/^\/api\/v1\/bookings\/([^/]+)\/(cancel|confirm|complete)$/);
@@ -523,11 +542,17 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const target = items.find(item => item.id === actionMatch[1]);
     if (!target) return fail('Запись не найдена', 'not_found');
     const action = actionMatch[2];
-    if (action === 'cancel') target.status = 'cancelled';
+    if (action === 'cancel') {
+      if (target.cash?.provider) return fail('Исполнитель уже подтвердил получение наличных', 'cash_confirmed');
+      target.status = 'cancelled';
+    }
     if (action === 'confirm') target.status = 'confirmed';
-    if (action === 'complete') target.status = 'completed';
+    if (action === 'complete') {
+      if (target.status !== 'confirmed') return fail('Запись уже в другом состоянии', 'invalid_transition');
+      target.cash = { client: false, provider: true };
+    }
     saveBookings(items);
-    return { ok: true } as T;
+    return target as T;
   }
 
   if (url.pathname === '/api/v1/partner/places') {
