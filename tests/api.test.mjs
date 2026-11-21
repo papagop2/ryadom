@@ -570,11 +570,23 @@ test('выезд: заявка, предложения партнёров, вы�
     url: `/api/v1/partner/service-requests/${requestId}/start`, headers: partnerB.headers });
   assert.equal(started.statusCode, 200, started.body);
   assert.equal(started.json().status, 'in_progress');
+  const earlyCash = await app.inject({ method: 'POST',
+    url: `/api/v1/me/service-requests/${requestId}/cash`, headers: client.headers });
+  assert.equal(earlyCash.statusCode, 409);
+  assert.equal(earlyCash.json().error, 'cash_not_ready');
+
   const completed = await app.inject({ method: 'POST',
     url: `/api/v1/partner/service-requests/${requestId}/complete`, headers: partnerB.headers });
   assert.equal(completed.statusCode, 200, completed.body);
-  assert.equal(completed.json().status, 'completed');
-  assert.equal(completed.json().price.cents, 250000);
+  assert.equal(completed.json().status, 'awaiting_cash');
+  assert.deepEqual(completed.json().cash, { client: false, provider: true });
+
+  const paid = await app.inject({ method: 'POST',
+    url: `/api/v1/me/service-requests/${requestId}/cash`, headers: client.headers });
+  assert.equal(paid.statusCode, 200, paid.body);
+  assert.equal(paid.json().status, 'completed');
+  assert.deepEqual(paid.json().cash, { client: true, provider: true });
+  assert.equal(paid.json().price.cents, 250000);
 
   const jobs = await app.inject({ url: '/api/v1/partner/service-requests', headers: partnerB.headers });
   assert.equal(jobs.json().jobs.find(item => item.id === requestId), undefined);
@@ -620,11 +632,25 @@ test('товары: витрина, остатки, самовывоз и изо
   const foreign = await app.inject({ url: '/api/v1/partner/shop-orders', headers: otherPartner.headers });
   assert.equal(foreign.json().items.some(item => item.id === orderId), false);
 
-  for (const action of ['confirm', 'ready', 'complete']) {
+  for (const action of ['confirm', 'ready']) {
     const moved = await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${orderId}/status`,
       headers: partner.headers, payload: { action } });
     assert.equal(moved.statusCode, 200, moved.body);
   }
+  const earlyCash = await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${orderId}/cash`,
+    headers: client.headers });
+  assert.equal(earlyCash.statusCode, 409);
+  assert.equal(earlyCash.json().error, 'cash_not_ready');
+  const handed = await app.inject({ method: 'POST', url: `/api/v1/partner/shop-orders/${orderId}/status`,
+    headers: partner.headers, payload: { action: 'complete' } });
+  assert.equal(handed.statusCode, 200, handed.body);
+  assert.equal(handed.json().status, 'awaiting_cash');
+  assert.deepEqual(handed.json().cash, { client: false, provider: true });
+  const paid = await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${orderId}/cash`,
+    headers: client.headers });
+  assert.equal(paid.statusCode, 200, paid.body);
+  assert.equal(paid.json().status, 'completed');
+  assert.deepEqual(paid.json().cash, { client: true, provider: true });
   const mine = await app.inject({ url: '/api/v1/me/shop-orders', headers: client.headers });
   assert.equal(mine.json().items.find(item => item.id === orderId).status, 'completed');
   assert.equal((await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${orderId}/cancel`,
@@ -746,9 +772,17 @@ test('доставка: зона, сбор за доставку и путь к�
     headers: courier.headers });
   assert.equal(delivered.statusCode, 200, delivered.body);
   assert.equal(delivered.json().status, 'delivered');
-  assert.equal(delivered.json().order.status, 'completed');
+  assert.equal(delivered.json().order.status, 'awaiting_cash');
   const mine = await app.inject({ url: '/api/v1/me/shop-orders', headers: client.headers });
-  assert.equal(mine.json().items.find(item => item.id === orderId).delivery.status, 'delivered');
+  const deliveredOrder = mine.json().items.find(item => item.id === orderId);
+  assert.equal(deliveredOrder.delivery.status, 'delivered');
+  assert.equal(deliveredOrder.status, 'awaiting_cash');
+  assert.deepEqual(deliveredOrder.cash, { client: false, provider: true });
+  const paid = await app.inject({ method: 'POST', url: `/api/v1/me/shop-orders/${orderId}/cash`,
+    headers: client.headers });
+  assert.equal(paid.statusCode, 200, paid.body);
+  assert.equal(paid.json().status, 'completed');
+  assert.deepEqual(paid.json().cash, { client: true, provider: true });
 });
 
 test('доставка: оператор назначает курьера и видит активные задания', async (t) => {

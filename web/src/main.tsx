@@ -19,7 +19,7 @@ type PlacePhoto = { small: string; large: string; full: string; author: string |
 type Offer = { id: string; title: string; description: string; durationMin: number; price: Money; nextSlot: string | null };
 type ShopProduct = { id: string; title: string; description: string; price: Money; stockQty: number; unit: string; isActive: boolean };
 type ShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
-type ShopOrderStatus = 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'completed' | 'cancelled';
+type ShopOrderStatus = 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'awaiting_cash' | 'completed' | 'cancelled';
 type DeliveryStatus = 'pending' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
 type DeliveryZone = { id: string; district: string; fee: Money; minOrder: Money; etaMin: number; isActive: boolean };
 type DeliveryInfo = {
@@ -29,6 +29,7 @@ type DeliveryInfo = {
 type ShopOrder = {
   id: string; status: ShopOrderStatus; total: Money; goods: Money; deliveryFee: Money;
   fulfillment: 'pickup' | 'delivery'; pickupCode: string; note: string; createdAt: string;
+  cash: { client: boolean; provider: boolean };
   client: { id: string; name: string };
   place: { id: string; name: string; address: string; district: string };
   delivery: DeliveryInfo | null;
@@ -79,7 +80,7 @@ type Trip = {
 };
 type Estimate = { distanceKm: number; durationMin: number; route?: 'osrm' | 'straight' };
 type ServiceCategory = 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
-type ServiceStatus = 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
+type ServiceStatus = 'open' | 'assigned' | 'in_progress' | 'awaiting_cash' | 'completed' | 'cancelled' | 'expired';
 type ServiceOffer = {
   id: string; price: Money; message: string; etaMin: number | null;
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
@@ -90,6 +91,7 @@ type ServiceRequest = {
   address: string; budget: { min: Money; max: Money }; preferred: { from: string; to: string };
   price: Money | null; createdAt: string; client: { id: string; name: string };
   partner: { id: string; name: string } | null; offers: ServiceOffer[];
+  cash: { client: boolean; provider: boolean };
 };
 type PartnerOffer = { id: string; title: string; description: string; durationMin: number; price: Money; isActive: boolean; slotCount: number; nextSlot: string | null };
 type PartnerPlace = {
@@ -129,12 +131,12 @@ const serviceCategoryIcon: Record<ServiceCategory, IconName> = {
   repair: 'wrench', cleaning: 'sparkles', beauty: 'scissors', tutoring: 'edit', moving: 'car', other: 'dots',
 };
 const serviceStatusLabel: Record<ServiceStatus, string> = {
-  open: 'Ищем мастера', assigned: 'Мастер выбран', in_progress: 'В работе', completed: 'Завершена',
-  cancelled: 'Отменена', expired: 'Истекла',
+  open: 'Ищем мастера', assigned: 'Мастер выбран', in_progress: 'В работе',
+  awaiting_cash: 'Ждём оплату', completed: 'Завершена', cancelled: 'Отменена', expired: 'Истекла',
 };
 const shopStatusLabel: Record<ShopOrderStatus, string> = {
   placed: 'Ждёт подтверждения', confirmed: 'Подтверждён', ready: 'Готов', out_for_delivery: 'В пути',
-  completed: 'Выдан', cancelled: 'Отменён',
+  awaiting_cash: 'Ждём оплату', completed: 'Выдан', cancelled: 'Отменён',
 };
 const deliveryStatusLabel: Record<DeliveryStatus, string> = {
   pending: 'Ищем курьера', assigned: 'Курьер назначен', picked_up: 'В пути', delivered: 'Доставлено', cancelled: 'Отменено',
@@ -2583,6 +2585,17 @@ function ServiceRequestCard({ item, me, notify, onChanged }: {
     finally { setBusy(null); }
   }
 
+  async function confirmCash() {
+    setBusy('cash');
+    try {
+      await api(`/api/v1/me/service-requests/${item.id}/cash`, { method: 'POST' });
+      notify('Оплата подтверждена');
+      haptic([8, 40, 12]);
+      onChanged();
+    } catch (error) { notify((error as Error).message || 'Не удалось подтвердить оплату'); }
+    finally { setBusy(null); }
+  }
+
   return <div className={`service-card ${item.status}`}>
     <div className="service-card-head">
       <span className={`status ${item.status}`}><span className="dot" />{serviceStatusLabel[item.status]}</span>
@@ -2616,6 +2629,15 @@ function ServiceRequestCard({ item, me, notify, onChanged }: {
     {(item.status === 'open' || item.status === 'assigned') && (me?.user.id === item.client.id) &&
       <div className="service-actions">
         <button type="button" className="ghost-mini" disabled={busy === 'cancel'} onClick={() => void cancel()}>Отменить заявку</button>
+      </div>}
+
+    {item.status === 'awaiting_cash' && !item.cash.client &&
+      <div className="cash-confirm">
+        <span><Icon name="receipt" size={14} />Мастер отметил работу выполненной</span>
+        <button type="button" className="primary wide" disabled={busy === 'cash'}
+          onClick={() => void confirmCash()}>
+          {busy === 'cash' ? 'Подтверждаем…' : `Передал наличные · ${price(item.price)}`}
+        </button>
       </div>}
   </div>;
 }
@@ -2729,7 +2751,8 @@ function PartnerServiceRequests({ notify }: { notify: (text: string) => void }) 
         <p className="meta"><Icon name="clock" size={13} />{serviceWindow(item)}</p>
         <div className="service-actions">
           {item.status === 'assigned' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'start')}>Начать работу</button>}
-          {item.status === 'in_progress' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Завершить · оплата</button>}
+          {item.status === 'in_progress' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Завершить · наличные</button>}
+          {item.status === 'awaiting_cash' && <span className="cash-wait"><Icon name="clock" size={13} />Ждём подтверждения клиента</span>}
         </div>
       </div>)}
     </>}
@@ -2753,6 +2776,15 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
       notify('Заказ отменён');
       load();
     } catch (error) { notify((error as Error).message || 'Не удалось отменить'); }
+  }
+
+  async function confirmCash(id: string) {
+    try {
+      await api(`/api/v1/me/shop-orders/${id}/cash`, { method: 'POST' });
+      notify('Оплата подтверждена');
+      haptic([8, 40, 12]);
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось подтвердить оплату'); }
   }
 
   return <div className="service-panel">
@@ -2782,6 +2814,13 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
         {(item.status === 'placed' || item.status === 'confirmed') &&
           <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
       </div>
+      {item.status === 'awaiting_cash' && !item.cash.client &&
+        <div className="cash-confirm">
+          <span><Icon name="bag" size={14} />{item.fulfillment === 'delivery' ? 'Курьер доставил заказ' : 'Заказ выдан'}</span>
+          <button type="button" className="primary wide" onClick={() => void confirmCash(item.id)}>
+            Передал наличные · {price(item.total)}
+          </button>
+        </div>}
     </div>)}
   </div>;
 }
@@ -2995,7 +3034,7 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
     } catch (error) { notify((error as Error).message || 'Не удалось обновить'); }
   }
 
-  const active = items?.filter(item => ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(item.status)) ?? [];
+  const active = items?.filter(item => ['placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash'].includes(item.status)) ?? [];
   return <div className="partner-service">
     <div className="panel-title"><h2>Заказы</h2><span className="count-chip">{items ? active.length : '—'}</span></div>
     {!items && <div className="skeleton-card" />}
@@ -3017,6 +3056,7 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
           {item.fulfillment === 'delivery' ? 'Готов к доставке' : 'Готов к выдаче'}</button>}
         {item.status === 'ready' && item.fulfillment === 'pickup' && <button type="button" className="primary mini" onClick={() => void act(item.id, 'complete')}>Выдан · наличные</button>}
         {item.status === 'out_for_delivery' && <span className="meta">Курьер везёт заказ</span>}
+        {item.status === 'awaiting_cash' && <span className="cash-wait"><Icon name="clock" size={13} />Ждём подтверждения клиента</span>}
         {['placed', 'confirmed'].includes(item.status) && <button type="button" className="ghost-mini" onClick={() => void act(item.id, 'cancel')}>Отменить</button>}
       </div>
     </div>)}

@@ -93,7 +93,8 @@ type DemoServiceOffer = {
   createdAt: string; partner: { id: string; name: string };
 };
 type DemoServiceRequest = {
-  id: string; status: 'open' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'expired';
+  id: string; status: 'open' | 'assigned' | 'in_progress' | 'awaiting_cash' | 'completed' | 'cancelled' | 'expired';
+  cash?: { client: boolean; provider: boolean };
   category: 'repair' | 'cleaning' | 'beauty' | 'tutoring' | 'moving' | 'other';
   title: string; description: string; address: string;
   budget: { min: Money; max: Money }; preferred: { from: string; to: string };
@@ -107,7 +108,8 @@ type DemoShopProduct = {
 };
 type DemoShopOrderItem = { id: string; productId: string | null; title: string; unit: string; qty: number; price: Money; total: Money };
 type DemoShopOrder = {
-  id: string; status: 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'completed' | 'cancelled';
+  id: string; status: 'placed' | 'confirmed' | 'ready' | 'out_for_delivery' | 'awaiting_cash' | 'completed' | 'cancelled';
+  cash?: { client: boolean; provider: boolean };
   total: Money; goods?: Money; deliveryFee?: Money; fulfillment?: 'pickup' | 'delivery';
   pickupCode: string; note: string; createdAt: string; key?: string | null;
   client: { id: string; name: string };
@@ -182,6 +184,7 @@ function orderView(order: DemoShopOrder) {
   const fee = order.deliveryFee ?? money(0);
   return {
     ...order, goods, deliveryFee: fee, fulfillment: order.fulfillment ?? 'pickup',
+    cash: order.cash ?? { client: false, provider: false },
     delivery: job ? {
       id: job.id, status: job.status, address: job.address, district: job.district,
       fee: money(job.feeCents), etaMin: job.etaMin, courier: job.courier,
@@ -202,7 +205,7 @@ function jobView(job: DemoDeliveryJob) {
     },
   };
 }
-const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress'];
+const SERVICE_ACTIVE = ['open', 'assigned', 'in_progress', 'awaiting_cash'];
 const demoNames: Record<string, string> = { p1: 'Студия «Форма»', p2: 'Мастерская «Линия»' };
 const getServices = () => read<DemoServiceRequest[]>(SERVICE_KEY, []);
 const saveServices = (items: DemoServiceRequest[]) => write(SERVICE_KEY, items);
@@ -840,6 +843,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
         preferred: { from: String(body.preferredFrom), to: String(body.preferredTo) },
         price: null, createdAt: new Date().toISOString(), key,
         client: { id: me.user.id, name: me.user.displayName }, partner: null, offers: [],
+        cash: { client: false, provider: false },
       };
       saveServices([request, ...services]);
       return request as T;
@@ -864,6 +868,23 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     request.offers = request.offers.map(item => item.id === offer.id
       ? { ...item, status: 'accepted' as const }
       : item.status === 'pending' ? { ...item, status: 'declined' as const } : item);
+    saveServices(services);
+    return request as T;
+  }
+
+  const serviceCashMatch = url.pathname.match(/^\/api\/v1\/me\/service-requests\/([^/]+)\/cash$/);
+  if (serviceCashMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const services = getServices();
+    const request = services.find(item => item.id === serviceCashMatch[1]);
+    if (!request) return fail('Заявка не найдена', 'not_found');
+    if (request.client.id !== me.user.id) return fail('Это не ваша заявка', 'forbidden');
+    if (request.status !== 'awaiting_cash' || !request.cash?.provider) {
+      return fail('Исполнитель ещё не подтвердил получение наличных', 'cash_not_ready');
+    }
+    request.cash = { ...request.cash, client: true };
+    request.status = 'completed';
     saveServices(services);
     return request as T;
   }
@@ -954,7 +975,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       request.status = 'in_progress';
     } else {
       if (request.status !== 'in_progress') return fail('Заявка уже в другом состоянии', 'invalid_transition');
-      request.status = 'completed';
+      request.status = 'awaiting_cash';
+      request.cash = { client: false, provider: true };
     }
     saveServices(services);
     return request as T;
@@ -1002,6 +1024,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
         goods: money(goodsCents), deliveryFee: money(deliveryFeeCents), fulfillment,
         pickupCode: String(Math.floor(1000 + Math.random() * 9000)), note: String(body.note ?? '').slice(0, 300),
         createdAt: new Date().toISOString(), key,
+        cash: { client: false, provider: false },
         client: { id: me.user.id, name: me.user.displayName },
         place: { id: place.id, name: place.name, address: place.address, district: place.district },
         items: lines.map((line, index) => ({
@@ -1025,6 +1048,23 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       return orderView(order) as T;
     }
     return { items: getShopOrders().filter(item => item.client.id === me.user.id).map(orderView) } as T;
+  }
+
+  const shopCashMatch = url.pathname.match(/^\/api\/v1\/me\/shop-orders\/([^/]+)\/cash$/);
+  if (shopCashMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const orders = getShopOrders();
+    const order = orders.find(item => item.id === shopCashMatch[1]);
+    if (!order) return fail('Заказ не найден', 'not_found');
+    if (order.client.id !== me.user.id) return fail('Это не ваш заказ', 'forbidden');
+    if (order.status !== 'awaiting_cash' || !order.cash?.provider) {
+      return fail('Продавец или курьер ещё не подтвердил получение наличных', 'cash_not_ready');
+    }
+    order.cash = { ...order.cash, client: true };
+    order.status = 'completed';
+    saveShopOrders(orders);
+    return orderView(order) as T;
   }
 
   const shopCancelMatch = url.pathname.match(/^\/api\/v1\/me\/shop-orders\/([^/]+)\/cancel$/);
@@ -1056,7 +1096,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!me?.roles.some(role => role.role === 'partner')) return fail('Недостаточно прав', 'forbidden');
     const orders = getShopOrders().filter(order => {
       const place = placeById(order.place.id);
-      return place && place.partnerId !== null && me.partnerIds.includes(place.partnerId) && ['placed', 'confirmed', 'ready', 'out_for_delivery'].includes(order.status);
+      return place && place.partnerId !== null && me.partnerIds.includes(place.partnerId)
+        && ['placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash'].includes(order.status);
     });
     return { items: orders.map(orderView) } as T;
   }
@@ -1088,10 +1129,14 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
         if (product) product.stockQty += line.qty;
       }
       saveProducts(products);
+    } else if (action === 'complete') {
+      if (order.status !== 'ready') return fail('Заказ уже в другом состоянии', 'invalid_transition');
+      order.status = 'awaiting_cash';
+      order.cash = { client: false, provider: true };
     } else {
       const from = flow[action];
       if (!from || order.status !== from) return fail('Заказ уже в другом состоянии', 'invalid_transition');
-      order.status = ({ confirm: 'confirmed', ready: 'ready', complete: 'completed' } as Record<string, DemoShopOrder['status']>)[action];
+      order.status = ({ confirm: 'confirmed', ready: 'ready' } as Record<string, DemoShopOrder['status']>)[action];
     }
     saveShopOrders(orders);
     return orderView(order) as T;
@@ -1249,7 +1294,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       if (job.courier?.id !== me.user.id) return fail('Это не ваша доставка', 'forbidden');
       if (job.status !== 'picked_up') return fail('Доставка уже в другом состоянии', 'invalid_transition');
       job.status = 'delivered';
-      order.status = 'completed';
+      order.status = 'awaiting_cash';
+      order.cash = { client: false, provider: true };
     }
     saveJobs(jobs);
     saveShopOrders(orders);

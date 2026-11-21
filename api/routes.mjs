@@ -392,6 +392,7 @@ function serviceRequestView(row, offers = []) {
     completedAt: row.completed_at,
     client: { id: row.client_user_id, name: row.client_name },
     partner: row.partner_id ? { id: row.partner_id, name: row.partner_name } : null,
+    cash: { client: Boolean(row.cash_confirmed_client_at), provider: Boolean(row.cash_confirmed_provider_at) },
     offers: offers.map(serviceOfferView),
   };
 }
@@ -520,6 +521,7 @@ function shopOrderView(row, items = []) {
     note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cash: { client: Boolean(row.cash_confirmed_client_at), provider: Boolean(row.cash_confirmed_provider_at) },
     delivery: row.delivery_job_id ? {
       id: row.delivery_job_id, status: row.delivery_status,
       address: row.delivery_address, district: row.delivery_district,
@@ -2047,6 +2049,32 @@ export function routes(app, { pool, demoLogin = false }) {
     });
   });
 
+  app.post('/api/v1/me/service-requests/:id/cash', async (request) => {
+    const auth = requireUser(request);
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (item.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваша заявка');
+      if (item.cash_confirmed_client_at) return loadServiceRequest(client, requestId);
+      if (item.status !== 'awaiting_cash' || !item.cash_confirmed_provider_at) {
+        fail(409, 'cash_not_ready', 'Исполнитель ещё не подтвердил получение наличных');
+      }
+      await client.query(
+        `update service_requests set cash_confirmed_client_at = now(), status = 'completed',
+                completed_at = now(), updated_at = now() where id = $1`, [requestId]);
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id, note)
+         values ($1, 'completed', $2, 'cash_confirmed_client')`, [requestId, auth.userId]);
+      if (item.partner_id) {
+        await notifyPartner(client, item.partner_id, 'service_cash_confirmed',
+          { requestId, price: item.price_cents });
+      }
+      return loadServiceRequest(client, requestId);
+    });
+  });
+
   app.post('/api/v1/me/service-requests/:id/cancel', async (request) => {
     const auth = requireUser(request);
     const requestId = uuidValue(request.params.id, 'Заявка');
@@ -2075,7 +2103,7 @@ export function routes(app, { pool, demoLogin = false }) {
       `${SERVICE_SELECT} where r.status = 'open' and r.preferred_to > now()
        order by r.created_at limit 100`);
     const jobs = await pool.query(
-      `${SERVICE_SELECT} where r.partner_id = any($1::uuid[]) and r.status in ('assigned', 'in_progress')
+      `${SERVICE_SELECT} where r.partner_id = any($1::uuid[]) and r.status in ('assigned', 'in_progress', 'awaiting_cash')
        order by r.created_at desc limit 100`, [partnerIds]);
     const visibleOffers = await offersForRequests(pool, open.rows.map(row => row.id), partnerIds);
     reply.header('Cache-Control', 'no-store');
@@ -2186,13 +2214,37 @@ export function routes(app, { pool, demoLogin = false }) {
 
   app.post('/api/v1/partner/service-requests/:id/start', async (request) =>
     serviceTransition(request, 'assigned', 'in_progress', 'started_at'));
-  app.post('/api/v1/partner/service-requests/:id/complete', async (request) =>
-    serviceTransition(request, 'in_progress', 'completed', 'completed_at'));
+
+  app.post('/api/v1/partner/service-requests/:id/complete', async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const partnerIds = partnerIdsOf(auth);
+    const requestId = uuidValue(request.params.id, 'Заявка');
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query('select * from service_requests where id = $1 for update', [requestId]);
+      const item = rows[0];
+      if (!item) fail(404, 'request_not_found', 'Заявка не найдена');
+      if (!isOperator(auth) && !partnerIds.includes(item.partner_id)) {
+        fail(403, 'forbidden', 'Это не ваша заявка');
+      }
+      if (item.status !== 'in_progress') fail(409, 'invalid_transition', 'Заявка уже в другом состоянии');
+      if (item.price_cents === null) fail(409, 'price_not_agreed', 'Цена ещё не согласована');
+      await client.query(
+        `update service_requests set status = 'awaiting_cash', cash_confirmed_provider_at = now(),
+                updated_at = now() where id = $1`, [requestId]);
+      await client.query(
+        `insert into service_request_events (request_id, status, actor_user_id, note)
+         values ($1, 'awaiting_cash', $2, 'cash_confirmed_provider')`, [requestId, auth.userId]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'service_awaiting_cash', $2)`,
+        [item.client_user_id, JSON.stringify({ requestId, price: item.price_cents })]);
+      return loadServiceRequest(client, requestId);
+    });
+  });
 
   app.get('/api/v1/operator/service-requests', async (request, reply) => {
     requireRole(request, 'operator');
     const { rows } = await pool.query(
-      `${SERVICE_SELECT} where r.status in ('open', 'assigned', 'in_progress')
+      `${SERVICE_SELECT} where r.status in ('open', 'assigned', 'in_progress', 'awaiting_cash')
        order by r.created_at limit 100`);
     const offers = await offersForRequests(pool, rows.map(row => row.id));
     reply.header('Cache-Control', 'no-store');
@@ -2324,6 +2376,39 @@ export function routes(app, { pool, demoLogin = false }) {
     }
   });
 
+  app.post('/api/v1/me/shop-orders/:id/cash', async (request) => {
+    const auth = requireUser(request);
+    const orderId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `select o.*, p.partner_id from shop_orders o join places p on p.id = o.place_id
+         where o.id = $1 for update`, [orderId]);
+      const order = rows[0];
+      if (!order) fail(404, 'order_not_found', 'Заказ не найден');
+      if (order.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваш заказ');
+      if (order.cash_confirmed_client_at) return loadShopOrder(client, orderId);
+      if (order.status !== 'awaiting_cash' || !order.cash_confirmed_provider_at) {
+        fail(409, 'cash_not_ready', 'Продавец или курьер ещё не подтвердил получение наличных');
+      }
+      await client.query(
+        `update shop_orders set cash_confirmed_client_at = now(), status = 'completed',
+                completed_at = now(), updated_at = now() where id = $1`, [orderId]);
+      await client.query(
+        `insert into shop_order_events (order_id, status, actor_user_id, note)
+         values ($1, 'completed', $2, 'cash_confirmed_client')`, [orderId, auth.userId]);
+      await notifyPartner(client, order.partner_id, 'shop_cash_confirmed',
+        { orderId, total: order.total_cents });
+      const job = await client.query(
+        'select courier_user_id from delivery_jobs where order_id = $1', [orderId]);
+      if (job.rows[0]?.courier_user_id) {
+        await client.query(
+          `insert into notifications (user_id, kind, payload) values ($1, 'delivery_cash_confirmed', $2)`,
+          [job.rows[0].courier_user_id, JSON.stringify({ orderId })]);
+      }
+      return loadShopOrder(client, orderId);
+    });
+  });
+
   app.post('/api/v1/me/shop-orders/:id/cancel', async (request) => {
     const auth = requireUser(request);
     const orderId = uuidParam(request);
@@ -2393,8 +2478,8 @@ export function routes(app, { pool, demoLogin = false }) {
       const transitions = {
         confirm: { from: 'placed', to: 'confirmed', stamp: 'confirmed_at' },
         ready: { from: 'confirmed', to: 'ready', stamp: 'ready_at' },
-        complete: { from: 'ready', to: 'completed', stamp: 'completed_at' },
       };
+      let nextStatus;
       if (action === 'cancel') {
         if (!['placed', 'confirmed'].includes(order.status)) fail(409, 'invalid_transition', 'Заказ уже нельзя отменить');
         await restockShopOrder(client, orderId);
@@ -2404,15 +2489,21 @@ export function routes(app, { pool, demoLogin = false }) {
         await client.query(
           `update shop_orders set status = 'cancelled', cancelled_at = now(), updated_at = now() where id = $1`,
           [orderId]);
+        nextStatus = 'cancelled';
+      } else if (action === 'complete') {
+        if (order.fulfillment === 'delivery') fail(409, 'courier_required', 'Доставку завершает курьер');
+        if (order.status !== 'ready') fail(409, 'invalid_transition', 'Заказ уже в другом состоянии');
+        await client.query(
+          `update shop_orders set status = 'awaiting_cash', cash_confirmed_provider_at = now(),
+                  updated_at = now() where id = $1`, [orderId]);
+        nextStatus = 'awaiting_cash';
       } else {
-        if (action === 'complete' && order.fulfillment === 'delivery') {
-          fail(409, 'courier_required', 'Доставку завершает курьер');
-        }
         const transition = transitions[action];
         if (order.status !== transition.from) fail(409, 'invalid_transition', 'Заказ уже в другом состоянии');
         await client.query(
           `update shop_orders set status = $2, ${transition.stamp} = now(), updated_at = now() where id = $1`,
           [orderId, transition.to]);
+        nextStatus = transition.to;
         if (action === 'ready' && order.fulfillment === 'delivery') {
           const job = await client.query('select id from delivery_jobs where order_id = $1', [orderId]);
           const couriers = await client.query('select user_id from courier_profiles where is_online');
@@ -2423,13 +2514,13 @@ export function routes(app, { pool, demoLogin = false }) {
           }
         }
       }
-      const nextStatus = action === 'cancel' ? 'cancelled' : transitions[action].to;
       await client.query(
         `insert into shop_order_events (order_id, status, actor_user_id) values ($1, $2, $3)`,
         [orderId, nextStatus, auth.userId]);
       await client.query(
         `insert into notifications (user_id, kind, payload) values ($1, $2, $3)`,
-        [order.client_user_id, `shop_${nextStatus}`, JSON.stringify({ orderId, status: nextStatus })]);
+        [order.client_user_id, nextStatus === 'awaiting_cash' ? 'shop_awaiting_cash' : `shop_${nextStatus}`,
+          JSON.stringify({ orderId, status: nextStatus, total: order.total_cents })]);
       return loadShopOrder(client, orderId);
     });
   });
@@ -2570,11 +2661,14 @@ export function routes(app, { pool, demoLogin = false }) {
           [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id })]);
       } else {
         await client.query(
-          `update shop_orders set status = 'completed', completed_at = now(), updated_at = now() where id = $1`,
-          [job.order_id]);
+          `update shop_orders set status = 'awaiting_cash', cash_confirmed_provider_at = now(),
+                  updated_at = now() where id = $1`, [job.order_id]);
+        await client.query(
+          `insert into shop_order_events (order_id, status, actor_user_id, note)
+           values ($1, 'awaiting_cash', $2, 'cash_confirmed_courier')`, [job.order_id, auth.userId]);
         await client.query(
           `insert into notifications (user_id, kind, payload) values ($1, 'delivery_completed', $2)`,
-          [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id })]);
+          [job.client_user_id, JSON.stringify({ jobId, orderId: job.order_id, status: 'awaiting_cash' })]);
         await notifyPartner(client, job.partner_id, 'delivery_completed', { orderId: job.order_id });
         await client.query(
           'update courier_profiles set deliveries_count = deliveries_count + 1 where user_id = $1', [auth.userId]);
