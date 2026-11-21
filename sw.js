@@ -1,6 +1,6 @@
-const CACHE = "ryadom-e976fd1985fcf7b3693b";
+const CACHE = "ryadom-06293e343e2592187b9e";
 const BASE = "/ryadom/";
-const FILES = ["/ryadom/index.html","/ryadom/manifest.webmanifest","/ryadom/icon-192.png","/ryadom/icon-512.png","/ryadom/icon-maskable.png","/ryadom/assets/index-B4aKTr3b.js","/ryadom/assets/index-D6ZZUx54.css"];
+const FILES = ["/ryadom/index.html","/ryadom/manifest.webmanifest","/ryadom/icon-192.png","/ryadom/icon-512.png","/ryadom/icon-maskable.png","/ryadom/assets/index-JXyYfIu5.js","/ryadom/assets/index-c6VTZRpJ.css"];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' })))));
 });
@@ -24,4 +24,32 @@ self.addEventListener('fetch', event => {
   } else if (FILES.includes(url.pathname) && url.pathname !== page && !url.search) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(request)).then(hit => hit || fetch(request)));
   }
+});
+
+// Web Push: показываем системное уведомление и открываем нужный раздел.
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() || '' }; }
+  const title = data.title || 'Рядом';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: `${BASE}icon-192.png`,
+    badge: `${BASE}icon-192.png`,
+    tag: data.kind || 'ryadom',
+    data: { url: data.url || './', kind: data.kind || 'ryadom', notificationId: data.notificationId || null },
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const target = new URL(data.url || './', self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    const existing = clients.find(client => client.url.startsWith(self.registration.scope));
+    if (existing) {
+      if ('navigate' in existing) void existing.navigate(target);
+      return existing.focus();
+    }
+    return self.clients.openWindow(target);
+  }));
 });
