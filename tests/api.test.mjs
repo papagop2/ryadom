@@ -245,6 +245,14 @@ test('штампы: визит начисляет награду, партнёр
   assert.equal(card.card.stamps, 0);
   assert.equal(card.card.rewardsAvailable, 1);
 
+  const publicCard = await app.inject({ url: `/api/v1/places/${placeId}/loyalty`, headers: client.headers });
+  assert.equal(publicCard.statusCode, 200, publicCard.body);
+  assert.equal(publicCard.json().active, true);
+  assert.equal(publicCard.json().card.rewardsAvailable, 1);
+  const anonymous = await app.inject(`/api/v1/places/${placeId}/loyalty`);
+  assert.equal(anonymous.json().active, true);
+  assert.equal(anonymous.json().card, null);
+
   const partnerCards = await app.inject({ url: `/api/v1/partner/places/${placeId}/loyalty`, headers: partner.headers });
   assert.equal(partnerCards.statusCode, 200, partnerCards.body);
   assert.ok(partnerCards.json().cards.some(item => item.client.id === client.userId && item.rewardsAvailable === 1));
