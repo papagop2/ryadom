@@ -136,7 +136,7 @@ const serviceStatusLabel: Record<ServiceStatus, string> = {
 };
 const shopStatusLabel: Record<ShopOrderStatus, string> = {
   placed: 'Ждёт подтверждения', confirmed: 'Подтверждён', ready: 'Готов', out_for_delivery: 'В пути',
-  awaiting_cash: 'Ждём оплату', completed: 'Выдан', cancelled: 'Отменён',
+  awaiting_cash: 'Ждём оплату', completed: 'Завершён', cancelled: 'Отменён',
 };
 const deliveryStatusLabel: Record<DeliveryStatus, string> = {
   pending: 'Ищем курьера', assigned: 'Курьер назначен', picked_up: 'В пути', delivered: 'Доставлено', cancelled: 'Отменено',
