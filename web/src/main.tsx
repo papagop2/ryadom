@@ -59,6 +59,20 @@ type Booking = {
   place: { id: string; name: string; address: string; district: string };
   review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
 };
+type QueueTicket = {
+  id: string; number: number; status: 'waiting' | 'called' | 'serving' | 'done' | 'cancelled' | 'no_show';
+  note: string; day: string; createdAt: string; calledAt: string | null; closedAt: string | null;
+  place: { id: string; name: string; address: string; district: string };
+};
+type QueueInfo = {
+  active: boolean; avgMinutes: number | null; notice: string; waiting: number; called: number; serving: number;
+  nextNumber: number | null; currentNumber: number | null; myTicket: QueueTicket | null; position: number | null;
+  place: { id: string; name: string; address: string; district: string };
+};
+type QueuePlace = {
+  place: { id: string; name: string; category: Category; district: string; address: string; image: string | null };
+  waiting: number; currentNumber: number | null; avgMinutes: number; notice: string;
+};
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
 type TripPoint = { label: string; address?: string; lat: number; lng: number };
 type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
@@ -1823,6 +1837,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   const [districts, setDistricts] = useState<string[]>([]);
   const [items, setItems] = useState<PlaceCard[] | null>(null);
   const [mapItems, setMapItems] = useState<PlaceCard[] | null>(null);
+  const [queues, setQueues] = useState<QueuePlace[]>([]);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<PlaceCard | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -1853,8 +1868,11 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     void api<{ items: PlaceCard[]; total: number }>(`/api/v1/places/map?city=${encodeURIComponent(city.slug)}`)
       .then(data => { if (!cancelled) setMapItems(data.items); })
       .catch(() => { if (!cancelled) setMapItems([]); });
+    void api<{ items: QueuePlace[] }>(`/api/v1/queues?city=${encodeURIComponent(city.slug)}`)
+      .then(data => { if (!cancelled) setQueues(data.items); })
+      .catch(() => { if (!cancelled) setQueues([]); });
     return () => { cancelled = true; };
-  }, [city?.slug]);
+  }, [city?.slug, refreshKey]);
 
 
   useEffect(() => {
@@ -1973,7 +1991,8 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
   }
 
   useModalHistory(Boolean(open), () => setOpen(null));
-  if (open) return <PlaceScreen place={open} me={me} onBack={() => setOpen(null)} notify={notify} />;
+  if (open) return <PlaceScreen place={open} me={me}
+    onBack={() => { setOpen(null); setRefreshKey(value => value + 1); }} notify={notify} />;
 
   const firstName = me?.user.displayName.split(' ')[0];
 
@@ -2029,6 +2048,22 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
           <span>{categories[key]}</span>
         </button>)}
     </div>
+
+    {queues.length > 0 && <section className="queue-strip-wrap" aria-labelledby="queues-title">
+      <div className="section-title">
+        <h2 id="queues-title"><span className="pulse" aria-hidden="true" />Живая очередь</h2>
+        <span className="count-chip">{queues.length}</span>
+      </div>
+      <div className="queue-strip">{queues.map(item => <button type="button" className="queue-strip-card" key={item.place.id}
+        onClick={() => { const full = mapItems?.find(place => place.id === item.place.id); if (full) { haptic(); setOpen(full); } }}>
+        <span className="queue-strip-icon"><Icon name={categoryIcon[item.place.category]} size={16} /></span>
+        <span className="queue-strip-copy">
+          <strong>{item.place.name}</strong>
+          <small>{item.place.district} · {item.waiting ? `ждут ${item.waiting}` : 'без ожидания'}</small>
+        </span>
+        <span className="queue-strip-number">{item.currentNumber ? `№ ${item.currentNumber}` : `${item.avgMinutes} мин`}</span>
+      </button>)}</div>
+    </section>}
 
     {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify}
       initialView={mapViewRef.current?.citySlug === city?.slug ? mapViewRef.current : null}
@@ -2124,6 +2159,37 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewSent, setReviewSent] = useState(false);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
+  const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
+  const [queueBusy, setQueueBusy] = useState(false);
+
+  const loadQueue = useCallback(() => {
+    void api<QueueInfo>(`/api/v1/places/${place.id}/queue`).then(setQueueInfo).catch(() => setQueueInfo(null));
+  }, [place.id]);
+
+  useEffect(loadQueue, [loadQueue]);
+
+  async function joinQueue() {
+    if (!me) { notify('Войдите, чтобы занять очередь'); return; }
+    setQueueBusy(true);
+    try {
+      const info = await api<QueueInfo>(`/api/v1/places/${place.id}/queue`, { method: 'POST', body: {} });
+      setQueueInfo(info);
+      notify(`Ваш номер ${info.myTicket?.number ?? ''}`);
+      haptic([8, 35, 12]);
+    } catch (error) { notify((error as Error).message || 'Очередь недоступна'); }
+    finally { setQueueBusy(false); }
+  }
+
+  async function cancelQueue() {
+    if (!queueInfo?.myTicket) return;
+    setQueueBusy(true);
+    try {
+      await api(`/api/v1/queue/${queueInfo.myTicket.id}/cancel`, { method: 'POST' });
+      loadQueue();
+      notify('Талон отменён');
+    } catch (error) { notify((error as Error).message || 'Не удалось отменить талон'); }
+    finally { setQueueBusy(false); }
+  }
 
   const loadDetail = useCallback(() => {
     void api<PlaceDetail>(`/api/v1/places/${place.id}`).then(setDetail).catch(() => setError('Карточка недоступна'));
@@ -2275,6 +2341,33 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     {detail?.place.info?.schedule && <p className="hint place-schedule">
       <Icon name="clock" size={13} />{detail.place.info.schedule}
     </p>}
+
+    {queueInfo?.active && <div className={`queue-card${queueInfo.myTicket ? ' mine' : ''}`}>
+      <div className="queue-head">
+        <span className="queue-live"><span className="pulse" aria-hidden="true" />Живая очередь</span>
+        <span className="queue-count">{queueInfo.waiting} {plural(queueInfo.waiting, 'человек', 'человека', 'человек')}</span>
+      </div>
+      {queueInfo.myTicket ? <>
+        <div className="queue-ticket">
+          <span className="queue-ticket-label">Ваш талон</span>
+          <strong>{String(queueInfo.myTicket.number).padStart(2, '0')}</strong>
+          <span className={`queue-state ${queueInfo.myTicket.status}`}>{queueInfo.myTicket.status === 'waiting'
+            ? `в очереди${queueInfo.position ? ` · ${queueInfo.position}-й` : ''}`
+            : queueInfo.myTicket.status === 'called' ? 'вас вызвали' : 'обслуживают'}</span>
+        </div>
+        <p className="hint">{queueInfo.myTicket.status === 'waiting'
+          ? `Ориентировочно ${Math.max(1, (queueInfo.position ?? 1) - 1) * (queueInfo.avgMinutes ?? 10)} мин`
+          : queueInfo.myTicket.status === 'called' ? 'Подойдите к стойке' : 'Хорошего визита'}</p>
+        {queueInfo.myTicket.status === 'waiting' && <button type="button" className="ghost-mini wide"
+          disabled={queueBusy} onClick={() => void cancelQueue()}>Отменить талон</button>}
+      </> : <>
+        <p className="queue-copy">{queueInfo.currentNumber ? `Сейчас обслуживают № ${queueInfo.currentNumber}` : 'Очередь свободна'} · в среднем {queueInfo.avgMinutes ?? 10} мин</p>
+        {queueInfo.notice && <p className="hint">{queueInfo.notice}</p>}
+        <button type="button" className="primary wide" disabled={queueBusy} onClick={() => void joinQueue()}>
+          <Icon name="receipt" size={15} />{queueBusy ? 'Берём талон…' : 'Занять очередь'}
+        </button>
+      </>}
+    </div>}
 
     {place.source && <a className="source-card" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
       <span className="source-badge">{place.source.name}</span>
@@ -2826,8 +2919,57 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
   </div>;
 }
 
+function QueuePanel({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [items, setItems] = useState<QueueTicket[] | null>(null);
+  const load = useCallback(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: QueueTicket[] }>('/api/v1/me/queue').then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  async function cancel(id: string) {
+    try {
+      await api(`/api/v1/queue/${id}/cancel`, { method: 'POST' });
+      notify('Талон отменён');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось отменить талон'); }
+  }
+
+  const labels: Record<QueueTicket['status'], string> = {
+    waiting: 'В очереди', called: 'Вас вызвали', serving: 'Обслуживают',
+    done: 'Завершён', cancelled: 'Отменён', no_show: 'Не пришли',
+  };
+  if (!items) return <div className="skeleton-card tall" />;
+  if (!items.length) return <div className="empty-state">
+    <Icon name="clock" size={30} /><p>Талонов пока нет</p>
+    <span className="meta">Живая очередь доступна в карточке заведения</span>
+  </div>;
+  return <ul className="orders queue-orders">{items.map(item => <li key={item.id}>
+    <div className="order-head">
+      <strong>{item.place.name}</strong>
+      <span className={`status ${item.status === 'called' || item.status === 'serving' ? 'confirmed' : item.status}`}>
+        <span className="dot" />{labels[item.status]}</span>
+    </div>
+    <p className="meta"><Icon name="pin" size={13} />{item.place.district} · {item.place.address}</p>
+    <div className="queue-ticket-line">
+      <span className="queue-ticket-label">Талон</span>
+      <strong>№ {String(item.number).padStart(2, '0')}</strong>
+      <span className="meta">{dayTime.format(new Date(item.createdAt))}</span>
+    </div>
+    {item.note && <p className="service-desc">{item.note}</p>}
+    {item.status === 'waiting' && <div className="order-actions">
+      <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить талон</button>
+    </div>}
+    {item.status === 'called' && <p className="hint accent-hint"><Icon name="bell" size={13} />Подойдите к стойке</p>}
+  </li>)}</ul>;
+}
+
 function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
-  const [view, setView] = useState<'bookings' | 'requests' | 'shop'>('bookings');
+  const [view, setView] = useState<'bookings' | 'requests' | 'shop' | 'queue'>('bookings');
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const load = useCallback(() => {
@@ -2861,8 +3003,9 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
       <button type="button" className={view === 'bookings' ? 'active' : ''} onClick={() => setView('bookings')}>Записи</button>
       <button type="button" className={view === 'requests' ? 'active' : ''} onClick={() => setView('requests')}>Выезд</button>
       <button type="button" className={view === 'shop' ? 'active' : ''} onClick={() => setView('shop')}>Товары</button>
+      <button type="button" className={view === 'queue' ? 'active' : ''} onClick={() => setView('queue')}>Очередь</button>
     </div>
-    {view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : view === 'shop' ? <ShopOrdersPanel me={me} notify={notify} /> : <>
+    {view === 'queue' ? <QueuePanel me={me} notify={notify} /> : view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : view === 'shop' ? <ShopOrdersPanel me={me} notify={notify} /> : <>
       {!items && <div className="skeleton-card tall" />}
       {items && !items.length && <div className="empty-state">
         <Icon name="receipt" size={30} /><p>Пока пусто</p>
@@ -3081,6 +3224,92 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
   </div>;
 }
 
+function PartnerQueue({ placeId, notify }: { placeId: string; notify: (text: string) => void }) {
+  const [data, setData] = useState<{ settings: { isActive: boolean; avgMinutes: number; notice: string }; tickets: QueueTicket[] } | null>(null);
+  const [avgDraft, setAvgDraft] = useState('10');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => {
+    void api<{ settings: { isActive: boolean; avgMinutes: number; notice: string }; tickets: QueueTicket[] }>(
+      `/api/v1/partner/places/${placeId}/queue`).then(setData).catch(() => setData(null));
+  }, [placeId]);
+  useEffect(load, [load]);
+  useEffect(() => { if (data) setAvgDraft(String(data.settings.avgMinutes)); }, [data?.settings.avgMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function update(patch: { isActive?: boolean; avgMinutes?: number; notice?: string }) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/queue`, { method: 'PUT', body: patch });
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось сохранить очередь'); }
+    finally { setBusy(false); }
+  }
+
+  async function next() {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/queue/next`, { method: 'POST' });
+      notify('Следующий вызван');
+      load();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      notify(code === 'queue_empty' ? 'В очереди никого нет' : (error as Error).message || 'Не удалось вызвать');
+    } finally { setBusy(false); }
+  }
+
+  async function act(id: string, action: 'serving' | 'done' | 'no_show') {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/queue/${id}/status`, { method: 'POST', body: { action } });
+      notify(action === 'done' ? 'Визит завершён' : 'Статус обновлён');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось обновить'); }
+    finally { setBusy(false); }
+  }
+
+  if (!data) return <div className="partner-queue"><div className="skeleton-card" /></div>;
+  const active = data.tickets.filter(item => ['waiting', 'called', 'serving'].includes(item.status));
+  const called = active.find(item => item.status === 'called');
+  const serving = active.find(item => item.status === 'serving');
+  return <div className="partner-queue">
+    <div className="partner-queue-head">
+      <strong><Icon name="clock" size={14} />Живая очередь</strong>
+      <label className="switch">
+        <input type="checkbox" checked={data.settings.isActive} disabled={busy}
+          onChange={event => void update({ isActive: event.target.checked })} />
+        <span>{data.settings.isActive ? 'Открыта' : 'Закрыта'}</span>
+      </label>
+    </div>
+    <div className="partner-queue-row">
+      <span className="queue-count">{active.filter(item => item.status === 'waiting').length} ждут</span>
+      <label className="queue-avg">~<input value={avgDraft} inputMode="numeric" disabled={busy}
+        onChange={event => setAvgDraft(event.target.value.replace(/\D/g, '').slice(0, 3))}
+        onBlur={() => { const value = Math.max(1, Math.min(180, Number(avgDraft) || 10)); setAvgDraft(String(value)); if (value !== data.settings.avgMinutes) void update({ avgMinutes: value }); }}
+        onKeyDown={event => { if (event.key === 'Enter') (event.currentTarget as HTMLInputElement).blur(); }} /> мин</label>
+      <button type="button" className="primary mini" disabled={busy || Boolean(called || serving)} onClick={() => void next()}>
+        <Icon name="bell" size={13} />Следующий
+      </button>
+    </div>
+    {serving && <div className="partner-queue-current">
+      <span>Обслуживаем <strong>№ {serving.number}</strong></span>
+      <button type="button" className="primary mini" disabled={busy} onClick={() => void act(serving.id, 'done')}>Завершить</button>
+    </div>}
+    {called && !serving && <div className="partner-queue-current">
+      <span>Вызван <strong>№ {called.number}</strong></span>
+      <span className="queue-current-actions">
+        <button type="button" className="primary mini" disabled={busy} onClick={() => void act(called.id, 'serving')}>Обслуживать</button>
+        <button type="button" className="ghost-mini" disabled={busy} onClick={() => void act(called.id, 'no_show')}>Не пришёл</button>
+      </span>
+    </div>}
+    {active.length > 0 ? <ul className="partner-queue-list">{active.map(item => <li key={item.id}>
+      <span className={`queue-number ${item.status}`}>{String(item.number).padStart(2, '0')}</span>
+      <span>{item.status === 'waiting' ? 'ждёт' : item.status === 'called' ? 'вызван' : 'обслуживаем'}</span>
+      {item.status === 'called' && <span className="queue-current-actions">
+        <button type="button" className="ghost-mini" disabled={busy} onClick={() => void act(item.id, 'no_show')}>Не пришёл</button>
+      </span>}
+    </li>)}</ul> : <p className="notice">Очередь пуста</p>}
+  </div>;
+}
+
 function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [items, setItems] = useState<PartnerPlace[] | null>(null);
   const [editing, setEditing] = useState<PartnerPlace | null>(null);
@@ -3093,6 +3322,7 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [districts, setDistricts] = useState<string[]>([]);
   const [addingZone, setAddingZone] = useState<string | null>(null);
   const [zoneDraft, setZoneDraft] = useState({ district: '', fee: '199', min: '500', eta: '45' });
+  const [queueOpen, setQueueOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -3196,8 +3426,14 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
         <div className="order-head">
           <div><strong>{place.name}</strong>
             <p className="meta">{categories[place.category]} · {place.district} · {place.address}</p></div>
-          <button type="button" onClick={() => setEditing({ ...place })}>Изменить</button>
+          <div className="place-head-actions">
+            <button type="button" onClick={() => setQueueOpen(queueOpen === place.id ? null : place.id)}>
+              <Icon name="clock" size={13} />Очередь
+            </button>
+            <button type="button" onClick={() => setEditing({ ...place })}>Изменить</button>
+          </div>
         </div>
+        {queueOpen === place.id && <PartnerQueue placeId={place.id} notify={notify} />}
         {!place.isPublished && <p className="meta">Скрыто из каталога</p>}
         <ul className="partner-offers">{place.offers.map(offer => <li key={offer.id}>
           <div className="offer-line">
@@ -3367,6 +3603,10 @@ const noticeLabel: Record<string, string> = {
   service_assigned: 'Мастер назначен', service_in_progress: 'Работа началась', service_completed: 'Заявка завершена',
   shop_order_new: 'Новый заказ', shop_placed: 'Заказ оформлен', shop_confirmed: 'Заказ подтверждён',
   shop_ready: 'Заказ готов к выдаче', shop_completed: 'Заказ выдан', shop_cancelled: 'Заказ отменён',
+  shop_awaiting_cash: 'Заказ ждёт оплаты', shop_cash_confirmed: 'Оплата подтверждена',
+  service_awaiting_cash: 'Заявка ждёт оплаты', service_cash_confirmed: 'Оплата подтверждена',
+  delivery_cash_confirmed: 'Доставка оплачена',
+  queue_ticket_new: 'Новый талон', queue_called: 'Вас вызвали', queue_status: 'Очередь обновлена',
 };
 
 function Notifications() {

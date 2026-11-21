@@ -511,6 +511,76 @@ async function loadShopOrder(db, id) {
   return shopOrderView(rows[0], items.get(id) ?? []);
 }
 
+const QUEUE_TICKET_SELECT = `
+  select t.*, p.name as place_name, p.address as place_address, p.district as place_district
+  from queue_tickets t join places p on p.id = t.place_id`;
+
+function queueTicketView(row) {
+  return {
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    note: row.note,
+    day: row.day,
+    createdAt: row.created_at,
+    calledAt: row.called_at,
+    closedAt: row.closed_at,
+    place: {
+      id: row.place_id, name: row.place_name,
+      address: row.place_address, district: row.place_district,
+    },
+  };
+}
+
+async function queueSnapshot(db, placeId, userId = null) {
+  const place = await db.query(
+    'select id, partner_id, name, address, district from places where id = $1 and is_published', [placeId]);
+  if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+  const settings = await db.query(
+    'select is_active, avg_minutes, notice from queue_settings where place_id = $1', [placeId]);
+  const counts = await db.query(
+    `select count(*) filter (where status = 'waiting')::int as waiting,
+            count(*) filter (where status = 'called')::int as called,
+            count(*) filter (where status = 'serving')::int as serving,
+            min(number) filter (where status = 'waiting') as next_number,
+            max(number) filter (where status in ('called', 'serving')) as current_number
+     from queue_tickets where place_id = $1 and day = current_date`, [placeId]);
+  let myTicket = null;
+  let position = null;
+  if (userId) {
+    const mine = await db.query(
+      `${QUEUE_TICKET_SELECT} where t.place_id = $1 and t.client_user_id = $2
+       and t.status in ('waiting', 'called', 'serving') order by t.number limit 1`, [placeId, userId]);
+    if (mine.rows[0]) {
+      myTicket = queueTicketView(mine.rows[0]);
+      if (myTicket.status === 'waiting') {
+        const ahead = await db.query(
+          `select count(*)::int as n from queue_tickets
+           where place_id = $1 and day = current_date and status = 'waiting' and number < $2`,
+          [placeId, myTicket.number]);
+        position = ahead.rows[0].n + 1;
+      }
+    }
+  }
+  const row = counts.rows[0];
+  return {
+    active: Boolean(settings.rows[0]?.is_active),
+    avgMinutes: settings.rows[0]?.avg_minutes ?? null,
+    notice: settings.rows[0]?.notice ?? '',
+    waiting: row.waiting,
+    called: row.called,
+    serving: row.serving,
+    nextNumber: row.next_number,
+    currentNumber: row.current_number,
+    myTicket,
+    position,
+    place: {
+      id: place.rows[0].id, name: place.rows[0].name,
+      address: place.rows[0].address, district: place.rows[0].district,
+    },
+  };
+}
+
 function shopOrderView(row, items = []) {
   return {
     id: row.id,
@@ -938,6 +1008,109 @@ export function routes(app, { pool, demoLogin = false }) {
     };
   });
 
+  app.get('/api/v1/queues', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: {
+      city: { type: 'string', maxLength: 40 },
+    } } },
+  }, async (request, reply) => {
+    const { rows } = await pool.query(
+      `select p.id, p.name, p.category, p.district, p.address, p.image_url,
+              qs.avg_minutes, qs.notice,
+              (select count(*)::int from queue_tickets t
+                where t.place_id = p.id and t.day = current_date and t.status = 'waiting') as waiting,
+              (select max(t.number) from queue_tickets t
+                where t.place_id = p.id and t.day = current_date
+                  and t.status in ('called', 'serving')) as current_number
+       from queue_settings qs join places p on p.id = qs.place_id
+       where qs.is_active and p.is_published
+         and ($1::text is null or p.city_slug = $1)
+       order by waiting desc, p.name asc`, [request.query.city ?? null]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      place: { id: row.id, name: row.name, category: row.category, district: row.district,
+        address: row.address, image: row.image_url },
+      waiting: row.waiting, currentNumber: row.current_number,
+      avgMinutes: row.avg_minutes, notice: row.notice,
+    })) };
+  });
+
+  app.get('/api/v1/places/:id/queue', async (request, reply) => {
+    const placeId = uuidParam(request);
+    reply.header('Cache-Control', 'no-store');
+    return queueSnapshot(pool, placeId, request.auth?.userId ?? null);
+  });
+
+  app.post('/api/v1/places/:id/queue', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: { note: { type: 'string', maxLength: 200 } },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const placeId = uuidParam(request);
+    const place = await pool.query(
+      'select id, partner_id from places where id = $1 and is_published', [placeId]);
+    if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    const settings = await pool.query('select is_active from queue_settings where place_id = $1', [placeId]);
+    if (!settings.rows[0]?.is_active) fail(409, 'queue_closed', 'Очередь сейчас закрыта');
+    const existing = await pool.query(
+      `select id from queue_tickets where place_id = $1 and client_user_id = $2
+       and status in ('waiting', 'called', 'serving')`, [placeId, auth.userId]);
+    if (existing.rows[0]) {
+      reply.code(200);
+      return queueSnapshot(pool, placeId, auth.userId);
+    }
+    try {
+      await withTransaction(pool, async (client) => {
+        const day = await client.query(
+          `insert into queue_days (place_id, day, last_number) values ($1, current_date, 1)
+           on conflict (place_id, day) do update set last_number = queue_days.last_number + 1
+           returning last_number`, [placeId]);
+        const ticket = await client.query(
+          `insert into queue_tickets (place_id, client_user_id, day, number, note)
+           values ($1, $2, current_date, $3, $4) returning id`,
+          [placeId, auth.userId, day.rows[0].last_number, request.body?.note ?? '']);
+        if (place.rows[0].partner_id) {
+          await notifyPartner(client, place.rows[0].partner_id, 'queue_ticket_new',
+            { placeId, ticketId: ticket.rows[0].id, number: day.rows[0].last_number });
+        }
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'queue_tickets_active_uq') {
+        reply.code(200);
+        return queueSnapshot(pool, placeId, auth.userId);
+      }
+      throw error;
+    }
+    reply.code(201);
+    return queueSnapshot(pool, placeId, auth.userId);
+  });
+
+  app.post('/api/v1/queue/:id/cancel', async (request) => {
+    const auth = requireUser(request);
+    const ticketId = uuidParam(request);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(`${QUEUE_TICKET_SELECT} where t.id = $1 for update of t`, [ticketId]);
+      const ticket = rows[0];
+      if (!ticket) fail(404, 'queue_ticket_not_found', 'Талон не найден');
+      if (ticket.client_user_id !== auth.userId) fail(403, 'forbidden', 'Это не ваш талон');
+      if (ticket.status !== 'waiting') fail(409, 'invalid_transition', 'Талон уже нельзя отменить');
+      await client.query(
+        `update queue_tickets set status = 'cancelled', closed_at = now() where id = $1`, [ticketId]);
+      return queueTicketView({ ...ticket, status: 'cancelled', closed_at: new Date() });
+    });
+  });
+
+  app.get('/api/v1/me/queue', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `${QUEUE_TICKET_SELECT} where t.client_user_id = $1
+       order by (t.status in ('waiting', 'called', 'serving')) desc, t.created_at desc limit 30`,
+      [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(queueTicketView) };
+  });
+
   app.get('/api/v1/offers/:id/slots', {
     schema: { querystring: {
       type: 'object', additionalProperties: false,
@@ -1298,6 +1471,125 @@ export function routes(app, { pool, demoLogin = false }) {
     await pool.query(
       `update places set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
     return partnerPlaceView(pool, uuidParam(request));
+  });
+
+  app.get('/api/v1/partner/places/:id/queue', async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const settings = await pool.query(
+      'select is_active, avg_minutes, notice from queue_settings where place_id = $1', [placeId]);
+    const tickets = await pool.query(
+      `${QUEUE_TICKET_SELECT} where t.place_id = $1 and t.day = current_date
+       order by t.number`, [placeId]);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      settings: {
+        isActive: Boolean(settings.rows[0]?.is_active),
+        avgMinutes: settings.rows[0]?.avg_minutes ?? 10,
+        notice: settings.rows[0]?.notice ?? '',
+      },
+      tickets: tickets.rows.map(queueTicketView),
+    };
+  });
+
+  app.put('/api/v1/partner/places/:id/queue', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        isActive: { type: 'boolean' },
+        avgMinutes: { type: 'integer', minimum: 1, maximum: 180 },
+        notice: { type: 'string', maxLength: 200 },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const current = await pool.query(
+      'select is_active, avg_minutes, notice from queue_settings where place_id = $1', [placeId]);
+    const previous = current.rows[0] ?? { is_active: false, avg_minutes: 10, notice: '' };
+    const isActive = request.body.isActive ?? previous.is_active;
+    const avgMinutes = request.body.avgMinutes ?? previous.avg_minutes;
+    const notice = request.body.notice ?? previous.notice;
+    const { rows } = await pool.query(
+      `insert into queue_settings (place_id, is_active, avg_minutes, notice)
+       values ($1, $2, $3, $4)
+       on conflict (place_id) do update set is_active = excluded.is_active,
+         avg_minutes = excluded.avg_minutes, notice = excluded.notice, updated_at = now()
+       returning is_active, avg_minutes, notice`,
+      [placeId, isActive, avgMinutes, notice]);
+    return { isActive: rows[0].is_active, avgMinutes: rows[0].avg_minutes, notice: rows[0].notice };
+  });
+
+  app.post('/api/v1/partner/places/:id/queue/next', async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const result = await withTransaction(pool, async (client) => {
+      const settings = await client.query(
+        'select is_active from queue_settings where place_id = $1 for update', [placeId]);
+      if (!settings.rows[0]?.is_active) fail(409, 'queue_closed', 'Очередь сейчас закрыта');
+      const current = await client.query(
+        `select id from queue_tickets where place_id = $1 and day = current_date
+         and status in ('called', 'serving') limit 1`, [placeId]);
+      if (current.rows[0]) fail(409, 'queue_busy', 'Сначала завершите текущий талон');
+      const next = await client.query(
+        `select * from queue_tickets where place_id = $1 and day = current_date
+         and status = 'waiting' order by number limit 1 for update`, [placeId]);
+      if (!next.rows[0]) fail(404, 'queue_empty', 'В очереди никого нет');
+      await client.query(
+        `update queue_tickets set status = 'called', called_at = now() where id = $1`, [next.rows[0].id]);
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'queue_called', $2)`,
+        [next.rows[0].client_user_id, JSON.stringify({
+          placeId, ticketId: next.rows[0].id, number: next.rows[0].number,
+        })]);
+      const view = await client.query(`${QUEUE_TICKET_SELECT} where t.id = $1`, [next.rows[0].id]);
+      return queueTicketView(view.rows[0]);
+    });
+    return result;
+  });
+
+  app.post('/api/v1/partner/queue/:id/status', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['action'],
+      properties: { action: { type: 'string', enum: ['serving', 'done', 'no_show'] } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const ticketId = uuidParam(request);
+    const result = await withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `${QUEUE_TICKET_SELECT} where t.id = $1 for update of t`, [ticketId]);
+      const ticket = rows[0];
+      if (!ticket) fail(404, 'queue_ticket_not_found', 'Талон не найден');
+      await loadPlaceForManager(auth, ticket.place_id, client);
+      const action = request.body.action;
+      const allowed = {
+        serving: ['called'],
+        done: ['serving'],
+        no_show: ['waiting', 'called'],
+      };
+      if (!allowed[action].includes(ticket.status)) {
+        fail(409, 'invalid_transition', 'Талон уже в другом состоянии');
+      }
+      const status = action === 'no_show' ? 'no_show' : action;
+      if (action === 'done' || action === 'no_show') {
+        await client.query(
+          `update queue_tickets set status = $2, closed_at = now() where id = $1`, [ticketId, status]);
+      } else {
+        await client.query('update queue_tickets set status = $2 where id = $1', [ticketId, status]);
+      }
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'queue_status', $2)`,
+        [ticket.client_user_id, JSON.stringify({
+          placeId: ticket.place_id, ticketId, status, number: ticket.number,
+        })]);
+      const view = await client.query(`${QUEUE_TICKET_SELECT} where t.id = $1`, [ticketId]);
+      return queueTicketView(view.rows[0]);
+    });
+    return result;
   });
 
   app.post('/api/v1/partner/places/:id/offers', {

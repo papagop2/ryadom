@@ -22,6 +22,8 @@ const SHOP_ORDERS_KEY = 'rjadom.demo.shop-orders';
 const DELIVERY_ZONES_KEY = 'rjadom.demo.delivery-zones';
 const DELIVERY_JOBS_KEY = 'rjadom.demo.delivery-jobs';
 const PLACE_REVIEWS_KEY = 'rjadom.demo.place-reviews';
+const QUEUE_SETTINGS_KEY = 'rjadom.demo.queue-settings';
+const QUEUE_TICKETS_KEY = 'rjadom.demo.queue-tickets';
 const DAY = 86400000;
 
 const demoPlaces: DemoPlace[] = [
@@ -125,6 +127,13 @@ type DemoDeliveryJob = {
   courier: { id: string; name: string } | null;
 };
 type DemoReview = { id: string; rating: number; body: string; createdAt: string; author: string; status: 'pending' | 'published' | 'hidden' };
+type DemoQueueTicket = {
+  id: string; placeId: string; clientUserId: string; day: string; number: number;
+  status: 'waiting' | 'called' | 'serving' | 'done' | 'cancelled' | 'no_show';
+  note: string; createdAt: string; calledAt: string | null; closedAt: string | null;
+  clientName: string;
+};
+type DemoQueueSettings = { placeId: string; isActive: boolean; avgMinutes: number; notice: string };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
@@ -148,6 +157,48 @@ const fail = (message: string, code?: string) => Promise.reject(Object.assign(ne
 const getMe = () => read<DemoMe | null>(ME_KEY, null);
 const getBookings = (): DemoBooking[] => read<DemoBooking[]>(BOOKINGS_KEY, []).map(item => ({ ...item, cash: item.cash ?? { client: false, provider: false } }));
 const saveBookings = (items: DemoBooking[]) => write(BOOKINGS_KEY, items);
+const defaultQueueSettings: DemoQueueSettings[] = [
+  { placeId: 'forma', isActive: true, avgMinutes: 12, notice: 'Сегодня работают два мастера' },
+  { placeId: 'tihiy-chas', isActive: true, avgMinutes: 15, notice: 'Массаж по записи и живой очереди' },
+  { placeId: '2gis-70000001118751203', isActive: true, avgMinutes: 18, notice: 'Свободные мастера сегодня' },
+];
+const getQueueSettings = (): DemoQueueSettings[] =>
+  read<DemoQueueSettings[] | null>(QUEUE_SETTINGS_KEY, null) ?? defaultQueueSettings;
+const saveQueueSettings = (items: DemoQueueSettings[]) => write(QUEUE_SETTINGS_KEY, items);
+const getQueueTickets = (): DemoQueueTicket[] => read<DemoQueueTicket[]>(QUEUE_TICKETS_KEY, []);
+const saveQueueTickets = (items: DemoQueueTicket[]) => write(QUEUE_TICKETS_KEY, items);
+const queueDay = () => new Date().toISOString().slice(0, 10);
+function queueTicketView(ticket: DemoQueueTicket) {
+  const place = placeById(ticket.placeId);
+  return {
+    id: ticket.id, number: ticket.number, status: ticket.status, note: ticket.note,
+    day: ticket.day, createdAt: ticket.createdAt, calledAt: ticket.calledAt, closedAt: ticket.closedAt,
+    place: { id: ticket.placeId, name: place?.name ?? 'Точка', address: place?.address ?? '', district: place?.district ?? '' },
+  };
+}
+function queueSnapshot(placeId: string, me: DemoMe | null) {
+  const place = placeById(placeId);
+  if (!place) return null;
+  const settings = getQueueSettings().find(item => item.placeId === placeId);
+  const today = getQueueTickets().filter(item => item.placeId === placeId && item.day === queueDay());
+  const active = today.filter(item => ['waiting', 'called', 'serving'].includes(item.status));
+  const mine = active.find(item => me && item.clientUserId === me.user.id) ?? null;
+  const waiting = today.filter(item => item.status === 'waiting');
+  return {
+    active: Boolean(settings?.isActive),
+    avgMinutes: settings?.avgMinutes ?? null,
+    notice: settings?.notice ?? '',
+    waiting: waiting.length,
+    called: today.filter(item => item.status === 'called').length,
+    serving: today.filter(item => item.status === 'serving').length,
+    nextNumber: waiting[0]?.number ?? null,
+    currentNumber: today.find(item => ['called', 'serving'].includes(item.status))?.number ?? null,
+    myTicket: mine ? queueTicketView(mine) : null,
+    position: mine?.status === 'waiting' ? waiting.filter(item => item.number < mine.number).length + 1 : null,
+    place: { id: place.id, name: place.name, address: place.address, district: place.district },
+  };
+}
+function queueError(message: string, code: string) { return fail(message, code); }
 const getTrips = () => read<DemoTrip[]>(TRIPS_KEY, []);
 const saveTrips = (items: DemoTrip[]) => write(TRIPS_KEY, items);
 const TRIP_ACTIVE: DemoTripStatus[] = ['requested', 'assigned', 'arrived', 'in_progress'];
@@ -494,6 +545,73 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return { items: getBookings().slice().sort((a, b) => b.slot.startsAt.localeCompare(a.slot.startsAt)) } as T;
   }
 
+  if (url.pathname === '/api/v1/queues') {
+    const city = url.searchParams.get('city');
+    const items = getQueueSettings().filter(setting => setting.isActive).map(setting => {
+      const place = placeById(setting.placeId);
+      if (!place || (city && place.city !== city)) return null;
+      const today = getQueueTickets().filter(ticket => ticket.placeId === setting.placeId && ticket.day === queueDay());
+      return {
+        place: { id: place.id, name: place.name, category: place.category, district: place.district, address: place.address, image: place.image ?? null },
+        waiting: today.filter(ticket => ticket.status === 'waiting').length,
+        currentNumber: today.find(ticket => ['called', 'serving'].includes(ticket.status))?.number ?? null,
+        avgMinutes: setting.avgMinutes, notice: setting.notice,
+      };
+    }).filter(Boolean);
+    return { items } as T;
+  }
+
+  const placeQueueMatch = url.pathname.match(/^\/api\/v1\/places\/([^/]+)\/queue$/);
+  if (placeQueueMatch) {
+    const place = placeById(placeQueueMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    const me = getMe();
+    if (method === 'GET') return queueSnapshot(place.id, me) as T;
+    if (method === 'POST') {
+      if (!me) return fail('Требуется вход', 'unauthorized');
+      const settings = getQueueSettings().find(item => item.placeId === place.id);
+      if (!settings?.isActive) return fail('Очередь сейчас закрыта', 'queue_closed');
+      const tickets = getQueueTickets();
+      const active = tickets.find(ticket => ticket.placeId === place.id && ticket.clientUserId === me.user.id
+        && ['waiting', 'called', 'serving'].includes(ticket.status));
+      if (active) return queueSnapshot(place.id, me) as T;
+      const today = tickets.filter(ticket => ticket.placeId === place.id && ticket.day === queueDay());
+      const number = Math.max(0, ...today.map(ticket => ticket.number)) + 1;
+      tickets.push({
+        id: `q-${Date.now()}`, placeId: place.id, clientUserId: me.user.id, day: queueDay(), number,
+        status: 'waiting', note: String(body.note ?? '').slice(0, 200), createdAt: new Date().toISOString(),
+        calledAt: null, closedAt: null, clientName: me.user.displayName,
+      });
+      saveQueueTickets(tickets);
+      return queueSnapshot(place.id, me) as T;
+    }
+  }
+
+  const queueCancelMatch = url.pathname.match(/^\/api\/v1\/queue\/([^/]+)\/cancel$/);
+  if (queueCancelMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const tickets = getQueueTickets();
+    const ticket = tickets.find(item => item.id === queueCancelMatch[1]);
+    if (!ticket) return fail('Талон не найден', 'not_found');
+    if (ticket.clientUserId !== me.user.id) return fail('Это не ваш талон', 'forbidden');
+    if (ticket.status !== 'waiting') return fail('Талон уже нельзя отменить', 'invalid_transition');
+    ticket.status = 'cancelled';
+    ticket.closedAt = new Date().toISOString();
+    saveQueueTickets(tickets);
+    return queueTicketView(ticket) as T;
+  }
+
+  if (url.pathname === '/api/v1/me/queue') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getQueueTickets().filter(ticket => ticket.clientUserId === me.user.id)
+      .sort((a, b) => (['waiting', 'called', 'serving'].includes(b.status) ? 1 : 0)
+        - (['waiting', 'called', 'serving'].includes(a.status) ? 1 : 0)
+        || b.createdAt.localeCompare(a.createdAt));
+    return { items: items.map(queueTicketView) } as T;
+  }
+
   if (url.pathname === '/api/v1/bookings' && method === 'POST') {
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
@@ -553,6 +671,82 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     }
     saveBookings(items);
     return target as T;
+  }
+
+  const partnerQueueMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/queue$/);
+  if (partnerQueueMatch) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerQueueMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    if (method === 'GET') {
+      const settings = getQueueSettings().find(item => item.placeId === place.id)
+        ?? { placeId: place.id, isActive: false, avgMinutes: 10, notice: '' };
+      const tickets = getQueueTickets().filter(ticket => ticket.placeId === place.id && ticket.day === queueDay())
+        .sort((a, b) => a.number - b.number);
+      return { settings: { isActive: settings.isActive, avgMinutes: settings.avgMinutes, notice: settings.notice },
+        tickets: tickets.map(queueTicketView) } as T;
+    }
+    if (method === 'PUT') {
+      const all = getQueueSettings();
+      const index = all.findIndex(item => item.placeId === place.id);
+      const previous = all[index] ?? { placeId: place.id, isActive: false, avgMinutes: 10, notice: '' };
+      const next = {
+        ...previous,
+        isActive: body.isActive === undefined ? previous.isActive : Boolean(body.isActive),
+        avgMinutes: body.avgMinutes === undefined ? previous.avgMinutes : Math.max(1, Math.min(180, Number(body.avgMinutes) || 10)),
+        notice: body.notice === undefined ? previous.notice : String(body.notice).slice(0, 200),
+      };
+      if (index >= 0) all[index] = next; else all.push(next);
+      saveQueueSettings(all);
+      return { isActive: next.isActive, avgMinutes: next.avgMinutes, notice: next.notice } as T;
+    }
+  }
+
+  const partnerQueueNextMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/queue\/next$/);
+  if (partnerQueueNextMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerQueueNextMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    const settings = getQueueSettings().find(item => item.placeId === place.id);
+    if (!settings?.isActive) return fail('Очередь сейчас закрыта', 'queue_closed');
+    const tickets = getQueueTickets();
+    const today = tickets.filter(ticket => ticket.placeId === place.id && ticket.day === queueDay());
+    if (today.some(ticket => ['called', 'serving'].includes(ticket.status))) return fail('Сначала завершите текущий талон', 'queue_busy');
+    const next = today.filter(ticket => ticket.status === 'waiting').sort((a, b) => a.number - b.number)[0];
+    if (!next) return fail('В очереди никого нет', 'queue_empty');
+    next.status = 'called';
+    next.calledAt = new Date().toISOString();
+    saveQueueTickets(tickets);
+    return queueTicketView(next) as T;
+  }
+
+  const partnerQueueStatusMatch = url.pathname.match(/^\/api\/v1\/partner\/queue\/([^/]+)\/status$/);
+  if (partnerQueueStatusMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const tickets = getQueueTickets();
+    const ticket = tickets.find(item => item.id === partnerQueueStatusMatch[1]);
+    if (!ticket) return fail('Талон не найден', 'not_found');
+    const place = placeById(ticket.placeId);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    const action = String(body.action);
+    const allowed: Record<string, string[]> = { serving: ['called'], done: ['serving'], no_show: ['waiting', 'called'] };
+    if (!allowed[action]?.includes(ticket.status)) return fail('Талон уже в другом состоянии', 'invalid_transition');
+    ticket.status = action === 'no_show' ? 'no_show' : action as DemoQueueTicket['status'];
+    if (action === 'done' || action === 'no_show') ticket.closedAt = new Date().toISOString();
+    saveQueueTickets(tickets);
+    return queueTicketView(ticket) as T;
   }
 
   if (url.pathname === '/api/v1/partner/places') {

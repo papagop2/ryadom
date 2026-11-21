@@ -794,6 +794,65 @@ test('доставка: зона, сбор за доставку и путь к�
   assert.deepEqual(paid.json().cash, { client: true, provider: true });
 });
 
+test('живая очередь: талон, вызов и завершение визита', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  const place = (await pool.query("select id from places where name = 'Форма'")).rows[0];
+  await pool.query('delete from queue_tickets where place_id = $1', [place.id]);
+  await pool.query('delete from queue_days where place_id = $1', [place.id]);
+
+  const settings = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/queue`,
+    headers: partner.headers, payload: { isActive: true, avgMinutes: 12, notice: 'Тестовая очередь' } });
+  assert.equal(settings.statusCode, 200, settings.body);
+  assert.equal(settings.json().isActive, true);
+
+  const first = await app.inject({ method: 'POST', url: `/api/v1/places/${place.id}/queue`,
+    headers: client.headers, payload: { note: 'Тест' } });
+  assert.equal(first.statusCode, 201, first.body);
+  const ticket = first.json().myTicket;
+  assert.equal(ticket.status, 'waiting');
+  assert.equal(ticket.number, 1);
+  assert.equal(first.json().position, 1);
+
+  const repeated = await app.inject({ method: 'POST', url: `/api/v1/places/${place.id}/queue`,
+    headers: client.headers, payload: {} });
+  assert.equal(repeated.statusCode, 200);
+  assert.equal(repeated.json().myTicket.id, ticket.id);
+
+  const partnerQueue = await app.inject({ url: `/api/v1/partner/places/${place.id}/queue`, headers: partner.headers });
+  assert.equal(partnerQueue.statusCode, 200, partnerQueue.body);
+  assert.equal(partnerQueue.json().tickets.length, 1);
+
+  const called = await app.inject({ method: 'POST', url: `/api/v1/partner/places/${place.id}/queue/next`,
+    headers: partner.headers });
+  assert.equal(called.statusCode, 200, called.body);
+  assert.equal(called.json().status, 'called');
+  const clientQueue = await app.inject({ url: `/api/v1/places/${place.id}/queue`, headers: client.headers });
+  assert.equal(clientQueue.json().myTicket.status, 'called');
+
+  const serving = await app.inject({ method: 'POST', url: `/api/v1/partner/queue/${ticket.id}/status`,
+    headers: partner.headers, payload: { action: 'serving' } });
+  assert.equal(serving.statusCode, 200, serving.body);
+  assert.equal(serving.json().status, 'serving');
+  const done = await app.inject({ method: 'POST', url: `/api/v1/partner/queue/${ticket.id}/status`,
+    headers: partner.headers, payload: { action: 'done' } });
+  assert.equal(done.statusCode, 200, done.body);
+  assert.equal(done.json().status, 'done');
+
+  const second = await app.inject({ method: 'POST', url: `/api/v1/places/${place.id}/queue`,
+    headers: client.headers, payload: {} });
+  assert.equal(second.statusCode, 201, second.body);
+  assert.equal(second.json().myTicket.number, 2);
+  const cancelled = await app.inject({ method: 'POST', url: `/api/v1/queue/${second.json().myTicket.id}/cancel`,
+    headers: client.headers });
+  assert.equal(cancelled.statusCode, 200, cancelled.body);
+  assert.equal(cancelled.json().status, 'cancelled');
+  await pool.query('delete from queue_tickets where place_id = $1', [place.id]);
+  await pool.query('delete from queue_days where place_id = $1', [place.id]);
+});
+
 test('доставка: оператор назначает курьера и видит активные задания', async (t) => {
   if (!ready) return t.skip(skipReason);
   const client = await login();
