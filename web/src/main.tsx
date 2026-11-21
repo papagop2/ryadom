@@ -73,6 +73,23 @@ type QueuePlace = {
   place: { id: string; name: string; category: Category; district: string; address: string; image: string | null };
   waiting: number; currentNumber: number | null; avgMinutes: number; notice: string;
 };
+type LoyaltyCardState = { stamps: number; rewardsAvailable: number; totalVisits: number; lastStampAt: string | null };
+type LoyaltyInfo = {
+  active: boolean; goal?: number; rewardTitle?: string; rewardNote?: string;
+  card?: LoyaltyCardState | null;
+};
+type LoyaltyPlaceCard = {
+  place: { id: string; name: string; category: Category; district: string; address: string; image: string | null };
+  goal: number; rewardTitle: string; rewardNote: string; card: LoyaltyCardState;
+};
+
+function visitsLabel(count: number) {
+  const mod10 = count % 10, mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} визит`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} визита`;
+  return `${count} визитов`;
+}
+
 type Me = { user: { id: string; phone: string; displayName: string }; roles: { role: string; partner_id: string | null }[]; partnerIds: string[] };
 type TripPoint = { label: string; address?: string; lat: number; lng: number };
 type TripStatus = 'requested' | 'assigned' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
@@ -190,7 +207,8 @@ async function api<T>(path: string, init: { method?: string; body?: unknown; sig
 type IconName = 'home' | 'map' | 'receipt' | 'user' | 'search' | 'pin' | 'star' | 'clock' | 'chevron'
   | 'chevronDown' | 'bell' | 'sliders' | 'sparkles' | 'scissors' | 'spa' | 'food' | 'wrench' | 'grid'
   | 'arrowLeft' | 'plus' | 'check' | 'edit' | 'logout' | 'calendar' | 'shield' | 'close' | 'phone'
-  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download' | 'refresh' | 'child' | 'bag' | 'paw';
+  | 'send' | 'heart' | 'bolt' | 'dots' | 'car' | 'download' | 'refresh' | 'child' | 'bag' | 'paw'
+  | 'gift';
 
 const iconPaths: Record<IconName, ReactNode> = {
   home: <><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" /></>,
@@ -204,6 +222,7 @@ const iconPaths: Record<IconName, ReactNode> = {
   chevron: <><path d="m9 6 6 6-6 6" /></>,
   chevronDown: <><path d="m6 9 6 6 6-6" /></>,
   bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></>,
+  gift: <><rect x="4" y="9" width="16" height="11" rx="2" /><path d="M12 9v11M4 13h16" /><path d="M12 9C10 5 5 5 5 8c0 2 3 1 7 1zM12 9c2-4 7-4 7-1 0 2-3 1-7 1z" /></>,
   sliders: <><path d="M4 7h9M18 7h2M4 17h4M13 17h7" /><circle cx="15.5" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></>,
   sparkles: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /><path d="m12 9 1.3 1.7L15 12l-1.7 1.3L12 15l-1.3-1.7L9 12l1.7-1.3z" /></>,
   scissors: <><circle cx="6" cy="7" r="2.4" /><circle cx="6" cy="17" r="2.4" /><path d="M8 8.4 20 19M8 15.6 20 5" /></>,
@@ -2180,6 +2199,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [loyalty, setLoyalty] = useState<LoyaltyInfo | null>(null);
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
 
@@ -2207,6 +2227,9 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   }, [place.id]);
 
   useEffect(loadQueue, [loadQueue]);
+  useEffect(() => {
+    void api<LoyaltyInfo>(`/api/v1/places/${place.id}/loyalty`).then(setLoyalty).catch(() => setLoyalty(null));
+  }, [place.id, me?.user.id]);
 
   async function joinQueue() {
     if (!me) { notify('Войдите, чтобы занять очередь'); return; }
@@ -2411,6 +2434,23 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           <Icon name="receipt" size={15} />{queueBusy ? 'Берём талон…' : 'Занять очередь'}
         </button>
       </>}
+    </div>}
+
+    {loyalty?.active && <div className={`loyalty-card${loyalty.card?.rewardsAvailable ? ' ready' : ''}`}>
+      <div className="loyalty-head">
+        <span className="loyalty-title"><Icon name="gift" size={15} />Штампы</span>
+        <span className="loyalty-goal">{visitsLabel(loyalty.goal ?? 0)}</span>
+      </div>
+      <p className="loyalty-reward">{loyalty.rewardTitle}</p>
+      <div className="stamps" aria-label={`Штампов: ${loyalty.card?.stamps ?? 0} из ${loyalty.goal ?? 0}`}>
+        {Array.from({ length: loyalty.goal ?? 0 }).map((_, index) =>
+          <span key={index} className={`stamp${index < (loyalty.card?.stamps ?? 0) ? ' filled' : ''}`}>
+            {index < (loyalty.card?.stamps ?? 0) ? <Icon name="check" size={10} /> : index + 1}
+          </span>)}
+      </div>
+      {loyalty.card?.rewardsAvailable ? <p className="loyalty-ready"><Icon name="gift" size={13} />Награда доступна · покажите на кассе</p>
+        : <p className="hint">{loyalty.card ? `Ещё ${Math.max(0, (loyalty.goal ?? 0) - loyalty.card.stamps)} до подарка` : 'Штамп добавится после завершённого визита'}</p>}
+      {loyalty.rewardNote && <p className="hint">{loyalty.rewardNote}</p>}
     </div>}
 
     {place.source && <a className="source-card" href={place.source.url ?? '#'} target="_blank" rel="noopener noreferrer">
@@ -3150,6 +3190,32 @@ function ReviewForm({ bookingId, onDone, notify }: { bookingId: string; onDone: 
   </div>;
 }
 
+function LoyaltyPanel({ me }: { me: Me | null }) {
+  const [items, setItems] = useState<LoyaltyPlaceCard[] | null>(null);
+  useEffect(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: LoyaltyPlaceCard[] }>('/api/v1/me/loyalty')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  if (!items?.length) return null;
+  return <div className="loyalty-list">
+    <div className="panel-title"><h2><Icon name="gift" size={14} />Мои штампы</h2><span className="count-chip">{items.length}</span></div>
+    {items.map(item => <div className={`loyalty-row${item.card.rewardsAvailable ? ' ready' : ''}`} key={item.place.id}>
+      <div className="loyalty-row-head">
+        <strong>{item.place.name}</strong>
+        {item.card.rewardsAvailable > 0 && <span className="loyalty-badge">Подарок</span>}
+      </div>
+      <p className="meta">{item.rewardTitle} · {visitsLabel(item.goal)}</p>
+      <div className="stamps">
+        {Array.from({ length: item.goal }).map((_, index) =>
+          <span key={index} className={`stamp${index < item.card.stamps ? ' filled' : ''}`}>
+            {index < item.card.stamps ? <Icon name="check" size={10} /> : index + 1}
+          </span>)}
+      </div>
+    </div>)}
+  </div>;
+}
+
 function PushToggle({ notify }: { notify: (text: string) => void }) {
   if (DEMO) return null;
   const [state, setState] = useState<'checking' | 'unsupported' | 'off' | 'on' | 'denied' | 'busy'>('checking');
@@ -3298,6 +3364,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     <div className="chips-row">{me.roles.map(role => <span className="chip" key={role.role}>
       <Icon name={role.role === 'operator' ? 'shield' : role.role === 'partner' ? 'edit' : role.role === 'courier' ? 'car' : 'user'} size={13} />{roleLabel[role.role] ?? role.role}
     </span>)}</div>
+    <LoyaltyPanel me={me} />
 
     {isPartner && <div className="partner">
       <div className="panel-title"><h2>Заявки</h2><span className="count-chip">{partner ? partner.length : '—'}</span></div>
@@ -3405,6 +3472,75 @@ function PartnerShopOrders({ notify }: { notify: (text: string) => void }) {
   </div>;
 }
 
+type PartnerLoyaltyData = {
+  settings: { isActive: boolean; goal: number; rewardTitle: string; rewardNote: string };
+  cards: ({ client: { id: string; name: string } } & LoyaltyCardState)[];
+};
+
+function PartnerLoyalty({ placeId, notify }: { placeId: string; notify: (text: string) => void }) {
+  const [data, setData] = useState<PartnerLoyaltyData | null>(null);
+  const [goal, setGoal] = useState('5');
+  const [reward, setReward] = useState('Подарок');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => {
+    void api<PartnerLoyaltyData>(`/api/v1/partner/places/${placeId}/loyalty`)
+      .then(value => { setData(value); setGoal(String(value.settings.goal)); setReward(value.settings.rewardTitle); })
+      .catch(() => setData(null));
+  }, [placeId]);
+  useEffect(load, [load]);
+
+  async function update(patch: { isActive?: boolean; goal?: number; rewardTitle?: string }) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/loyalty`, { method: 'PUT', body: patch });
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось сохранить программу'); }
+    finally { setBusy(false); }
+  }
+
+  async function redeem(userId: string) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/partner/places/${placeId}/loyalty/redeem`, { method: 'POST', body: { userId } });
+      notify('Награда выдана');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось выдать награду'); }
+    finally { setBusy(false); }
+  }
+
+  if (!data) return <div className="partner-loyalty"><div className="skeleton-card" /></div>;
+  return <div className="partner-loyalty">
+    <div className="partner-queue-head">
+      <strong><Icon name="gift" size={14} />Штампы</strong>
+      <label className="switch">
+        <input type="checkbox" checked={data.settings.isActive} disabled={busy}
+          onChange={event => void update({ isActive: event.target.checked })} />
+        <span>{data.settings.isActive ? 'Включена' : 'Выключена'}</span>
+      </label>
+    </div>
+    <div className="loyalty-settings">
+      <label>Визитов до награды<input value={goal} inputMode="numeric" disabled={busy}
+        onChange={event => setGoal(event.target.value.replace(/\D/g, '').slice(0, 2))}
+        onBlur={() => { const value = Math.max(1, Math.min(50, Number(goal) || 5)); setGoal(String(value)); if (value !== data.settings.goal) void update({ goal: value }); }} /></label>
+      <label>Награда<input value={reward} maxLength={120} disabled={busy}
+        onChange={event => setReward(event.target.value)}
+        onBlur={() => { if (reward.trim() && reward !== data.settings.rewardTitle) void update({ rewardTitle: reward.trim() }); }} /></label>
+    </div>
+    {data.cards.length === 0 ? <p className="notice">Пока никого. Штамп появится после завершённой записи, заказа или визита по очереди.</p>
+      : <ul className="loyalty-clients">{data.cards.map(card => <li key={card.client.id}>
+        <div className="loyalty-client-copy">
+          <strong>{card.client.name}</strong>
+          <div className="stamps">
+            {Array.from({ length: data.settings.goal }).map((_, index) =>
+              <span key={index} className={`stamp${index < card.stamps ? ' filled' : ''}`}>{index < card.stamps ? '✓' : index + 1}</span>)}
+          </div>
+        </div>
+        {card.rewardsAvailable > 0 && <button type="button" className="primary mini" disabled={busy}
+          onClick={() => void redeem(card.client.id)}>Выдать</button>}
+      </li>)}</ul>}
+  </div>;
+}
+
 function PartnerQueue({ placeId, notify }: { placeId: string; notify: (text: string) => void }) {
   const [data, setData] = useState<{ settings: { isActive: boolean; avgMinutes: number; notice: string }; tickets: QueueTicket[] } | null>(null);
   const [avgDraft, setAvgDraft] = useState('10');
@@ -3504,6 +3640,7 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [addingZone, setAddingZone] = useState<string | null>(null);
   const [zoneDraft, setZoneDraft] = useState({ district: '', fee: '199', min: '500', eta: '45' });
   const [queueOpen, setQueueOpen] = useState<string | null>(null);
+  const [loyaltyOpen, setLoyaltyOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -3611,10 +3748,14 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
             <button type="button" onClick={() => setQueueOpen(queueOpen === place.id ? null : place.id)}>
               <Icon name="clock" size={13} />Очередь
             </button>
+            <button type="button" onClick={() => setLoyaltyOpen(loyaltyOpen === place.id ? null : place.id)}>
+              <Icon name="gift" size={13} />Штампы
+            </button>
             <button type="button" onClick={() => setEditing({ ...place })}>Изменить</button>
           </div>
         </div>
         {queueOpen === place.id && <PartnerQueue placeId={place.id} notify={notify} />}
+        {loyaltyOpen === place.id && <PartnerLoyalty placeId={place.id} notify={notify} />}
         {!place.isPublished && <p className="meta">Скрыто из каталога</p>}
         <ul className="partner-offers">{place.offers.map(offer => <li key={offer.id}>
           <div className="offer-line">

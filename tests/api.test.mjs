@@ -226,6 +226,41 @@ test('отзыв можно оставить один раз и только п�
   assert.equal(second.json().error, 'review_exists');
 });
 
+test('штампы: визит начисляет награду, партнёр её выдаёт', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const place = (await pool.query("select id from places where name = 'Форма'")).rows[0];
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  await pool.query('delete from loyalty_programs where place_id = $1', [place.id]);
+  const settings = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/loyalty`,
+    headers: partner.headers, payload: { isActive: true, goal: 1, rewardTitle: 'Подарок за визит' } });
+  assert.equal(settings.statusCode, 200, settings.body);
+  assert.equal(settings.json().goal, 1);
+
+  const { client, placeId } = await completeBooking('Форма');
+  const mine = await app.inject({ url: '/api/v1/me/loyalty', headers: client.headers });
+  assert.equal(mine.statusCode, 200, mine.body);
+  const card = mine.json().items.find(item => item.place.id === placeId);
+  assert.ok(card, 'карта должна появиться после завершённой записи');
+  assert.equal(card.card.stamps, 0);
+  assert.equal(card.card.rewardsAvailable, 1);
+
+  const partnerCards = await app.inject({ url: `/api/v1/partner/places/${placeId}/loyalty`, headers: partner.headers });
+  assert.equal(partnerCards.statusCode, 200, partnerCards.body);
+  assert.ok(partnerCards.json().cards.some(item => item.client.id === client.userId && item.rewardsAvailable === 1));
+
+  const redeemed = await app.inject({ method: 'POST', url: `/api/v1/partner/places/${placeId}/loyalty/redeem`,
+    headers: partner.headers, payload: { userId: client.userId } });
+  assert.equal(redeemed.statusCode, 200, redeemed.body);
+  assert.equal(redeemed.json().rewardsAvailable, 0);
+  const after = await app.inject({ url: '/api/v1/me/loyalty', headers: client.headers });
+  assert.equal(after.json().items.find(item => item.place.id === placeId).card.rewardsAvailable, 0);
+
+  await pool.query('delete from loyalty_programs where place_id = $1', [place.id]);
+  await pool.query('delete from loyalty_cards where place_id = $1', [place.id]);
+  await pool.query('delete from loyalty_events where place_id = $1', [place.id]);
+});
+
 test('изменение без сессии и без CSRF отклоняется', async (t) => {
   if (!ready) return t.skip(skipReason);
   assert.equal((await app.inject({ method: 'POST', url: '/api/v1/bookings', payload: { slotId: '00000000-0000-4000-8000-000000000000' } })).statusCode, 401);

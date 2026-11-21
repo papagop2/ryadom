@@ -512,6 +512,15 @@ async function loadShopOrder(db, id) {
   return shopOrderView(rows[0], items.get(id) ?? []);
 }
 
+function loyaltyCardView(row) {
+  return {
+    stamps: row.stamps,
+    rewardsAvailable: row.rewards_available,
+    totalVisits: row.total_visits,
+    lastStampAt: row.last_stamp_at,
+  };
+}
+
 const QUEUE_TICKET_SELECT = `
   select t.*, p.name as place_name, p.address as place_address, p.district as place_district
   from queue_tickets t join places p on p.id = t.place_id`;
@@ -1174,6 +1183,139 @@ export function routes(app, { pool, demoLogin = false }) {
       'delete from push_subscriptions where user_id = $1 and endpoint = $2',
       [auth.userId, request.body.endpoint]);
     return { subscribed: false, removed: rowCount };
+  });
+
+  app.get('/api/v1/places/:id/loyalty', async (request, reply) => {
+    const placeId = uuidParam(request);
+    const place = await pool.query('select id from places where id = $1 and is_published', [placeId]);
+    if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    const program = await pool.query(
+      'select goal, reward_title, reward_note from loyalty_programs where place_id = $1 and is_active', [placeId]);
+    if (!program.rows[0]) {
+      reply.header('Cache-Control', 'no-store');
+      return { active: false };
+    }
+    let card = null;
+    if (request.auth?.userId) {
+      const mine = await pool.query(
+        'select stamps, rewards_available, total_visits, last_stamp_at from loyalty_cards where user_id = $1 and place_id = $2',
+        [request.auth.userId, placeId]);
+      if (mine.rows[0]) card = loyaltyCardView(mine.rows[0]);
+    }
+    reply.header('Cache-Control', 'no-store');
+    return {
+      active: true,
+      goal: program.rows[0].goal,
+      rewardTitle: program.rows[0].reward_title,
+      rewardNote: program.rows[0].reward_note,
+      card,
+    };
+  });
+
+  app.get('/api/v1/me/loyalty', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `select c.stamps, c.rewards_available, c.total_visits, c.last_stamp_at,
+              p.id as place_id, p.name as place_name, p.category, p.district, p.address, p.image_url,
+              lp.goal, lp.reward_title, lp.reward_note
+       from loyalty_cards c
+       join places p on p.id = c.place_id
+       join loyalty_programs lp on lp.place_id = c.place_id and lp.is_active
+       where c.user_id = $1
+       order by c.rewards_available desc, c.last_stamp_at desc`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      place: { id: row.place_id, name: row.place_name, category: row.category,
+        district: row.district, address: row.address, image: row.image_url },
+      goal: row.goal, rewardTitle: row.reward_title, rewardNote: row.reward_note,
+      card: loyaltyCardView(row),
+    })) };
+  });
+
+  app.get('/api/v1/partner/places/:id/loyalty', async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const program = await pool.query(
+      'select is_active, goal, reward_title, reward_note from loyalty_programs where place_id = $1', [placeId]);
+    const cards = await pool.query(
+      `select c.stamps, c.rewards_available, c.total_visits, c.last_stamp_at,
+              u.id as user_id, u.display_name
+       from loyalty_cards c join users u on u.id = c.user_id
+       where c.place_id = $1
+       order by c.rewards_available desc, c.last_stamp_at desc limit 100`, [placeId]);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      settings: {
+        isActive: Boolean(program.rows[0]?.is_active),
+        goal: program.rows[0]?.goal ?? 5,
+        rewardTitle: program.rows[0]?.reward_title ?? 'Подарок',
+        rewardNote: program.rows[0]?.reward_note ?? '',
+      },
+      cards: cards.rows.map(row => ({
+        client: { id: row.user_id, name: row.display_name },
+        ...loyaltyCardView(row),
+      })),
+    };
+  });
+
+  app.put('/api/v1/partner/places/:id/loyalty', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        isActive: { type: 'boolean' },
+        goal: { type: 'integer', minimum: 1, maximum: 50 },
+        rewardTitle: { type: 'string', minLength: 1, maxLength: 120 },
+        rewardNote: { type: 'string', maxLength: 300 },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const current = await pool.query(
+      'select is_active, goal, reward_title, reward_note from loyalty_programs where place_id = $1', [placeId]);
+    const previous = current.rows[0] ?? { is_active: false, goal: 5, reward_title: 'Подарок', reward_note: '' };
+    const { rows } = await pool.query(
+      `insert into loyalty_programs (place_id, is_active, goal, reward_title, reward_note)
+       values ($1, $2, $3, $4, $5)
+       on conflict (place_id) do update set is_active = excluded.is_active,
+         goal = excluded.goal, reward_title = excluded.reward_title,
+         reward_note = excluded.reward_note, updated_at = now()
+       returning is_active, goal, reward_title, reward_note`,
+      [placeId, request.body.isActive ?? previous.is_active,
+        request.body.goal ?? previous.goal,
+        request.body.rewardTitle ?? previous.reward_title,
+        request.body.rewardNote ?? previous.reward_note]);
+    return { isActive: rows[0].is_active, goal: rows[0].goal,
+      rewardTitle: rows[0].reward_title, rewardNote: rows[0].reward_note };
+  });
+
+  app.post('/api/v1/partner/places/:id/loyalty/redeem', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['userId'],
+      properties: { userId: { type: 'string', format: 'uuid' } },
+    } },
+  }, async (request) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    return withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `select stamps, rewards_available, total_visits, last_stamp_at
+         from loyalty_cards where user_id = $1 and place_id = $2 for update`,
+        [request.body.userId, placeId]);
+      const card = rows[0];
+      if (!card) fail(404, 'loyalty_card_not_found', 'Карта не найдена');
+      if (card.rewards_available < 1) fail(409, 'reward_not_available', 'Нет доступной награды');
+      await client.query(
+        `update loyalty_cards set rewards_available = rewards_available - 1
+         where user_id = $1 and place_id = $2`, [request.body.userId, placeId]);
+      await client.query(
+        `insert into loyalty_events (user_id, place_id, delta, kind, source)
+         values ($1, $2, 0, 'reward', 'partner')`, [request.body.userId, placeId]);
+      return { ...loyaltyCardView({ ...card, rewards_available: card.rewards_available - 1 }), redeemed: true };
+    });
   });
 
   app.get('/api/v1/me/favorites', {

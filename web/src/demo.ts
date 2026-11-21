@@ -25,6 +25,9 @@ const PLACE_REVIEWS_KEY = 'rjadom.demo.place-reviews';
 const QUEUE_SETTINGS_KEY = 'rjadom.demo.queue-settings';
 const QUEUE_TICKETS_KEY = 'rjadom.demo.queue-tickets';
 const FAVORITES_KEY = 'rjadom.demo.favorites';
+const LOYALTY_PROGRAMS_KEY = 'rjadom.demo.loyalty-programs';
+const LOYALTY_CARDS_KEY = 'rjadom.demo.loyalty-cards';
+const LOYALTY_EVENTS_KEY = 'rjadom.demo.loyalty-events';
 const DAY = 86400000;
 
 const demoPlaces: DemoPlace[] = [
@@ -135,6 +138,11 @@ type DemoQueueTicket = {
   clientName: string;
 };
 type DemoQueueSettings = { placeId: string; isActive: boolean; avgMinutes: number; notice: string };
+type DemoLoyaltyProgram = { placeId: string; isActive: boolean; goal: number; rewardTitle: string; rewardNote: string };
+type DemoLoyaltyCard = {
+  placeId: string; userId: string; clientName: string; stamps: number; totalVisits: number;
+  rewardsAvailable: number; lastStampAt: string;
+};
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
@@ -168,6 +176,41 @@ const getQueueSettings = (): DemoQueueSettings[] =>
 const saveQueueSettings = (items: DemoQueueSettings[]) => write(QUEUE_SETTINGS_KEY, items);
 const getQueueTickets = (): DemoQueueTicket[] => read<DemoQueueTicket[]>(QUEUE_TICKETS_KEY, []);
 const saveQueueTickets = (items: DemoQueueTicket[]) => write(QUEUE_TICKETS_KEY, items);
+const defaultLoyaltyPrograms: DemoLoyaltyProgram[] = [
+  { placeId: 'forma', isActive: true, goal: 3, rewardTitle: 'Стрижка со скидкой 20%', rewardNote: 'Покажите награду администратору' },
+];
+const getLoyaltyPrograms = (): DemoLoyaltyProgram[] =>
+  read<DemoLoyaltyProgram[] | null>(LOYALTY_PROGRAMS_KEY, null) ?? defaultLoyaltyPrograms;
+const saveLoyaltyPrograms = (items: DemoLoyaltyProgram[]) => write(LOYALTY_PROGRAMS_KEY, items);
+const getLoyaltyCards = (): DemoLoyaltyCard[] => read<DemoLoyaltyCard[]>(LOYALTY_CARDS_KEY, []);
+const saveLoyaltyCards = (items: DemoLoyaltyCard[]) => write(LOYALTY_CARDS_KEY, items);
+const getLoyaltyEvents = (): string[] => read<string[]>(LOYALTY_EVENTS_KEY, []);
+const saveLoyaltyEvents = (items: string[]) => write(LOYALTY_EVENTS_KEY, items);
+function loyaltyState(card: DemoLoyaltyCard) {
+  return { stamps: card.stamps, rewardsAvailable: card.rewardsAvailable, totalVisits: card.totalVisits, lastStampAt: card.lastStampAt };
+}
+function awardDemoLoyalty(placeId: string, userId: string, clientName: string, source: string, sourceId: string) {
+  const program = getLoyaltyPrograms().find(item => item.placeId === placeId && item.isActive);
+  if (!program) return;
+  const events = getLoyaltyEvents();
+  const key = `${source}:${sourceId}`;
+  if (events.includes(key)) return;
+  saveLoyaltyEvents([key, ...events].slice(0, 300));
+  const cards = getLoyaltyCards();
+  let card = cards.find(item => item.placeId === placeId && item.userId === userId);
+  if (!card) {
+    card = { placeId, userId, clientName, stamps: 0, totalVisits: 0, rewardsAvailable: 0, lastStampAt: '' };
+    cards.push(card);
+  }
+  card.stamps += 1;
+  card.totalVisits += 1;
+  card.lastStampAt = new Date().toISOString();
+  if (card.stamps >= program.goal) {
+    card.stamps = 0;
+    card.rewardsAvailable += 1;
+  }
+  saveLoyaltyCards(cards);
+}
 const getFavorites = (): string[] => read<string[]>(FAVORITES_KEY, []);
 const saveFavorites = (items: string[]) => write(FAVORITES_KEY, items);
 const queueDay = () => new Date().toISOString().slice(0, 10);
@@ -605,6 +648,83 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return queueTicketView(ticket) as T;
   }
 
+  const loyaltyPlaceMatch = url.pathname.match(/^\/api\/v1\/places\/([^/]+)\/loyalty$/);
+  if (loyaltyPlaceMatch) {
+    const place = placeById(loyaltyPlaceMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    const program = getLoyaltyPrograms().find(item => item.placeId === place.id && item.isActive);
+    if (!program) return { active: false } as T;
+    const me = getMe();
+    const card = me ? getLoyaltyCards().find(item => item.placeId === place.id && item.userId === me.user.id) : null;
+    return { active: true, goal: program.goal, rewardTitle: program.rewardTitle, rewardNote: program.rewardNote,
+      card: card ? loyaltyState(card) : null } as T;
+  }
+
+  if (url.pathname === '/api/v1/me/loyalty') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const programs = getLoyaltyPrograms();
+    const items = getLoyaltyCards().filter(card => card.userId === me.user.id).map(card => {
+      const program = programs.find(item => item.placeId === card.placeId && item.isActive);
+      const place = placeById(card.placeId);
+      if (!program || !place) return null;
+      return { place: { id: place.id, name: place.name, category: place.category, district: place.district,
+        address: place.address, image: place.image ?? null },
+        goal: program.goal, rewardTitle: program.rewardTitle, rewardNote: program.rewardNote, card: loyaltyState(card) };
+    }).filter(Boolean);
+    return { items } as T;
+  }
+
+  const partnerLoyaltyMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/loyalty$/);
+  if (partnerLoyaltyMatch) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerLoyaltyMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    if (method === 'GET') {
+      const program = getLoyaltyPrograms().find(item => item.placeId === place.id)
+        ?? { placeId: place.id, isActive: false, goal: 5, rewardTitle: 'Подарок', rewardNote: '' };
+      return { settings: { isActive: program.isActive, goal: program.goal, rewardTitle: program.rewardTitle, rewardNote: program.rewardNote },
+        cards: getLoyaltyCards().filter(card => card.placeId === place.id)
+          .sort((a, b) => b.rewardsAvailable - a.rewardsAvailable || (b.lastStampAt || '').localeCompare(a.lastStampAt || ''))
+          .map(card => ({ client: { id: card.userId, name: card.clientName }, ...loyaltyState(card) })) } as T;
+    }
+    if (method === 'PUT') {
+      const all = getLoyaltyPrograms();
+      const index = all.findIndex(item => item.placeId === place.id);
+      const previous = all[index] ?? { placeId: place.id, isActive: false, goal: 5, rewardTitle: 'Подарок', rewardNote: '' };
+      const next = { ...previous,
+        isActive: body.isActive === undefined ? previous.isActive : Boolean(body.isActive),
+        goal: body.goal === undefined ? previous.goal : Math.max(1, Math.min(50, Number(body.goal) || 5)),
+        rewardTitle: body.rewardTitle === undefined ? previous.rewardTitle : String(body.rewardTitle).slice(0, 120),
+        rewardNote: body.rewardNote === undefined ? previous.rewardNote : String(body.rewardNote).slice(0, 300) };
+      if (index >= 0) all[index] = next; else all.push(next);
+      saveLoyaltyPrograms(all);
+      return { isActive: next.isActive, goal: next.goal, rewardTitle: next.rewardTitle, rewardNote: next.rewardNote } as T;
+    }
+  }
+
+  const partnerLoyaltyRedeemMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/loyalty\/redeem$/);
+  if (partnerLoyaltyRedeemMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerLoyaltyRedeemMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    const cards = getLoyaltyCards();
+    const card = cards.find(item => item.placeId === place.id && item.userId === String(body.userId));
+    if (!card) return fail('Карта не найдена', 'loyalty_card_not_found');
+    if (card.rewardsAvailable < 1) return fail('Нет доступной награды', 'reward_not_available');
+    card.rewardsAvailable -= 1;
+    saveLoyaltyCards(cards);
+    return { ...loyaltyState(card), redeemed: true } as T;
+  }
+
   if (url.pathname === '/api/v1/me/favorites') {
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
@@ -677,6 +797,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     target.cash = { ...target.cash, client: true };
     target.status = 'completed';
     saveBookings(items);
+    awardDemoLoyalty(target.place.id, me.user.id, me.user.displayName, 'booking', target.id);
     return target as T;
   }
 
@@ -774,6 +895,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     ticket.status = action === 'no_show' ? 'no_show' : action as DemoQueueTicket['status'];
     if (action === 'done' || action === 'no_show') ticket.closedAt = new Date().toISOString();
     saveQueueTickets(tickets);
+    if (action === 'done') awardDemoLoyalty(ticket.placeId, ticket.clientUserId, ticket.clientName, 'queue', ticket.id);
     return queueTicketView(ticket) as T;
   }
 
@@ -1311,6 +1433,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     order.cash = { ...order.cash, client: true };
     order.status = 'completed';
     saveShopOrders(orders);
+    awardDemoLoyalty(order.place.id, me.user.id, me.user.displayName, 'shop', order.id);
     return orderView(order) as T;
   }
 
