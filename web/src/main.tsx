@@ -422,6 +422,7 @@ function App() {
     if (!new URLSearchParams(location.search).has('tab')) return;
     const url = new URL(location.href);
     url.searchParams.delete('tab');
+    url.searchParams.delete('view');
     history.replaceState(history.state, '', url);
   }, []);
 
@@ -2962,6 +2963,44 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
   </div>;
 }
 
+function RepeatBooking({ booking, onDone, notify }: {
+  booking: Booking; onDone: () => void; notify: (text: string) => void;
+}) {
+  const [slots, setSlots] = useState<Slot[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<{ slots: Slot[] }>(`/api/v1/offers/${booking.offer.id}/slots?days=14`)
+      .then(data => setSlots(data.slots)).catch(() => setSlots([]));
+  }, [booking.offer.id]);
+
+  async function book(slot: Slot) {
+    setBusy(true);
+    try {
+      await api('/api/v1/bookings', { method: 'POST', body: {
+        slotId: slot.id, idempotencyKey: `repeat-${booking.id}-${slot.id}`,
+        note: `Повтор записи: ${booking.offer.title}`,
+      } });
+      notify('Записали на выбранное время');
+      haptic([8, 30, 10]);
+      onDone();
+    } catch (error) { notify((error as Error).message || 'Время уже заняли'); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="repeat-booking">
+    <div className="repeat-head"><strong><Icon name="refresh" size={14} />Повторить визит</strong>
+      <span className="meta">{booking.offer.title}</span></div>
+    {!slots ? <div className="skeleton-card" /> : !slots.length
+      ? <p className="notice">Свободных окон пока нет</p>
+      : <div className="repeat-slots">{slots.slice(0, 12).map(slot =>
+        <button type="button" key={slot.id} className="repeat-slot" disabled={busy}
+          onClick={() => void book(slot)}>
+          <span>{dayTime.format(new Date(slot.startsAt))}</span>
+          <small>{price(booking.price)}</small>
+        </button>)}</div>}
+  </div>;
+}
+
 function QueuePanel({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
   const [items, setItems] = useState<QueueTicket[] | null>(null);
   const load = useCallback(() => {
@@ -3012,9 +3051,13 @@ function QueuePanel({ me, notify }: { me: Me | null; notify: (text: string) => v
 }
 
 function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
-  const [view, setView] = useState<'bookings' | 'requests' | 'shop' | 'queue'>('bookings');
+  const [view, setView] = useState<'bookings' | 'requests' | 'shop' | 'queue'>(() => {
+    const value = new URLSearchParams(location.search).get('view');
+    return value === 'queue' || value === 'shop' || value === 'requests' ? value : 'bookings';
+  });
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [repeating, setRepeating] = useState<string | null>(null);
   const load = useCallback(() => {
     if (!me) { setItems([]); return; }
     void api<{ items: Booking[] }>('/api/v1/me/orders').then(data => setItems(data.items)).catch(() => setItems([]));
@@ -3064,12 +3107,18 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
         <div className="order-actions">
           {(item.status === 'requested' || (item.status === 'confirmed' && !item.cash.provider)) &&
             <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
+          {item.status === 'completed' && <button type="button" className="ghost-mini"
+            onClick={() => setRepeating(repeating === item.id ? null : item.id)}>
+            <Icon name="refresh" size={13} />Повторить
+          </button>}
           {item.status === 'completed' && !item.review && (reviewing === item.id
             ? <ReviewForm bookingId={item.id} onDone={() => { setReviewing(null); load(); }} notify={notify} />
             : <button type="button" className="ghost-mini accent" onClick={() => setReviewing(item.id)}><Icon name="star" size={14} />Оценить</button>)}
           {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
             {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
         </div>
+        {repeating === item.id && <RepeatBooking booking={item}
+          onDone={() => { setRepeating(null); load(); }} notify={notify} />}
         {item.status === 'confirmed' && item.cash.provider && !item.cash.client &&
           <div className="cash-confirm">
             <span><Icon name="receipt" size={14} />Партнёр отметил оплату наличными</span>
@@ -3099,6 +3148,94 @@ function ReviewForm({ bookingId, onDone, notify }: { bookingId: string; onDone: 
         .catch(() => notify('Отзыв уже оставлен'));
     }}>Отправить</button>
   </div>;
+}
+
+function PushToggle({ notify }: { notify: (text: string) => void }) {
+  if (DEMO) return null;
+  const [state, setState] = useState<'checking' | 'unsupported' | 'off' | 'on' | 'denied' | 'busy'>('checking');
+
+  useEffect(() => {
+    if (DEMO || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      setState('unsupported');
+      return;
+    }
+    let alive = true;
+    void navigator.serviceWorker.ready
+      .then(reg => reg.pushManager.getSubscription())
+      .then(sub => { if (alive) setState(sub ? 'on' : 'off'); })
+      .catch(() => { if (alive) setState('off'); });
+    return () => { alive = false; };
+  }, []);
+
+  async function enable() {
+    setState('busy');
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') { setState('denied'); notify('Разрешение на уведомления отклонено'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg) { setState('unsupported'); notify('Service worker ещё не готов'); return; }
+      const key = await fetch('/api/v1/push/public-key').then(response => response.json()) as { enabled: boolean; publicKey: string | null };
+      if (!key.enabled || !key.publicKey) { setState('off'); notify('Push на стенде не настроен'); return; }
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key.publicKey),
+      });
+      const raw = subscription.toJSON();
+      await api('/api/v1/me/push-subscriptions', { method: 'POST', body: {
+        endpoint: raw.endpoint, p256dh: raw.keys?.p256dh, auth: raw.keys?.auth, userAgent: navigator.userAgent,
+      } });
+      setState('on');
+      notify('Уведомления включены');
+      haptic([8, 30, 12]);
+    } catch (error) {
+      setState('off');
+      notify((error as Error).message || 'Не удалось включить уведомления');
+    }
+  }
+
+  async function disable() {
+    setState('busy');
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg?.pushManager.getSubscription();
+      if (subscription) {
+        await api('/api/v1/me/push-subscriptions', { method: 'DELETE', body: { endpoint: subscription.endpoint } });
+        await subscription.unsubscribe();
+      }
+      setState('off');
+      notify('Уведомления выключены');
+    } catch (error) {
+      setState('on');
+      notify((error as Error).message || 'Не удалось выключить уведомления');
+    }
+  }
+
+  if (state === 'unsupported') return <div className="push-card muted">
+    <span className="push-icon"><Icon name="bell" size={17} /></span>
+    <span><strong>Push-уведомления</strong><small>Доступны в установленном приложении по HTTPS</small></span>
+  </div>;
+  if (state === 'checking') return null;
+  return <div className={`push-card${state === 'on' ? ' on' : ''}`}>
+    <span className="push-icon"><Icon name="bell" size={17} /></span>
+    <span className="push-copy">
+      <strong>Push-уведомления</strong>
+      <small>{state === 'on' ? 'Вызов из очереди, запись и заказы' : state === 'denied' ? 'Разрешение отклонено в настройках' : 'Узнавайте о вызове и записи сразу'}</small>
+    </span>
+    {state === 'on'
+      ? <button type="button" className="ghost-mini" onClick={() => void disable()}>Выключить</button>
+      : <button type="button" className="primary mini" disabled={state === 'busy'} onClick={() => void enable()}>
+        {state === 'busy' ? '…' : state === 'denied' ? 'Повторить' : 'Включить'}
+      </button>}
+  </div>;
+}
+
+function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+  return bytes;
 }
 
 function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => void; notify: (text: string) => void }) {
@@ -3186,6 +3323,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     {isCourier && <CourierPanel notify={notify} />}
     {isOperator && <OperatorDeliveries notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
+    <PushToggle notify={notify} />
     <Notifications />
   </section>;
 }

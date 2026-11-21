@@ -7,6 +7,7 @@ import {
   safeEqual, setSessionCookies, tokenHash,
 } from './security.mjs';
 import { isUniqueViolation, withTransaction } from './db.mjs';
+import { pushEnabled, pushPublicKey } from './push.mjs';
 
 const CATEGORIES = ['salon', 'services', 'food', 'health'];
 const ACTIVE = ['requested', 'confirmed'];
@@ -1109,6 +1110,70 @@ export function routes(app, { pool, demoLogin = false }) {
       [auth.userId]);
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(queueTicketView) };
+  });
+
+  app.get('/api/v1/push/public-key', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { enabled: pushEnabled(), publicKey: pushPublicKey() };
+  });
+
+  app.get('/api/v1/me/push-subscriptions', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      'select id, endpoint, created_at, last_seen_at, last_error from push_subscriptions where user_id = $1 order by created_at desc',
+      [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      id: row.id, endpoint: row.endpoint, createdAt: row.created_at,
+      lastSeenAt: row.last_seen_at, lastError: row.last_error,
+    })), enabled: pushEnabled() };
+  });
+
+  app.post('/api/v1/me/push-subscriptions', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['endpoint', 'p256dh', 'auth'],
+      properties: {
+        endpoint: { type: 'string', minLength: 12, maxLength: 2000 },
+        p256dh: { type: 'string', minLength: 40, maxLength: 200 },
+        auth: { type: 'string', minLength: 16, maxLength: 100 },
+        userAgent: { type: 'string', maxLength: 300 },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    let endpoint;
+    try { endpoint = new URL(request.body.endpoint); } catch { fail(400, 'invalid_endpoint', 'Некорректный endpoint'); }
+    if (endpoint.protocol !== 'https:') fail(400, 'invalid_endpoint', 'Push работает только по HTTPS');
+    let p256dh; let authSecret;
+    try {
+      p256dh = Buffer.from(request.body.p256dh, 'base64url');
+      authSecret = Buffer.from(request.body.auth, 'base64url');
+    } catch { fail(400, 'invalid_subscription', 'Некорректный ключ подписки'); }
+    if (p256dh.length !== 65 || authSecret.length !== 16) {
+      fail(400, 'invalid_subscription', 'Некорректный ключ подписки');
+    }
+    const { rows } = await pool.query(
+      `insert into push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+       values ($1, $2, $3, $4, $5)
+       on conflict (endpoint) do update set user_id = excluded.user_id,
+         p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent,
+         last_seen_at = now(), last_error = null
+       returning id, endpoint, created_at`,
+      [auth.userId, endpoint.href, request.body.p256dh, request.body.auth, request.body.userAgent ?? '']);
+    return { subscribed: true, subscription: { id: rows[0].id, endpoint: rows[0].endpoint, createdAt: rows[0].created_at } };
+  });
+
+  app.delete('/api/v1/me/push-subscriptions', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['endpoint'],
+      properties: { endpoint: { type: 'string', minLength: 12, maxLength: 2000 } },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const { rowCount } = await pool.query(
+      'delete from push_subscriptions where user_id = $1 and endpoint = $2',
+      [auth.userId, request.body.endpoint]);
+    return { subscribed: false, removed: rowCount };
   });
 
   app.get('/api/v1/me/favorites', {

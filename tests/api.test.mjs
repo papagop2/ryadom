@@ -7,6 +7,7 @@ import { migrate } from '../db/migrate.mjs';
 import { seed } from '../db/seed.mjs';
 import { makeServer } from '../api/server.mjs';
 import { tokenHash } from '../api/security.mjs';
+import { createECDH, randomBytes } from 'node:crypto';
 
 const pool = createPool({ max: 4 });
 const app = makeServer({ pool, demoLogin: true });
@@ -792,6 +793,38 @@ test('доставка: зона, сбор за доставку и путь к�
   assert.equal(paid.statusCode, 200, paid.body);
   assert.equal(paid.json().status, 'completed');
   assert.deepEqual(paid.json().cash, { client: true, provider: true });
+});
+
+test('push: публичный ключ и подписка устройства', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const key = await app.inject({ url: '/api/v1/push/public-key' });
+  assert.equal(key.statusCode, 200, key.body);
+  assert.equal(typeof key.json().enabled, 'boolean');
+
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  const endpoint = `https://push.example.test/${randomBytes(6).toString('hex')}`;
+  const invalid = await app.inject({ method: 'POST', url: '/api/v1/me/push-subscriptions',
+    headers: client.headers, payload: { endpoint: 'http://insecure.example/push', p256dh: 'x', auth: 'y' } });
+  assert.equal(invalid.statusCode, 400);
+  const added = await app.inject({ method: 'POST', url: '/api/v1/me/push-subscriptions',
+    headers: client.headers, payload: {
+      endpoint, p256dh: ecdh.getPublicKey().toString('base64url'),
+      auth: randomBytes(16).toString('base64url'), userAgent: 'test',
+    } });
+  assert.equal(added.statusCode, 200, added.body);
+  assert.equal(added.json().subscribed, true);
+
+  const list = await app.inject({ url: '/api/v1/me/push-subscriptions', headers: client.headers });
+  assert.equal(list.statusCode, 200, list.body);
+  assert.equal(list.json().items.some(item => item.endpoint === endpoint), true);
+
+  const removed = await app.inject({ method: 'DELETE', url: '/api/v1/me/push-subscriptions',
+    headers: client.headers, payload: { endpoint } });
+  assert.equal(removed.statusCode, 200, removed.body);
+  const after = await app.inject({ url: '/api/v1/me/push-subscriptions', headers: client.headers });
+  assert.equal(after.json().items.some(item => item.endpoint === endpoint), false);
 });
 
 test('избранное: добавить, увидеть и убрать заведение', async (t) => {

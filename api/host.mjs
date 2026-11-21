@@ -7,6 +7,7 @@ import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createPool } from './db.mjs';
 import { makeServer } from './server.mjs';
+import { startPushLoop } from './pushJobs.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(here, '..', 'dist');
@@ -105,8 +106,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (!tls) console.warn('[host] TLS_PFX не задан: запуск по HTTP (только для локальной проверки)');
     await app.listen({ host, port });
     console.log(`[host] слушает ${tls ? 'https' : 'http'}://${host}:${port}`);
+    const stopPush = startPushLoop(pool, { logger: app.log });
     for (const signal of ['SIGINT', 'SIGTERM']) {
-      process.once(signal, async () => { await app.close(); await pool.end(); });
+      process.once(signal, async () => { stopPush(); await app.close(); await pool.end(); });
     }
   } catch (error) {
     console.error('[host] не удалось запуститься:', error.message);

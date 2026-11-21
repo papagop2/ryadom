@@ -22,3 +22,31 @@ self.addEventListener('fetch', event => {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(request)).then(hit => hit || fetch(request)));
   }
 });
+
+// Web Push: показываем системное уведомление и открываем нужный раздел.
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() || '' }; }
+  const title = data.title || 'Рядом';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: `${BASE}icon-192.png`,
+    badge: `${BASE}icon-192.png`,
+    tag: data.kind || 'ryadom',
+    data: { url: data.url || './', kind: data.kind || 'ryadom', notificationId: data.notificationId || null },
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const target = new URL(data.url || './', self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    const existing = clients.find(client => client.url.startsWith(self.registration.scope));
+    if (existing) {
+      if ('navigate' in existing) void existing.navigate(target);
+      return existing.focus();
+    }
+    return self.clients.openWindow(target);
+  }));
+});
