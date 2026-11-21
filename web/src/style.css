@@ -2117,3 +2117,38 @@ button, .dock, .appbar, .filters { -webkit-user-select: none; user-select: none;
 .loyalty-clients li { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,.05); }
 .loyalty-client-copy { display: grid; gap: 3px; }
 .loyalty-client-copy strong { font-size: 10px; }
+.open-filter { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--line); background: rgba(255,255,255,.05); color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.open-filter.active { color: #9fe7bd; border-color: rgba(126,226,168,.4); background: rgba(126,226,168,.1); }
+.open-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #8b929d; }
+.open-note { display: inline-flex; align-items: center; gap: 4px; }
+.open-note.open .open-dot, .open-filter.active .open-dot, .schedule-state.open .open-dot { background: #79e3a4; box-shadow: 0 0 0 3px rgba(121,227,164,.1); }
+.open-note.closed .open-dot, .schedule-state.closed .open-dot { background: #e88d8d; box-shadow: 0 0 0 3px rgba(232,141,141,.1); }
+.schedule-state { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.schedule-state.open { color: #9fe7bd; }
+.schedule-state.closed { color: #e8a2a2; }
+.schedule-card { display: grid; gap: 7px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line-soft); background: rgba(255,255,255,.025); }
+.schedule-card.open { border-color: rgba(126,226,168,.2); background: linear-gradient(135deg, rgba(126,226,168,.055), rgba(255,255,255,.015)); }
+.schedule-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.schedule-toggle { display: inline-flex; align-items: center; gap: 2px; padding: 3px 0 3px 6px; color: var(--muted); font-size: 9px; }
+.schedule-toggle .icon { width: 12px; height: 12px; }
+.schedule-week { display: grid; gap: 0; margin: 0; padding: 2px 0 0; list-style: none; border-top: 1px solid rgba(255,255,255,.06); }
+.schedule-week li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 2px; color: var(--muted); font-size: 10px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.schedule-week li:last-child { border-bottom: 0; }
+.schedule-week li.today { color: var(--text); }
+.schedule-week li.today span { color: var(--yellow); }
+.schedule-week li strong { font-weight: 550; text-align: right; }
+.partner-hours { display: grid; gap: 8px; margin-top: 9px; padding: 9px; border-radius: 12px; border: 1px solid var(--line-soft); background: rgba(255,255,255,.025); }
+.hours-days { display: grid; gap: 5px; }
+.hours-day { display: grid; gap: 5px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.05); }
+.hours-day:first-child { border-top: 0; }
+.hours-day-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hours-day-head strong { width: 22px; color: var(--muted); font-size: 10px; }
+.hours-switches { display: flex; gap: 3px; }
+.hours-switches button { height: 22px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--line-soft); background: rgba(255,255,255,.03); color: var(--muted); font: inherit; font-size: 8px; font-weight: 700; }
+.hours-switches button.active { color: var(--yellow); border-color: rgba(255,214,10,.35); background: rgba(255,214,10,.1); }
+.hours-intervals { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 28px; }
+.hours-interval { display: flex; align-items: center; gap: 2px; }
+.hours-interval input { width: 75px; height: 26px; padding: 0 3px; border-radius: 7px; border: 1px solid var(--line-soft); background: rgba(0,0,0,.18); color: var(--text); font: inherit; font-size: 10px; }
+.hours-interval span { color: var(--muted); font-size: 9px; }
+.hours-remove { display: grid; place-items: center; width: 22px; height: 26px; color: var(--muted); }
+.hours-add { height: 26px; padding: 0 7px; border-radius: 7px; border: 1px dashed rgba(255,255,255,.14); color: var(--muted); font: inherit; font-size: 8px; }

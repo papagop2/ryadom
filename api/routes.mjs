@@ -7,6 +7,7 @@ import {
   safeEqual, setSessionCookies, tokenHash,
 } from './security.mjs';
 import { isUniqueViolation, withTransaction } from './db.mjs';
+import { groupHourRows, hoursView, openStateFromDays, scheduleRowsForDb, validateSchedule } from './hours.mjs';
 import { pushEnabled, pushPublicKey } from './push.mjs';
 
 const CATEGORIES = ['salon', 'services', 'food', 'health'];
@@ -844,18 +845,21 @@ export function routes(app, { pool, demoLogin = false }) {
         lng: { type: 'number', minimum: -180, maximum: 180 },
         limit: { type: 'integer', minimum: 1, maximum: 50 },
         offset: { type: 'integer', minimum: 0, maximum: 500 },
+        openNow: { type: 'string', enum: ['1', '0', 'true', 'false'] },
       },
     } },
   }, async (request, reply) => {
-    const { city, category, district, q, maxPrice, minRating, limit = 20, offset = 0 } = request.query;
+    const { city, category, district, q, maxPrice, minRating, limit = 20, offset = 0, openNow } = request.query;
+    const onlyOpen = openNow === '1' || openNow === 'true';
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.lat, p.lng, p.about,
               p.rating_avg, p.rating_count, p.source, p.source_url, p.source_rating,
-              p.source_rating_count, p.city_slug, p.image_url, oo.min_price_cents, oo.offer_count,
+              p.source_rating_count, p.city_slug, p.image_url, c.timezone, oo.min_price_cents, oo.offer_count,
               count(*) over()::int as total,
               case when $7::numeric is null or $8::numeric is null
                    then null else round((point(p.lng, p.lat) <-> point($7, $8))::numeric * 111.32, 2) end as distance_km
        from places p
+       join cities c on c.slug = p.city_slug
        left join lateral (
          select min(price_cents) as min_price_cents, count(*)::int as offer_count
          from offers o where o.place_id = p.id and o.is_active
@@ -870,28 +874,29 @@ export function routes(app, { pool, demoLogin = false }) {
        order by distance_km asc nulls last,
          coalesce(p.rating_avg, p.source_rating) desc nulls last, p.name asc
        limit $6 offset $9`,
-      [category ?? null, district ?? null, q ?? null, maxPrice ?? null, minRating ?? null, limit,
-        request.query.lng ?? null, request.query.lat ?? null, offset, city ?? null]);
-    reply.header('Cache-Control', 'no-store');
-    return {
-      items: rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        category: row.category,
-        district: row.district,
-        address: row.address,
-        about: row.about,
+      [category ?? null, district ?? null, q ?? null, maxPrice ?? null, minRating ?? null,
+        onlyOpen ? 5000 : limit, request.query.lng ?? null, request.query.lat ?? null,
+        onlyOpen ? 0 : offset, city ?? null]);
+    const hourMap = await hoursForPlaces(rows.map(row => row.id));
+    const visible = rows.map(row => {
+      const hours = hourMap.get(row.id) ?? [];
+      return {
+        id: row.id, name: row.name, category: row.category, district: row.district,
+        address: row.address, about: row.about,
         location: { lat: Number(row.lat), lng: Number(row.lng) },
-        city: row.city_slug,
-        image: row.image_url,
+        city: row.city_slug, image: row.image_url,
         rating: row.rating_avg === null ? null : Number(row.rating_avg),
-        ratingCount: row.rating_count,
-        source: sourceView(row),
+        ratingCount: row.rating_count, source: sourceView(row),
         priceFrom: row.min_price_cents === null ? null : money(row.min_price_cents),
         offerCount: row.offer_count,
         distanceKm: row.distance_km === null ? null : Number(row.distance_km),
-      })),
-      total: rows[0]?.total ?? 0,
+        openNow: openStateFromDays(hours, row.timezone),
+      };
+    }).filter(row => !onlyOpen || row.openNow.state === 'open');
+    reply.header('Cache-Control', 'no-store');
+    return {
+      items: onlyOpen ? visible.slice(offset, offset + limit) : visible,
+      total: onlyOpen ? visible.length : rows[0]?.total ?? 0,
       limit,
       offset,
     };
@@ -900,28 +905,30 @@ export function routes(app, { pool, demoLogin = false }) {
   app.get('/api/v1/places/map', {
     schema: { querystring: { type: 'object', additionalProperties: false, properties: {
       city: { type: 'string', maxLength: 40 },
+      openNow: { type: 'string', enum: ['1', '0', 'true', 'false'] },
     } } },
   }, async (request, reply) => {
-    const { city } = request.query;
+    const { city, openNow } = request.query;
+    const onlyOpen = openNow === '1' || openNow === 'true';
     const { rows } = await pool.query(
       `select p.id, p.name, p.category, p.district, p.address, p.about, p.lat, p.lng,
               p.rating_avg, p.rating_count, p.source, p.source_url, p.source_reviews_url,
-              p.source_rating, p.source_rating_count, p.city_slug, p.image_url
-       from places p
+              p.source_rating, p.source_rating_count, p.city_slug, p.image_url, c.timezone
+       from places p join cities c on c.slug = p.city_slug
        where p.is_published and ($1::text is null or p.city_slug = $1)
        order by p.name asc`, [city ?? null]);
+    const hourMap = await hoursForPlaces(rows.map(row => row.id));
+    const items = rows.map(row => ({
+      id: row.id, name: row.name, category: row.category, district: row.district,
+      address: row.address, about: row.about, location: { lat: Number(row.lat), lng: Number(row.lng) },
+      city: row.city_slug, image: row.image_url,
+      rating: row.rating_avg === null ? null : Number(row.rating_avg), ratingCount: row.rating_count,
+      source: sourceView(row),
+      priceFrom: null, offerCount: 0, distanceKm: null,
+      openNow: openStateFromDays(hourMap.get(row.id) ?? [], row.timezone),
+    })).filter(row => !onlyOpen || row.openNow.state === 'open');
     reply.header('Cache-Control', 'no-store');
-    return {
-      items: rows.map(row => ({
-        id: row.id, name: row.name, category: row.category, district: row.district,
-        address: row.address, about: row.about, location: { lat: Number(row.lat), lng: Number(row.lng) },
-        city: row.city_slug, image: row.image_url,
-        rating: row.rating_avg === null ? null : Number(row.rating_avg), ratingCount: row.rating_count,
-        source: sourceView(row),
-        priceFrom: null, offerCount: 0, distanceKm: null,
-      })),
-      total: rows.length,
-    };
+    return { items, total: items.length };
   });
 
   app.get('/api/v1/cities', async (_request, reply) => {
@@ -955,8 +962,9 @@ export function routes(app, { pool, demoLogin = false }) {
       `select p.id, p.name, p.category, p.district, p.address, p.about, p.phone,
               p.lat, p.lng, p.rating_avg, p.rating_count, p.city_slug, p.source,
               p.source_url, p.source_reviews_url, p.source_rating, p.source_rating_count, p.image_url, p.photos,
-              p.metadata, (p.partner_id is not null) as bookable
-       from places p where p.id = $1 and p.is_published`, [uuidParam(request)]);
+              p.metadata, c.timezone, (p.partner_id is not null) as bookable
+       from places p join cities c on c.slug = p.city_slug
+       where p.id = $1 and p.is_published`, [uuidParam(request)]);
     if (!rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
     const place = rows[0];
     const offers = await pool.query(
@@ -976,6 +984,15 @@ export function routes(app, { pool, demoLogin = false }) {
     const zones = await pool.query(
       `select id, district, fee_cents, min_order_cents, eta_min, is_active
        from delivery_zones where place_id = $1 and is_active order by fee_cents`, [place.id]);
+    const hourRows = await pool.query(
+      `select h.place_id, h.weekday, h.is_closed, h.is_24h,
+              to_char(i.opens_at, 'HH24:MI') as opens_at,
+              to_char(i.closes_at, 'HH24:MI') as closes_at
+       from place_hours h
+       left join place_hour_intervals i
+         on i.place_id = h.place_id and i.weekday = h.weekday
+       where h.place_id = $1 order by h.weekday, i.position`, [place.id]);
+    const schedule = hoursView(hourRows.rows, place.timezone);
     reply.header('Cache-Control', 'no-store');
     return {
       place: {
@@ -994,6 +1011,9 @@ export function routes(app, { pool, demoLogin = false }) {
         rating: place.rating_avg === null ? null : Number(place.rating_avg),
         ratingCount: place.rating_count,
         source: sourceView(place),
+        timezone: schedule.timezone,
+        hours: schedule.days,
+        openNow: schedule.openNow,
         info: {
           schedule: scheduleText(place.metadata?.schedule) || place.metadata?.openingHours || null,
           sites: Array.isArray(place.metadata?.sites) ? place.metadata.sites.filter(Boolean).slice(0, 3) : [],
@@ -1626,6 +1646,20 @@ export function routes(app, { pool, demoLogin = false }) {
   });
 
   // ---- кабинет партнёра: карточки, услуги и расписание ----
+  async function hoursForPlaces(ids) {
+    if (!ids.length) return new Map();
+    const { rows } = await pool.query(
+      `select h.place_id, h.weekday, h.is_closed, h.is_24h,
+              to_char(i.opens_at, 'HH24:MI') as opens_at,
+              to_char(i.closes_at, 'HH24:MI') as closes_at
+       from place_hours h
+       left join place_hour_intervals i
+         on i.place_id = h.place_id and i.weekday = h.weekday
+       where h.place_id = any($1::uuid[])
+       order by h.place_id, h.weekday, i.position`, [ids]);
+    return groupHourRows(rows);
+  }
+
   async function loadPlaceForManager(auth, placeId, client = pool) {
     const { rows } = await client.query(
       'select id, partner_id from places where id = $1', [placeId]);
@@ -1728,6 +1762,79 @@ export function routes(app, { pool, demoLogin = false }) {
     await pool.query(
       `update places set ${updates.join(', ')}, updated_at = now() where id = $${values.length}`, values);
     return partnerPlaceView(pool, uuidParam(request));
+  });
+
+  app.get('/api/v1/partner/places/:id/hours', async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const place = await pool.query(
+      'select c.timezone from places p join cities c on c.slug = p.city_slug where p.id = $1', [placeId]);
+    if (!place.rows[0]) fail(404, 'place_not_found', 'Заведение не найдено');
+    const { rows } = await pool.query(
+      `select h.place_id, h.weekday, h.is_closed, h.is_24h,
+              to_char(i.opens_at, 'HH24:MI') as opens_at,
+              to_char(i.closes_at, 'HH24:MI') as closes_at
+       from place_hours h
+       left join place_hour_intervals i
+         on i.place_id = h.place_id and i.weekday = h.weekday
+       where h.place_id = $1 order by h.weekday, i.position`, [placeId]);
+    const view = hoursView(rows, place.rows[0].timezone);
+    reply.header('Cache-Control', 'no-store');
+    return { timezone: view.timezone, days: view.days, openNow: view.openNow };
+  });
+
+  app.put('/api/v1/partner/places/:id/hours', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['days'],
+      properties: { days: {
+        type: 'array', minItems: 7, maxItems: 7,
+        items: { type: 'object', additionalProperties: false,
+          required: ['weekday', 'isClosed', 'is24h'],
+          properties: {
+            weekday: { type: 'integer', minimum: 0, maximum: 6 },
+            isClosed: { type: 'boolean' },
+            is24h: { type: 'boolean' },
+            intervals: { type: 'array', maxItems: 4, items: {
+              type: 'object', additionalProperties: false, required: ['from', 'to'],
+              properties: { from: { type: 'string', maxLength: 5 }, to: { type: 'string', maxLength: 5 } },
+            } },
+          } },
+      } },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner', 'operator');
+    const placeId = uuidParam(request);
+    await loadPlaceForManager(auth, placeId);
+    const days = validateSchedule(request.body.days);
+    if (!days) fail(400, 'invalid_schedule', 'Проверьте дни и интервалы работы');
+    await withTransaction(pool, async (client) => {
+      await client.query('delete from place_hours where place_id = $1', [placeId]);
+      for (const day of days) {
+        await client.query(
+          `insert into place_hours (place_id, weekday, is_closed, is_24h)
+           values ($1, $2, $3, $4)`, [placeId, day.weekday, day.isClosed, day.is24h]);
+      }
+      for (const row of scheduleRowsForDb(days)) {
+        await client.query(
+          `insert into place_hour_intervals (place_id, weekday, position, opens_at, closes_at)
+           values ($1, $2, $3, $4, $5)`,
+          [placeId, row.weekday, row.position, row.opensAt, row.closesAt]);
+      }
+    });
+    const place = await pool.query(
+      'select c.timezone from places p join cities c on c.slug = p.city_slug where p.id = $1', [placeId]);
+    const { rows } = await pool.query(
+      `select h.place_id, h.weekday, h.is_closed, h.is_24h,
+              to_char(i.opens_at, 'HH24:MI') as opens_at,
+              to_char(i.closes_at, 'HH24:MI') as closes_at
+       from place_hours h
+       left join place_hour_intervals i
+         on i.place_id = h.place_id and i.weekday = h.weekday
+       where h.place_id = $1 order by h.weekday, i.position`, [placeId]);
+    const view = hoursView(rows, place.rows[0].timezone);
+    reply.header('Cache-Control', 'no-store');
+    return { timezone: view.timezone, days: view.days, openNow: view.openNow, saved: true };
   });
 
   app.get('/api/v1/partner/places/:id/queue', async (request, reply) => {

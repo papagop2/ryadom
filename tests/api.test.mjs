@@ -269,6 +269,58 @@ test('штампы: визит начисляет награду, партнёр
   await pool.query('delete from loyalty_events where place_id = $1', [place.id]);
 });
 
+test('часы работы: «открыто сейчас» и правка партнёром', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const place = (await pool.query("select id from places where name = 'Форма'")).rows[0];
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  const original = await app.inject({ url: `/api/v1/partner/places/${place.id}/hours`, headers: partner.headers });
+  assert.equal(original.statusCode, 200, original.body);
+  assert.equal(original.json().days.length, 7);
+
+  const day24 = { isClosed: false, is24h: true, intervals: [] };
+  const saved = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/hours`,
+    headers: partner.headers, payload: { days: original.json().days.map(day => ({ ...day, ...day24 })) } });
+  assert.equal(saved.statusCode, 200, saved.body);
+  assert.equal(saved.json().openNow.state, 'open');
+
+  const detail = await app.inject(`/api/v1/places/${place.id}`);
+  assert.equal(detail.statusCode, 200, detail.body);
+  assert.equal(detail.json().place.hours.length, 7);
+  assert.equal(detail.json().place.openNow.state, 'open');
+  assert.equal(detail.json().place.openNow.label, 'Круглосуточно');
+
+  const client = await login();
+  const forbidden = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/hours`,
+    headers: client.headers, payload: { days: original.json().days } });
+  assert.equal(forbidden.statusCode, 403);
+
+  const invalid = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/hours`,
+    headers: partner.headers, payload: { days: original.json().days.map((day, index) =>
+      index === 0 ? { ...day, isClosed: true, is24h: true, intervals: [] } : day) } });
+  assert.equal(invalid.statusCode, 400);
+
+  const open = await app.inject('/api/v1/places?city=demograd&openNow=1&limit=50');
+  assert.equal(open.statusCode, 200, open.body);
+  assert.ok(open.json().items.every(item => item.openNow.state === 'open'));
+  assert.ok(open.json().items.some(item => item.id === place.id));
+  const map = await app.inject('/api/v1/places/map?city=demograd&openNow=1');
+  assert.equal(map.statusCode, 200, map.body);
+  assert.ok(map.json().items.every(item => item.openNow.state === 'open'));
+
+  const osm = await pool.query("select id from places where source = 'osm' limit 1");
+  if (osm.rowCount) {
+    const noHours = await app.inject(`/api/v1/places/${osm.rows[0].id}`);
+    assert.equal(noHours.statusCode, 200, noHours.body);
+    assert.equal(noHours.json().place.openNow.state, 'unknown');
+    assert.ok(noHours.json().place.hours.every(day => day.present === false));
+  }
+
+  const restored = await app.inject({ method: 'PUT', url: `/api/v1/partner/places/${place.id}/hours`,
+    headers: partner.headers, payload: { days: original.json().days } });
+  assert.equal(restored.statusCode, 200, restored.body);
+});
+
 test('изменение без сессии и без CSRF отклоняется', async (t) => {
   if (!ready) return t.skip(skipReason);
   assert.equal((await app.inject({ method: 'POST', url: '/api/v1/bookings', payload: { slotId: '00000000-0000-4000-8000-000000000000' } })).statusCode, 401);

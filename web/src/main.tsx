@@ -8,11 +8,14 @@ import './style.css';
 
 type Money = { cents: number; currency: string };
 type PlaceSource = { kind?: '2gis' | 'osm'; name: string; url: string | null; reviewsUrl?: string | null; rating: number | null; ratingCount: number; license?: string };
+type OpenNow = { state: 'open' | 'closed' | 'unknown'; label: string | null; opensAt: string | null; closesAt: string | null; weekday: number | null; is24h?: boolean };
+type DayHours = { weekday: number; isClosed: boolean; is24h: boolean; intervals: { from: string; to: string }[]; present?: boolean };
 type PlaceCard = {
   id: string; name: string; category: Category; district: string; address: string; about: string;
   location: { lat: number; lng: number }; city: string; image: string | null;
   rating: number | null; ratingCount: number; source: PlaceSource | null;
   priceFrom: Money | null; offerCount: number; distanceKm: number | null;
+  openNow?: OpenNow;
 };
 type City = { slug: string; name: string; region: string; center: { lat: number; lng: number }; places: number };
 type PlacePhoto = { small: string; large: string; full: string; author: string | null };
@@ -45,6 +48,7 @@ type DeliveryJob = {
 };
 type CourierInfo = { id: string; display_name: string; transport: string; is_online: boolean; deliveries_count: number; active_jobs: number };
 type PlaceDetail = { place: PlaceCard & { phone: string | null; bookable: boolean; photos?: PlacePhoto[];
+  timezone?: string; hours?: DayHours[]; openNow?: OpenNow;
   info?: { schedule: string | null; sites: string[] } }; offers: Offer[]; products: ShopProduct[];
   delivery: { available: boolean; zones: DeliveryZone[] }; reviews: Review[] };
 type Slot = { id: string; startsAt: string; endsAt: string };
@@ -82,6 +86,14 @@ type LoyaltyPlaceCard = {
   place: { id: string; name: string; category: Category; district: string; address: string; image: string | null };
   goal: number; rewardTitle: string; rewardNote: string; card: LoyaltyCardState;
 };
+
+const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function scheduleDayText(day: DayHours) {
+  if (day.isClosed) return 'Выходной';
+  if (day.is24h) return 'Круглосуточно';
+  return day.intervals.map(interval => `${interval.from}–${interval.to}`).join(', ') || 'Выходной';
+}
 
 function visitsLabel(count: number) {
   const mod10 = count % 10, mod100 = count % 100;
@@ -1853,6 +1865,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
 }) {
   const [category, setCategory] = useState<'all' | Category>('all');
   const [district, setDistrict] = useState('all');
+  const [openNow, setOpenNow] = useState(false);
   const [query, setQuery] = useState('');
   const [districts, setDistricts] = useState<string[]>([]);
   const [items, setItems] = useState<PlaceCard[] | null>(null);
@@ -1908,6 +1921,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     if (category !== 'all') params.set('category', category);
     if (district !== 'all') params.set('district', district);
     if (query.trim()) params.set('q', query.trim());
+    if (openNow) params.set('openNow', '1');
     if (coords) {
       params.set('lat', String(coords.lat));
       params.set('lng', String(coords.lng));
@@ -1933,7 +1947,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         });
     }, 220);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [category, district, query, refreshKey, city?.slug, coords?.lat, coords?.lng]);
+  }, [category, district, query, refreshKey, city?.slug, coords?.lat, coords?.lng, openNow]);
 
   useEffect(() => {
     if (open || filterOpen || refreshing) return;
@@ -2003,6 +2017,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
       if (category !== 'all') params.set('category', category);
       if (district !== 'all') params.set('district', district);
       if (query.trim()) params.set('q', query.trim());
+      if (openNow) params.set('openNow', '1');
       if (coords) {
         params.set('lat', String(coords.lat));
         params.set('lng', String(coords.lng));
@@ -2021,6 +2036,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     onBack={() => { setOpen(null); setRefreshKey(value => value + 1); }} notify={notify} />;
 
   const firstName = me?.user.displayName.split(' ')[0];
+  const visibleMapItems = openNow ? mapItems?.filter(place => place.openNow?.state === 'open') : mapItems;
 
   return <>
     <div className={`pull-indicator${refreshing || pull > 4 ? ' visible' : ''}${refreshing ? ' refreshing' : ''}`}
@@ -2030,13 +2046,13 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
     </div>
     {withMap ? <div className="map-head">
       <span className="eyebrow"><Icon name="pin" size={14} /> {city?.name ?? 'Город'}</span>
-      <span className="map-count">{mapItems ? `${mapItems.length} мест` : total ? `${total} мест` : '…'}</span>
+      <span className="map-count">{visibleMapItems ? `${visibleMapItems.length} мест` : total ? `${total} мест` : '…'}</span>
     </div> : <section className="spotlight">
       <div className="spotlight-copy">
         <span className="eyebrow"><span className="pulse" aria-hidden="true" />{firstName ? `${firstName}, вы рядом` : `${city?.name ?? 'Город'} · онлайн`}</span>
         <h1>Что делаем <em>сегодня?</em></h1>
         <div className="spotlight-tags">
-          <span><Icon name="bolt" size={13} /> {total ? `${total} рядом` : 'ищем…'}</span>
+          <span><Icon name="bolt" size={13} /> {total ? `${total} ${openNow ? 'открыто' : 'рядом'}` : openNow ? 'ничего не открыто' : 'ищем…'}</span>
           <span><Icon name="clock" size={13} /> свободно сейчас</span>
         </div>
       </div>
@@ -2059,6 +2075,10 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
         onClick={() => { haptic(); setFilterOpen(true); }} aria-label="Фильтр по району">
         <Icon name="sliders" size={18} />
         {district !== 'all' && <span className="filter-dot" aria-hidden="true" />}
+      </button>
+      <button type="button" className={`open-filter${openNow ? ' active' : ''}`} aria-pressed={openNow}
+        onClick={() => { haptic(); setOpenNow(value => !value); }}>
+        <span className="open-dot" aria-hidden="true" />{openNow ? 'Открыто' : 'Сейчас'}
       </button>
     </div>
 
@@ -2103,7 +2123,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
       </button>)}</div>
     </section>}
 
-    {withMap && <MapView key={city?.slug} items={mapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify}
+    {withMap && <MapView key={`${city?.slug}-${openNow ? 'open' : 'all'}`} items={visibleMapItems ?? []} center={city?.center ?? CITY} onOpen={setOpen} notify={notify}
       initialView={mapViewRef.current?.citySlug === city?.slug ? mapViewRef.current : null}
       onViewChange={view => { mapViewRef.current = { citySlug: city?.slug ?? '', ...view }; }} />}
 
@@ -2129,7 +2149,7 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
           : !items.length ? <div className="empty-state">
             <Icon name="search" size={26} />
             <p>Ничего не нашлось</p>
-            <button type="button" className="ghost-mini" onClick={() => { setQuery(''); setDistrict('all'); setCategory('all'); }}>Сбросить</button>
+            <button type="button" className="ghost-mini" onClick={() => { setQuery(''); setDistrict('all'); setCategory('all'); setOpenNow(false); }}>Сбросить</button>
           </div>
             : <ul className="places">{items.map((place, index) => {
               const rating = place.rating ?? place.source?.rating ?? null;
@@ -2143,6 +2163,9 @@ function Catalogue({ me, notify, withMap = false, onPick, city }: {
                     </span>
                     <span className="sub">
                       <span>{place.district}</span>
+                      {place.openNow && place.openNow.state !== 'unknown' && <span className={`open-note ${place.openNow.state}`}>
+                        <span className="open-dot" aria-hidden="true" />{place.openNow.state === 'open' ? 'Открыто' : 'Закрыто'}
+                      </span>}
                       {place.distanceKm !== null && <span>{place.distanceKm.toFixed(1)} км</span>}
                       {place.offerCount > 0
                         ? <span>{place.offerCount} {plural(place.offerCount, 'услуга', 'услуги', 'услуг')}</span>
@@ -2200,6 +2223,7 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
   const [queueBusy, setQueueBusy] = useState(false);
   const [loyalty, setLoyalty] = useState<LoyaltyInfo | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
 
@@ -2405,9 +2429,25 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
     </div>
 
     <p className="about">{place.about}</p>
-    {detail?.place.info?.schedule && <p className="hint place-schedule">
+    {detail?.place.hours?.some(day => day.present !== false) ? <div className={`schedule-card ${detail.place.openNow?.state ?? 'unknown'}`}>
+      <div className="schedule-head">
+        <span className={`schedule-state ${detail.place.openNow?.state ?? 'unknown'}`}>
+          <span className="open-dot" aria-hidden="true" />
+          {detail.place.openNow?.label ?? 'Часы работы'}
+        </span>
+        <button type="button" className="schedule-toggle" onClick={() => { haptic(); setScheduleOpen(value => !value); }}>
+          {scheduleOpen ? 'Скрыть' : 'Вся неделя'}<Icon name={scheduleOpen ? 'chevronDown' : 'chevron'} size={13} />
+        </button>
+      </div>
+      {scheduleOpen && <ul className="schedule-week">
+        {detail.place.hours.map(day => <li key={day.weekday} className={detail.place.openNow?.weekday === day.weekday ? 'today' : ''}>
+          <span>{WEEKDAY_LABELS[day.weekday]}</span>
+          <strong>{scheduleDayText(day)}</strong>
+        </li>)}
+      </ul>}
+    </div> : detail?.place.info?.schedule ? <p className="hint place-schedule">
       <Icon name="clock" size={13} />{detail.place.info.schedule}
-    </p>}
+    </p> : null}
 
     {queueInfo?.active && <div className={`queue-card${queueInfo.myTicket ? ' mine' : ''}`}>
       <div className="queue-head">
@@ -3627,6 +3667,113 @@ function PartnerQueue({ placeId, notify }: { placeId: string; notify: (text: str
   </div>;
 }
 
+type PartnerHoursData = { timezone: string; days: DayHours[]; openNow: OpenNow };
+
+function PartnerHours({ placeId, notify }: { placeId: string; notify: (text: string) => void }) {
+  const [data, setData] = useState<PartnerHoursData | null>(null);
+  const [days, setDays] = useState<DayHours[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => {
+    void api<PartnerHoursData>(`/api/v1/partner/places/${placeId}/hours`)
+      .then(value => { setData(value); setDays(value.days.map(({ weekday, isClosed, is24h, intervals }) => ({ weekday, isClosed, is24h, intervals }))); })
+      .catch(() => { setData(null); setDays(null); });
+  }, [placeId]);
+  useEffect(load, [load]);
+
+  function replaceDay(index: number, next: DayHours) {
+    setDays(current => current ? current.map((day, i) => i === index ? next : day) : current);
+  }
+  function openDay(): DayHours {
+    return { weekday: 0, isClosed: false, is24h: false, intervals: [{ from: '10:00', to: '20:00' }] };
+  }
+  function toggleClosed(index: number) {
+    if (!days) return;
+    const day = days[index];
+    if (day.isClosed) replaceDay(index, { ...openDay(), weekday: day.weekday });
+    else replaceDay(index, { ...day, isClosed: true, is24h: false, intervals: [] });
+  }
+  function toggle24(index: number) {
+    if (!days) return;
+    const day = days[index];
+    if (day.is24h) replaceDay(index, { ...openDay(), weekday: day.weekday });
+    else replaceDay(index, { ...day, isClosed: false, is24h: true, intervals: [] });
+  }
+  function changeInterval(dayIndex: number, intervalIndex: number, patch: { from?: string; to?: string }) {
+    if (!days) return;
+    const day = days[dayIndex];
+    replaceDay(dayIndex, { ...day, intervals: day.intervals.map((item, i) => i === intervalIndex ? { ...item, ...patch } : item) });
+  }
+  function addInterval(dayIndex: number) {
+    if (!days) return;
+    const day = days[dayIndex];
+    if (day.intervals.length >= 4) return;
+    const last = day.intervals[day.intervals.length - 1];
+    replaceDay(dayIndex, { ...day, intervals: [...day.intervals, last
+      ? { from: last.to, to: '21:00' } : { from: '10:00', to: '20:00' }] });
+  }
+  function removeInterval(dayIndex: number, intervalIndex: number) {
+    if (!days) return;
+    const day = days[dayIndex];
+    if (day.intervals.length <= 1) return;
+    replaceDay(dayIndex, { ...day, intervals: day.intervals.filter((_, i) => i !== intervalIndex) });
+  }
+  async function save() {
+    if (!days) return;
+    if (days.some(day => !day.isClosed && !day.is24h && day.intervals.length === 0)) {
+      notify('Добавьте интервал или отметьте день выходным');
+      return;
+    }
+    if (days.some(day => !day.isClosed && !day.is24h && day.intervals.some(item => !item.from || !item.to || item.from === item.to))) {
+      notify('Проверьте интервалы: начало и конец не должны совпадать');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api<PartnerHoursData>(`/api/v1/partner/places/${placeId}/hours`, {
+        method: 'PUT', body: { days: days.map(({ weekday, isClosed, is24h, intervals }) => ({ weekday, isClosed, is24h, intervals })) },
+      });
+      setData(result); setDays(result.days.map(({ weekday, isClosed, is24h, intervals }) => ({ weekday, isClosed, is24h, intervals })));
+      notify('Часы работы сохранены');
+    } catch (error) { notify((error as Error).message || 'Не удалось сохранить часы'); }
+    finally { setBusy(false); }
+  }
+
+  if (!days) return <div className="partner-hours"><div className="skeleton-card" /></div>;
+  return <div className="partner-hours">
+    <div className="partner-queue-head">
+      <strong><Icon name="clock" size={14} />Часы работы</strong>
+      <span className={`schedule-state ${data?.openNow.state ?? 'unknown'}`}>
+        <span className="open-dot" aria-hidden="true" />{data?.openNow.label ?? 'Не заданы'}
+      </span>
+    </div>
+    <p className="hint">Время города. Второй интервал — перерыв; закрытие раньше открытия — до утра.</p>
+    <div className="hours-days">{days.map((day, index) => <div className="hours-day" key={day.weekday}>
+      <div className="hours-day-head">
+        <strong>{WEEKDAY_LABELS[day.weekday]}</strong>
+        <span className="hours-switches">
+          <button type="button" className={day.isClosed ? 'active' : ''} onClick={() => { haptic(3); toggleClosed(index); }}>Вых</button>
+          <button type="button" className={day.is24h ? 'active' : ''} onClick={() => { haptic(3); toggle24(index); }}>24ч</button>
+        </span>
+      </div>
+      {!day.isClosed && !day.is24h && <div className="hours-intervals">
+        {day.intervals.map((interval, intervalIndex) => <div className="hours-interval" key={intervalIndex}>
+          <input type="time" value={interval.from} step={300} aria-label={`${WEEKDAY_LABELS[day.weekday]}, открытие`}
+            onChange={event => changeInterval(index, intervalIndex, { from: event.target.value })} />
+          <span>–</span>
+          <input type="time" value={interval.to} step={300} aria-label={`${WEEKDAY_LABELS[day.weekday]}, закрытие`}
+            onChange={event => changeInterval(index, intervalIndex, { to: event.target.value })} />
+          {day.intervals.length > 1 && <button type="button" className="hours-remove" aria-label="Убрать интервал"
+            onClick={() => removeInterval(index, intervalIndex)}><Icon name="close" size={11} /></button>}
+        </div>)}
+        {day.intervals.length < 4 && <button type="button" className="hours-add" onClick={() => addInterval(index)}>+ интервал</button>}
+      </div>}
+    </div>)}</div>
+    <button type="button" className="primary wide" disabled={busy} onClick={() => void save()}>
+      {busy ? 'Сохраняем…' : 'Сохранить часы'}<Icon name="check" size={15} />
+    </button>
+  </div>;
+}
+
 function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [items, setItems] = useState<PartnerPlace[] | null>(null);
   const [editing, setEditing] = useState<PartnerPlace | null>(null);
@@ -3641,6 +3788,7 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
   const [zoneDraft, setZoneDraft] = useState({ district: '', fee: '199', min: '500', eta: '45' });
   const [queueOpen, setQueueOpen] = useState<string | null>(null);
   const [loyaltyOpen, setLoyaltyOpen] = useState<string | null>(null);
+  const [hoursOpen, setHoursOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -3751,11 +3899,15 @@ function PartnerPlaces({ notify }: { notify: (text: string) => void }) {
             <button type="button" onClick={() => setLoyaltyOpen(loyaltyOpen === place.id ? null : place.id)}>
               <Icon name="gift" size={13} />Штампы
             </button>
+            <button type="button" onClick={() => setHoursOpen(hoursOpen === place.id ? null : place.id)}>
+              <Icon name="clock" size={13} />Часы
+            </button>
             <button type="button" onClick={() => setEditing({ ...place })}>Изменить</button>
           </div>
         </div>
         {queueOpen === place.id && <PartnerQueue placeId={place.id} notify={notify} />}
         {loyaltyOpen === place.id && <PartnerLoyalty placeId={place.id} notify={notify} />}
+        {hoursOpen === place.id && <PartnerHours placeId={place.id} notify={notify} />}
         {!place.isPublished && <p className="meta">Скрыто из каталога</p>}
         <ul className="partner-offers">{place.offers.map(offer => <li key={offer.id}>
           <div className="offer-line">

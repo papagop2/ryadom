@@ -2,14 +2,17 @@
 // хранятся в localStorage, сеть и PostgreSQL не нужны. Включается VITE_DEMO=1.
 
 import district from './demo-district.json';
+import { openStateFromDays, validateSchedule } from '../../api/hours.mjs';
 
 type Category = 'salon' | 'services' | 'health' | 'food';
 type Money = { cents: number; currency: string };
 type DemoSource = { kind: '2gis' | 'osm'; name: string; url: string | null; rating: number | null; ratingCount: number; license?: string };
+type DemoDayHours = { weekday: number; isClosed: boolean; is24h: boolean; intervals: { from: string; to: string }[]; present?: boolean };
+type DemoOpenNow = { state: 'open' | 'closed' | 'unknown'; label: string | null; opensAt: string | null; closesAt: string | null; weekday: number | null; is24h?: boolean };
 type DemoPlace = {
   id: string; partnerId: string | null; city: string; name: string; category: Category;
   district: string; address: string; lat: number; lng: number; about: string; phone: string | null;
-  image?: string | null; source?: DemoSource | null;
+  image?: string | null; source?: DemoSource | null; timezone?: string; hours?: DemoDayHours[];
 };
 
 const ME_KEY = 'rjadom.demo.me';
@@ -38,6 +41,23 @@ const demoPlaces: DemoPlace[] = [
   { id: 'kuhnya', partnerId: 'p2', city: 'demograd', name: 'Кухня на районе', category: 'food', district: 'Южный', address: 'ул. Южная, 21', lat: 55.7402, lng: 37.6154, about: 'Домашние обеды, самовывоз с 11 до 20.', phone: '+79000000011' },
   { id: 'glaz', partnerId: 'p1', city: 'demograd', name: 'Глаз да глаз', category: 'services', district: 'Северный', address: 'ул. Северная, 15', lat: 55.7801, lng: 37.6103, about: 'Мелкий ремонт одежды, подгонка по фигуре.', phone: null },
 ];
+
+const demoHours: Record<string, DemoDayHours[]> = {
+  forma: [0, 1, 2, 3, 4, 5].map(weekday => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '10:00', to: '20:00' }] }))
+    .concat([{ weekday: 6, isClosed: false, is24h: false, intervals: [{ from: '11:00', to: '18:00' }] }]),
+  liniya: [0, 1, 2, 3, 4, 5].map(weekday => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '10:00', to: '20:00' }] }))
+    .concat([{ weekday: 6, isClosed: false, is24h: false, intervals: [{ from: '11:00', to: '18:00' }] }]),
+  ugol: [0, 1, 2, 3, 4].map(weekday => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '09:00', to: '19:00' }] }))
+    .concat([{ weekday: 5, isClosed: false, is24h: false, intervals: [{ from: '10:00', to: '16:00' }] }, { weekday: 6, isClosed: true, is24h: false, intervals: [] }]),
+  'tihiy-chas': Array.from({ length: 7 }, (_, weekday) => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '09:00', to: '22:00' }] })),
+  kuhnya: Array.from({ length: 7 }, (_, weekday) => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '11:00', to: '02:00' }] })),
+  glaz: [0, 1, 2, 3, 4].map(weekday => ({ weekday, isClosed: false, is24h: false, intervals: [{ from: '10:00', to: '19:00' }] }))
+    .concat([{ weekday: 5, isClosed: false, is24h: false, intervals: [{ from: '11:00', to: '16:00' }] }, { weekday: 6, isClosed: true, is24h: false, intervals: [] }]),
+};
+for (const place of demoPlaces) {
+  place.timezone = 'Europe/Moscow';
+  place.hours = demoHours[place.id] ?? [];
+}
 
 const places: DemoPlace[] = [...demoPlaces, ...(district as DemoPlace[])];
 
@@ -348,6 +368,20 @@ function activeOffers(placeId: string) {
   return offers.filter(item => item.placeId === placeId && (item as { isActive?: boolean }).isActive !== false);
 }
 
+function demoHoursFor(place: DemoPlace): DemoDayHours[] {
+  return Array.from({ length: 7 }, (_, weekday) => {
+    const found = place.hours?.find(day => day.weekday === weekday);
+    return found ? { ...found, present: true, intervals: found.intervals.map(interval => ({ ...interval })) }
+      : { weekday, isClosed: true, is24h: false, intervals: [], present: false };
+  });
+}
+
+function demoOpenNow(place: DemoPlace): DemoOpenNow {
+  if (!place.hours?.length) return { state: 'unknown', label: null, opensAt: null, closesAt: null, weekday: null };
+  const days = demoHoursFor(place).map(day => ({ ...day, present: true }));
+  return openStateFromDays(days, place.timezone ?? 'Asia/Irkutsk');
+}
+
 function card(place: DemoPlace, bookings = getBookings()) {
   const list = activeOffers(place.id);
   const reviews = reviewsFor(place.id, bookings);
@@ -372,6 +406,7 @@ function card(place: DemoPlace, bookings = getBookings()) {
     source: place.source ?? null,
     priceFrom: list.length ? money(Math.min(...list.map(item => item.price))) : null,
     offerCount: list.length, distanceKm: null,
+    openNow: demoOpenNow(place),
   };
 }
 
@@ -494,20 +529,24 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     const category = url.searchParams.get('category');
     const district = url.searchParams.get('district');
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+    const onlyOpen = ['1', 'true'].includes(url.searchParams.get('openNow') ?? '');
     const limit = Number(url.searchParams.get('limit') ?? 20);
     const offset = Number(url.searchParams.get('offset') ?? 0);
     const all = places
       .filter(place => !city || place.city === city)
       .filter(place => (!category || place.category === category) && (!district || place.district === district))
-      .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q));
+      .filter(place => !q || place.name.toLowerCase().includes(q) || place.about.toLowerCase().includes(q))
+      .filter(place => !onlyOpen || demoOpenNow(place).state === 'open');
     return { items: all.slice(offset, offset + limit).map(place => card(place)),
       total: all.length, limit, offset } as T;
   }
 
   if (url.pathname === '/api/v1/places/map') {
     const city = url.searchParams.get('city');
+    const onlyOpen = ['1', 'true'].includes(url.searchParams.get('openNow') ?? '');
     const items = places
       .filter(place => !city || place.city === city)
+      .filter(place => !onlyOpen || demoOpenNow(place).state === 'open')
       .map(place => card(place));
     return { items, total: items.length } as T;
   }
@@ -521,7 +560,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       ...item, price: money(item.price), nextSlot: slotsFor(item.id)[0]?.startsAt ?? null,
     }));
     const base = card(place, bookings);
-    return { place: { ...base, phone: place.phone, bookable: true }, offers: list,
+    return { place: { ...base, phone: place.phone, bookable: true,
+      timezone: place.timezone ?? 'Asia/Irkutsk', hours: demoHoursFor(place), openNow: demoOpenNow(place) }, offers: list,
       products: getProducts().filter(item => item.placeId === place.id && item.isActive),
       delivery: { available: getZones().some(item => item.placeId === place.id && item.isActive),
         zones: getZones().filter(item => item.placeId === place.id && item.isActive).map(item => ({
@@ -673,6 +713,28 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
         goal: program.goal, rewardTitle: program.rewardTitle, rewardNote: program.rewardNote, card: loyaltyState(card) };
     }).filter(Boolean);
     return { items } as T;
+  }
+
+  const partnerHoursMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/hours$/);
+  if (partnerHoursMatch) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const place = placeById(partnerHoursMatch[1]);
+    if (!place) return fail('Заведение не найдено', 'not_found');
+    if (!me.roles.some(role => role.role === 'operator') && (!place.partnerId || !me.partnerIds.includes(place.partnerId))) {
+      return fail('Это не ваша карточка', 'forbidden');
+    }
+    if (method === 'GET') {
+      const days = demoHoursFor(place);
+      return { timezone: place.timezone ?? 'Asia/Irkutsk', days, openNow: demoOpenNow(place) } as T;
+    }
+    if (method === 'PUT') {
+      const days = validateSchedule(body.days);
+      if (!days) return fail('Проверьте дни и интервалы работы', 'invalid_schedule');
+      place.hours = days;
+      const normalized = demoHoursFor(place);
+      return { timezone: place.timezone ?? 'Asia/Irkutsk', days: normalized, openNow: demoOpenNow(place), saved: true } as T;
+    }
   }
 
   const partnerLoyaltyMatch = url.pathname.match(/^\/api\/v1\/partner\/places\/([^/]+)\/loyalty$/);
