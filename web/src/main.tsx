@@ -58,10 +58,21 @@ type Booking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
   note: string; price: Money; createdAt: string;
   cash: { client: boolean; provider: boolean };
+
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
   review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
+};
+
+type WaitlistEntry = {
+  id: string;
+  status: 'waiting' | 'notified' | 'converted' | 'cancelled';
+  preferredDate: string | null;
+  createdAt: string;
+  notifiedAt: string | null;
+  offer: { id: string; title: string; durationMin: number; price: Money };
+  place: { id: string; name: string; address: string; district: string; image: string | null };
 };
 type QueueTicket = {
   id: string; number: number; status: 'waiting' | 'called' | 'serving' | 'done' | 'cancelled' | 'no_show';
@@ -93,6 +104,11 @@ function scheduleDayText(day: DayHours) {
   if (day.isClosed) return 'Выходной';
   if (day.is24h) return 'Круглосуточно';
   return day.intervals.map(interval => `${interval.from}–${interval.to}`).join(', ') || 'Выходной';
+}
+
+function waitlistDateLabel(value: string | null) {
+  if (!value) return 'любой день';
+  return new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
 function visitsLabel(count: number) {
@@ -2226,6 +2242,9 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [favorite, setFavorite] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [waitlistDate, setWaitlistDate] = useState('');
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
 
   useEffect(() => {
     if (!me) { setFavorite(false); return; }
@@ -2233,6 +2252,14 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
       .then(data => setFavorite(data.items.some(item => item.id === place.id)))
       .catch(() => setFavorite(false));
   }, [me?.user.id, place.id]);
+
+  const loadWaitlist = useCallback(() => {
+    if (!me) { setWaitlist([]); return; }
+    void api<{ items: WaitlistEntry[] }>('/api/v1/me/waitlist')
+      .then(data => setWaitlist(data.items))
+      .catch(() => setWaitlist([]));
+  }, [me?.user.id]);
+  useEffect(loadWaitlist, [loadWaitlist]);
 
   async function toggleFavorite() {
     if (!me) { notify('Войдите, чтобы добавить в избранное'); return; }
@@ -2283,15 +2310,20 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   }, [place.id]);
   useEffect(loadDetail, [loadDetail]);
 
-  useEffect(() => {
+  const loadSlots = useCallback(() => {
     if (!offer) return;
     setSlots(null);
-    setSlot(null);
-    setShowAllSlots(false);
     void api<{ slots: Slot[] }>(`/api/v1/offers/${offer.id}/slots`)
       .then(data => setSlots(data.slots))
       .catch(() => setSlots([]));
   }, [offer]);
+
+  useEffect(() => {
+    if (!offer) return;
+    setSlot(null);
+    setShowAllSlots(false);
+    loadSlots();
+  }, [offer, loadSlots]);
 
   const cartItems = Object.entries(cart).filter(([, qty]) => qty > 0);
   const cartCount = cartItems.reduce((sum, [, qty]) => sum + qty, 0);
@@ -2304,6 +2336,36 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
   const zone = zones.find(item => item.district === activeDistrict) ?? null;
   const deliveryFee = fulfillment === 'delivery' && zone ? zone.fee.cents : 0;
   const grandTotal = cartTotal + deliveryFee;
+
+  const activeWaitlist = offer
+    ? waitlist.find(entry => entry.offer.id === offer.id && (entry.status === 'waiting' || entry.status === 'notified'))
+    : undefined;
+
+  async function joinWaitlist() {
+    if (!me) { notify('Войдите, чтобы получать уведомления'); return; }
+    if (!offer || waitlistBusy) return;
+    setWaitlistBusy(true);
+    try {
+      await api(`/api/v1/offers/${offer.id}/waitlist`, {
+        method: 'POST', body: waitlistDate ? { date: waitlistDate } : {},
+      });
+      loadWaitlist();
+      notify(waitlistDate ? `Сообщим, если освободится ${waitlistDateLabel(waitlistDate)}` : 'Сообщим, когда появится окно');
+      haptic([6, 25, 8]);
+    } catch (error) { notify((error as Error).message || 'Не удалось встать в лист ожидания'); }
+    finally { setWaitlistBusy(false); }
+  }
+
+  async function leaveWaitlist() {
+    if (!activeWaitlist || waitlistBusy) return;
+    setWaitlistBusy(true);
+    try {
+      await api(`/api/v1/me/waitlist/${activeWaitlist.id}`, { method: 'DELETE' });
+      loadWaitlist();
+      notify('Больше не ждём окно');
+    } catch (error) { notify((error as Error).message || 'Не удалось убрать заявку'); }
+    finally { setWaitlistBusy(false); }
+  }
 
   function changeQty(product: ShopProduct, delta: number) {
     if (!me) { notify('Войдите, чтобы заказать'); return; }
@@ -2560,6 +2622,32 @@ function PlaceScreen({ place, me, onBack, notify }: { place: PlaceCard; me: Me |
           </label>
           <p className="hint">Оплата наличными на месте · отмена в «Заказах»</p>
         </>}
+
+        <div className={`waitlist-box${activeWaitlist ? ' active' : ''}${activeWaitlist?.status === 'notified' ? ' ready' : ''}`}>
+          <div className="waitlist-head">
+            <span className="waitlist-icon"><Icon name="bell" size={17} /></span>
+            <div>
+              <strong>{activeWaitlist?.status === 'notified' ? 'Окно освободилось' : activeWaitlist ? 'Вы в листе ожидания' : 'Ничего не подходит?'}</strong>
+              <span className="meta">{activeWaitlist?.status === 'notified'
+                ? 'Кто-то отменил запись — проверьте свободное время'
+                : activeWaitlist
+                  ? `Сообщим, когда появится окно · ${waitlistDateLabel(activeWaitlist.preferredDate)}`
+                  : 'Встаньте в лист — напишем, если кто-то отменит запись'}</span>
+            </div>
+            {activeWaitlist && <button type="button" className="waitlist-leave" onClick={() => void leaveWaitlist()} disabled={waitlistBusy}>Выйти</button>}
+          </div>
+          {!activeWaitlist && <div className="waitlist-form">
+            <label><span className="meta">Желаемая дата</span>
+              <input type="date" value={waitlistDate} min={new Date().toISOString().slice(0, 10)}
+                onChange={event => setWaitlistDate(event.target.value)} aria-label="Желаемая дата" />
+            </label>
+            <button type="button" className="primary mini" onClick={() => void joinWaitlist()} disabled={waitlistBusy}>
+              {waitlistBusy ? '…' : 'Ждать'}
+            </button>
+          </div>}
+          {activeWaitlist?.status === 'notified' && <button type="button" className="primary wide waitlist-check"
+            onClick={() => { loadSlots(); haptic([5, 20, 8]); }}>Проверить окна</button>}
+        </div>
       </div>}
       </> : place.source ? <div className="source-unbookable">
         <span className="source-badge">{place.source.name}</span>
@@ -3207,8 +3295,43 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
             </button>
           </div>}
       </li>)}</ul>
+      <WaitlistPanel me={me} notify={notify} />
     </>}
   </section>;
+}
+
+function WaitlistPanel({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [items, setItems] = useState<WaitlistEntry[] | null>(null);
+  const load = useCallback(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: WaitlistEntry[] }>('/api/v1/me/waitlist')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  useEffect(load, [load]);
+
+  async function remove(id: string) {
+    try {
+      await api(`/api/v1/me/waitlist/${id}`, { method: 'DELETE' });
+      notify('Убрали из листа ожидания');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось убрать заявку'); }
+  }
+
+  if (!items?.length) return null;
+  return <div className="waitlist-panel">
+    <div className="panel-title"><h2>Лист ожидания</h2><span className="count-chip">{items.length}</span></div>
+    <ul>{items.map(entry => <li key={entry.id} className={entry.status}>
+      <div className="waitlist-panel-head">
+        <strong>{entry.place.name}</strong>
+        <span className={`waitlist-status ${entry.status}`}>{entry.status === 'notified' ? 'Окно освободилось' : 'Ждём окно'}</span>
+      </div>
+      <p className="meta"><Icon name="clock" size={13} />{entry.offer.title} · {waitlistDateLabel(entry.preferredDate)}</p>
+      {entry.status === 'notified'
+        ? <p className="waitlist-ready"><Icon name="bell" size={13} />Загляните в карточку заведения — время могло освободиться</p>
+        : <p className="meta">Напишем, если кто-то отменит запись</p>}
+      <button type="button" className="ghost-mini" onClick={() => void remove(entry.id)}>Убрать</button>
+    </li>)}</ul>
+  </div>;
 }
 
 function ReviewForm({ bookingId, onDone, notify }: { bookingId: string; onDone: () => void; notify: (text: string) => void }) {
@@ -4081,6 +4204,7 @@ const noticeLabel: Record<string, string> = {
   service_awaiting_cash: 'Заявка ждёт оплаты', service_cash_confirmed: 'Оплата подтверждена',
   delivery_cash_confirmed: 'Доставка оплачена',
   queue_ticket_new: 'Новый талон', queue_called: 'Вас вызвали', queue_status: 'Очередь обновлена',
+  booking_waitlist_open: 'Окно освободилось',
 };
 
 function Notifications() {

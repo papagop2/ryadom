@@ -345,6 +345,70 @@ test('сессия хранится только хешем', async (t) => {
   assert.equal(plain.rowCount, 0);
 });
 
+test('лист ожидания: освободившееся окно уведомляет и снимает заявку', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const waiter = await login();
+  const wrongDateWaiter = await login();
+  const other = await login();
+  const slot = await freeSlot('Форма');
+  assert.ok(slot, 'нужно свободное окно Формы');
+  const offer = await pool.query(
+    `select s.offer_id, to_char((s.starts_at at time zone c.timezone), 'YYYY-MM-DD') as local_date
+     from availability_slots s join offers o on o.id = s.offer_id join places p on p.id = o.place_id
+     join cities c on c.slug = p.city_slug where s.id = $1`, [slot.id]);
+  const offerId = offer.rows[0].offer_id;
+  const localDate = offer.rows[0].local_date;
+
+  const unauth = await app.inject({ method: 'POST', url: `/api/v1/offers/${offerId}/waitlist`, payload: {} });
+  assert.equal(unauth.statusCode, 401, unauth.body);
+  const invalidDate = await app.inject({ method: 'POST', url: `/api/v1/offers/${offerId}/waitlist`,
+    headers: waiter.headers, payload: { date: '2026-02-31' } });
+  assert.equal(invalidDate.statusCode, 400, invalidDate.body);
+
+  const joined = await app.inject({ method: 'POST', url: `/api/v1/offers/${offerId}/waitlist`,
+    headers: waiter.headers, payload: { date: localDate } });
+  assert.equal(joined.statusCode, 201, joined.body);
+  assert.equal(joined.json().entry.status, 'waiting');
+  assert.equal(joined.json().entry.preferredDate, localDate);
+  const again = await app.inject({ method: 'POST', url: `/api/v1/offers/${offerId}/waitlist`,
+    headers: waiter.headers, payload: { date: localDate } });
+  assert.equal(again.statusCode, 200, again.body);
+  assert.equal(again.json().entry.id, joined.json().entry.id);
+
+  const wrong = await app.inject({ method: 'POST', url: `/api/v1/offers/${offerId}/waitlist`,
+    headers: wrongDateWaiter.headers, payload: { date: '2099-01-01' } });
+  assert.equal(wrong.statusCode, 201, wrong.body);
+
+  const booked = await app.inject({ method: 'POST', url: '/api/v1/bookings',
+    headers: other.headers, payload: { slotId: slot.id } });
+  assert.equal(booked.statusCode, 201, booked.body);
+  const cancelled = await app.inject({ method: 'POST', url: `/api/v1/bookings/${booked.json().id}/cancel`,
+    headers: other.headers });
+  assert.equal(cancelled.statusCode, 200, cancelled.body);
+
+  const notices = await app.inject({ method: 'GET', url: '/api/v1/me/notifications', headers: waiter.headers });
+  assert.equal(notices.statusCode, 200, notices.body);
+  const freed = notices.json().items.find(item => item.kind === 'booking_waitlist_open');
+  assert.ok(freed, 'ожидалось уведомление об освободившемся окне');
+  assert.equal(freed.payload.offerId, offerId);
+
+  const waiting = await app.inject({ method: 'GET', url: '/api/v1/me/waitlist', headers: waiter.headers });
+  const notified = waiting.json().items.find(item => item.id === joined.json().entry.id);
+  assert.equal(notified.status, 'notified');
+
+  const wrongStill = await app.inject({ method: 'GET', url: '/api/v1/me/waitlist', headers: wrongDateWaiter.headers });
+  assert.equal(wrongStill.json().items.find(item => item.id === wrong.json().entry.id).status, 'waiting');
+
+  const removed = await app.inject({ method: 'DELETE', url: `/api/v1/me/waitlist/${joined.json().entry.id}`,
+    headers: waiter.headers });
+  assert.equal(removed.statusCode, 200, removed.body);
+  const after = await app.inject({ method: 'GET', url: '/api/v1/me/waitlist', headers: waiter.headers });
+  assert.equal(after.json().items.some(item => item.id === joined.json().entry.id), false);
+
+  await pool.query('delete from waitlist_entries where user_id = any($1::uuid[])',
+    [[waiter.userId, wrongDateWaiter.userId]]);
+});
+
 async function addOperatorRole(userId) {
   await pool.query(`insert into memberships (user_id, role) values ($1, 'operator')
     on conflict (user_id, role) do nothing`, [userId]);

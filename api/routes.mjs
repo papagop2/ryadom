@@ -522,6 +522,46 @@ function loyaltyCardView(row) {
   };
 }
 
+const WAITLIST_SELECT = `
+  select w.id, w.status, to_char(w.preferred_date, 'YYYY-MM-DD') as preferred_date,
+         w.created_at, w.notified_at, w.expires_at,
+         o.id as offer_id, o.title as offer_title, o.duration_min, o.price_cents, o.currency,
+         p.id as place_id, p.name as place_name, p.address as place_address,
+         p.district as place_district, p.image_url as place_image
+  from waitlist_entries w
+  join offers o on o.id = w.offer_id
+  join places p on p.id = o.place_id`;
+
+function waitlistView(row) {
+  return {
+    id: row.id,
+    status: row.status,
+    preferredDate: row.preferred_date,
+    createdAt: row.created_at,
+    notifiedAt: row.notified_at,
+    offer: {
+      id: row.offer_id, title: row.offer_title, durationMin: row.duration_min,
+      price: money(row.price_cents, row.currency),
+    },
+    place: {
+      id: row.place_id, name: row.place_name, address: row.place_address,
+      district: row.place_district, image: row.place_image,
+    },
+  };
+}
+
+function validWaitlistDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    fail(400, 'invalid_date', 'Дата должна быть в формате ГГГГ-ММ-ДД');
+  }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    fail(400, 'invalid_date', 'Такой даты нет');
+  }
+  return value;
+}
+
 const QUEUE_TICKET_SELECT = `
   select t.*, p.name as place_name, p.address as place_address, p.district as place_district
   from queue_tickets t join places p on p.id = t.place_id`;
@@ -1388,6 +1428,72 @@ export function routes(app, { pool, demoLogin = false }) {
     return { favorite: false, placeId };
   });
 
+
+  app.get('/api/v1/me/waitlist', async (request, reply) => {
+    const auth = requireUser(request);
+    const { rows } = await pool.query(
+      `${WAITLIST_SELECT}
+       where w.user_id = $1 and w.status in ('waiting', 'notified') and w.expires_at > now()
+       order by w.created_at desc limit 100`, [auth.userId]);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(waitlistView) };
+  });
+
+  app.post('/api/v1/offers/:id/waitlist', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: { date: { anyOf: [
+        { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+        { type: 'null' },
+      ] } },
+    } },
+  }, async (request, reply) => {
+    const auth = requireUser(request);
+    const offerId = uuidParam(request);
+    const preferredDate = validWaitlistDate(request.body?.date);
+    const offer = await pool.query(
+      `select o.id, o.title, o.duration_min, o.price_cents, o.currency, p.id as place_id, p.name as place_name
+       from offers o join places p on p.id = o.place_id
+       where o.id = $1 and o.is_active and p.is_published`, [offerId]);
+    if (!offer.rows[0]) fail(404, 'offer_not_found', 'Услуга не найдена');
+
+    // Старая заявка со статусом notified могла остаться после освободившегося окна.
+    // Новая заявка заменяет её, а не создаёт вторую активную.
+    await pool.query(
+      `update waitlist_entries set status = 'cancelled', updated_at = now()
+       where user_id = $1 and offer_id = $2 and status = 'notified'`,
+      [auth.userId, offerId]);
+    const inserted = await pool.query(
+      `insert into waitlist_entries (user_id, offer_id, preferred_date)
+       values ($1, $2, $3)
+       on conflict (user_id, offer_id) where status = 'waiting' do nothing
+       returning id`, [auth.userId, offerId, preferredDate]);
+    let entryId = inserted.rows[0]?.id;
+    if (!entryId) {
+      const existing = await pool.query(
+        `select id from waitlist_entries
+         where user_id = $1 and offer_id = $2 and status = 'waiting'`, [auth.userId, offerId]);
+      if (!existing.rows[0]) fail(409, 'waitlist_busy', 'Попробуйте ещё раз');
+      entryId = existing.rows[0].id;
+      await pool.query(
+        `update waitlist_entries set preferred_date = $2, expires_at = now() + interval '30 days',
+           updated_at = now() where id = $1`, [entryId, preferredDate]);
+    }
+    const entry = await pool.query(`${WAITLIST_SELECT} where w.id = $1`, [entryId]);
+    reply.code(inserted.rows[0] ? 201 : 200);
+    return { entry: waitlistView(entry.rows[0]), place: offer.rows[0].place_name };
+  });
+
+  app.delete('/api/v1/me/waitlist/:id', async (request) => {
+    const auth = requireUser(request);
+    const result = await pool.query(
+      `update waitlist_entries set status = 'cancelled', updated_at = now()
+       where id = $1 and user_id = $2 and status in ('waiting', 'notified') returning id`,
+      [uuidParam(request), auth.userId]);
+    if (!result.rows[0]) fail(404, 'waitlist_not_found', 'Заявка не найдена');
+    return { cancelled: true, id: result.rows[0].id };
+  });
+
   app.get('/api/v1/offers/:id/slots', {
     schema: { querystring: {
       type: 'object', additionalProperties: false,
@@ -1473,6 +1579,11 @@ export function routes(app, { pool, demoLogin = false }) {
           [owner.user_id, JSON.stringify({ bookingId, place: found.place_name, startsAt: found.starts_at })]);
       }
 
+      await client.query(
+        `update waitlist_entries set status = 'converted', updated_at = now()
+         where user_id = $1 and offer_id = $2 and status in ('waiting', 'notified')`,
+        [auth.userId, found.offer_id]);
+
       const view = await client.query(`${BOOKING_SELECT} where b.id = $1`, [bookingId]);
       return { booking: bookingView(view.rows[0]), created: true };
     });
@@ -1519,6 +1630,41 @@ export function routes(app, { pool, demoLogin = false }) {
     return bookingView(booking);
   });
 
+
+  async function notifyWaitlistForFreedSlot(client, booking) {
+    const { rows } = await client.query(
+      `select w.id, w.user_id, p.id as place_id, p.name as place_name, o.title
+       from waitlist_entries w
+       join availability_slots s on s.id = $2
+       join offers o on o.id = w.offer_id
+       join places p on p.id = o.place_id
+       join cities c on c.slug = p.city_slug
+       where w.offer_id = $1 and w.status = 'waiting' and w.expires_at > now()
+         and w.user_id <> $3
+         and (w.preferred_date is null
+              or w.preferred_date = (s.starts_at at time zone c.timezone)::date)
+       for update of w`,
+      [booking.offer_id, booking.slot_id, booking.client_user_id]);
+    for (const entry of rows) {
+      const marked = await client.query(
+        `update waitlist_entries set status = 'notified', notified_at = now(), updated_at = now()
+         where id = $1 and status = 'waiting'`, [entry.id]);
+      if (!marked.rowCount) continue;
+      await client.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'booking_waitlist_open', $2)`,
+        [entry.user_id, JSON.stringify({
+          waitlistId: entry.id,
+          offerId: booking.offer_id,
+          placeId: entry.place_id,
+          slotId: booking.slot_id,
+          place: entry.place_name,
+          title: entry.title,
+          startsAt: booking.starts_at,
+          message: `${entry.place_name} · ${entry.title}: освободилось время`,
+        })]);
+    }
+  }
+
   async function transition(request, { from, to, requireManager }) {
     const auth = requireUser(request);
     return withTransaction(pool, async (client) => {
@@ -1549,6 +1695,7 @@ export function routes(app, { pool, demoLogin = false }) {
       await client.query(
         `insert into notifications (user_id, kind, payload) values ($1, $2, $3)`,
         [booking.client_user_id, `booking_${to}`, JSON.stringify({ bookingId: booking.id, status: to })]);
+      if (to === 'cancelled') await notifyWaitlistForFreedSlot(client, booking);
       return { id: booking.id, status: updated.rows[0].status };
     });
   }

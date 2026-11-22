@@ -31,6 +31,7 @@ const FAVORITES_KEY = 'rjadom.demo.favorites';
 const LOYALTY_PROGRAMS_KEY = 'rjadom.demo.loyalty-programs';
 const LOYALTY_CARDS_KEY = 'rjadom.demo.loyalty-cards';
 const LOYALTY_EVENTS_KEY = 'rjadom.demo.loyalty-events';
+const WAITLIST_KEY = 'rjadom.demo.waitlist';
 const DAY = 86400000;
 
 const demoPlaces: DemoPlace[] = [
@@ -165,12 +166,19 @@ type DemoLoyaltyCard = {
 };
 type DemoBooking = {
   id: string; status: 'requested' | 'confirmed' | 'completed' | 'cancelled' | 'expired';
+  clientUserId?: string;
   note: string; price: Money; createdAt: string;
   cash?: { client: boolean; provider: boolean };
   slot: { id: string; startsAt: string; endsAt: string };
   offer: { id: string; title: string; durationMin: number };
   place: { id: string; name: string; address: string; district: string };
   review: { id: string; rating: number; status: 'pending' | 'published' | 'hidden' } | null;
+};
+
+type DemoWaitlist = {
+  id: string; userId: string; offerId: string; preferredDate: string | null;
+  status: 'waiting' | 'notified' | 'converted' | 'cancelled';
+  createdAt: string; notifiedAt: string | null;
 };
 
 const read = <T,>(key: string, fallback: T): T => {
@@ -206,6 +214,55 @@ const getLoyaltyCards = (): DemoLoyaltyCard[] => read<DemoLoyaltyCard[]>(LOYALTY
 const saveLoyaltyCards = (items: DemoLoyaltyCard[]) => write(LOYALTY_CARDS_KEY, items);
 const getLoyaltyEvents = (): string[] => read<string[]>(LOYALTY_EVENTS_KEY, []);
 const saveLoyaltyEvents = (items: string[]) => write(LOYALTY_EVENTS_KEY, items);
+const getWaitlist = (): DemoWaitlist[] => read<DemoWaitlist[]>(WAITLIST_KEY, []);
+const saveWaitlist = (items: DemoWaitlist[]) => write(WAITLIST_KEY, items);
+
+function demoDateInZone(iso: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function waitlistView(entry: DemoWaitlist) {
+  const offer = offerById(entry.offerId);
+  const place = offer ? placeById(offer.placeId) : null;
+  if (!offer || !place) return null;
+  return {
+    id: entry.id,
+    status: entry.status,
+    preferredDate: entry.preferredDate,
+    createdAt: entry.createdAt,
+    notifiedAt: entry.notifiedAt,
+    offer: {
+      id: offer.id, title: offer.title, durationMin: offer.durationMin,
+      price: money(offer.price),
+    },
+    place: {
+      id: place.id, name: place.name, address: place.address, district: place.district,
+      image: place.image ?? null,
+    },
+  };
+}
+
+function notifyDemoWaitlist(booking: DemoBooking) {
+  const offer = offerById(booking.offer.id);
+  const place = offer ? placeById(offer.placeId) : null;
+  if (!place) return;
+  const wantedDate = demoDateInZone(booking.slot.startsAt, place.timezone ?? 'Europe/Moscow');
+  const entries = getWaitlist();
+  let changed = false;
+  for (const entry of entries) {
+    if (entry.offerId !== booking.offer.id || entry.status !== 'waiting') continue;
+    if (entry.userId === (booking.clientUserId ?? 'u-000001')) continue;
+    if (entry.preferredDate && entry.preferredDate !== wantedDate) continue;
+    entry.status = 'notified';
+    entry.notifiedAt = new Date().toISOString();
+    changed = true;
+  }
+  if (changed) saveWaitlist(entries);
+}
 function loyaltyState(card: DemoLoyaltyCard) {
   return { stamps: card.stamps, rewardsAvailable: card.rewardsAvailable, totalVisits: card.totalVisits, lastStampAt: card.lastStampAt };
 }
@@ -474,7 +531,24 @@ function demoNotifications(me: DemoMe) {
         delivered_at: null, last_error: null,
       };
     });
-  return items;
+  const waitlistItems = getWaitlist()
+    .filter(entry => entry.status === 'notified' && entry.userId === me.user.id)
+    .slice(0, 20)
+    .map((entry, index) => {
+      const view = waitlistView(entry);
+      const id = 5000 + index;
+      return {
+        id, kind: 'booking_waitlist_open',
+        payload: {
+          waitlistId: entry.id, offerId: entry.offerId, place: view?.place.name,
+          title: view?.offer.title, message: `${view?.place.name ?? 'Заведение'} · ${view?.offer.title ?? 'услуга'}: освободилось время`,
+        },
+        channel: 'inapp', created_at: entry.notifiedAt ?? entry.createdAt,
+        read_at: readIds.includes(id) ? new Date().toISOString() : null,
+        delivered_at: null, last_error: null,
+      };
+    });
+  return [...items, ...waitlistItems].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 function seedBookingsOnce(me: DemoMe) {
@@ -486,6 +560,7 @@ function seedBookingsOnce(me: DemoMe) {
   const requestedStart = new Date(Date.now() + DAY);
   requestedStart.setHours(14, 0, 0, 0);
   const base = {
+    clientUserId: 'u-000001',
     note: '', price: money(offer.price), createdAt: new Date(Date.now() - 2 * DAY).toISOString(),
     offer: { id: offer.id, title: offer.title, durationMin: offer.durationMin },
     place: { id: place.id, name: place.name, address: place.address, district: place.district },
@@ -822,6 +897,57 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     return { items: items.map(queueTicketView) } as T;
   }
 
+  if (url.pathname === '/api/v1/me/waitlist') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getWaitlist()
+      .filter(entry => entry.userId === me.user.id && (entry.status === 'waiting' || entry.status === 'notified'))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(waitlistView)
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    return { items } as T;
+  }
+
+  const offerWaitlistMatch = url.pathname.match(/^\/api\/v1\/offers\/([^/]+)\/waitlist$/);
+  if (offerWaitlistMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const offer = offerById(offerWaitlistMatch[1]);
+    if (!offer) return fail('Услуга не найдена', 'not_found');
+    const preferredDate = body.date ? String(body.date) : null;
+    const entries = getWaitlist();
+    const notified = entries.find(entry => entry.userId === me.user.id
+      && entry.offerId === offer.id && entry.status === 'notified');
+    if (notified) { notified.status = 'cancelled'; notified.notifiedAt = null; }
+    const existing = entries.find(entry => entry.userId === me.user.id
+      && entry.offerId === offer.id && entry.status === 'waiting');
+    if (existing) {
+      existing.preferredDate = preferredDate;
+    } else {
+      entries.unshift({
+        id: `w-${Date.now()}`, userId: me.user.id, offerId: offer.id, preferredDate,
+        status: 'waiting', createdAt: new Date().toISOString(), notifiedAt: null,
+      });
+    }
+    saveWaitlist(entries);
+    const entry = entries.find(item => item.userId === me.user.id
+      && item.offerId === offer.id && item.status === 'waiting')!;
+    return { entry: waitlistView(entry), place: placeById(offer.placeId)?.name } as T;
+  }
+
+  const waitlistDeleteMatch = url.pathname.match(/^\/api\/v1\/me\/waitlist\/([^/]+)$/);
+  if (waitlistDeleteMatch && method === 'DELETE') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const entries = getWaitlist();
+    const target = entries.find(entry => entry.id === waitlistDeleteMatch[1]
+      && entry.userId === me.user.id && (entry.status === 'waiting' || entry.status === 'notified'));
+    if (!target) return fail('Заявка не найдена', 'waitlist_not_found');
+    target.status = 'cancelled';
+    saveWaitlist(entries);
+    return { cancelled: true, id: target.id } as T;
+  }
+
   if (url.pathname === '/api/v1/bookings' && method === 'POST') {
     const me = getMe();
     if (!me) return fail('Требуется вход', 'unauthorized');
@@ -833,7 +959,8 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (!slot) return fail('Это время уже занято', 'slot_taken');
     const place = placeById(offer.placeId)!;
     const booking: DemoBooking = {
-      id: `b-${Date.now()}`, status: 'requested', note: String(body.note ?? '').slice(0, 200),
+      id: `b-${Date.now()}`, status: 'requested', clientUserId: me.user.id,
+      note: String(body.note ?? '').slice(0, 200),
       price: money(offer.price), createdAt: new Date().toISOString(),
       slot: { id: slot.id, startsAt: slot.startsAt, endsAt: slot.endsAt },
       offer: { id: offer.id, title: offer.title, durationMin: offer.durationMin },
@@ -842,6 +969,12 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       review: null,
     };
     saveBookings([...getBookings(), booking]);
+    const waitlist = getWaitlist();
+    for (const entry of waitlist) {
+      if (entry.userId === me.user.id && entry.offerId === offer.id
+        && (entry.status === 'waiting' || entry.status === 'notified')) entry.status = 'converted';
+    }
+    saveWaitlist(waitlist);
     return booking as T;
   }
 
@@ -874,6 +1007,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     if (action === 'cancel') {
       if (target.cash?.provider) return fail('Исполнитель уже подтвердил получение наличных', 'cash_confirmed');
       target.status = 'cancelled';
+      notifyDemoWaitlist(target);
     }
     if (action === 'confirm') target.status = 'confirmed';
     if (action === 'complete') {
