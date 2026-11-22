@@ -3240,6 +3240,39 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
   </div>;
 }
 
+function RescheduleBooking({ booking, onDone, notify }: {
+  booking: Booking; onDone: () => void; notify: (text: string) => void;
+}) {
+  const [slots, setSlots] = useState<Slot[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<{ slots: Slot[] }>(`/api/v1/offers/${booking.offer.id}/slots?days=30`)
+      .then(data => setSlots(data.slots)).catch(() => setSlots([]));
+  }, [booking.offer.id]);
+  async function move(slot: Slot) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/bookings/${booking.id}/reschedule`, { method: 'POST', body: { slotId: slot.id } });
+      notify('Запись перенесена');
+      haptic([8, 30, 10]);
+      onDone();
+    } catch (error) { notify((error as Error).message || 'Не удалось перенести'); }
+    finally { setBusy(false); }
+  }
+  return <div className="repeat-booking reschedule-booking">
+    <div className="repeat-head"><strong><Icon name="calendar" size={14} />Перенести запись</strong>
+      <span className="meta">Сейчас: {dayTime.format(new Date(booking.slot.startsAt))}</span></div>
+    {!slots ? <div className="skeleton-card" /> : !slots.length
+      ? <p className="notice">Свободных окон пока нет</p>
+      : <div className="repeat-slots">{slots.filter(slot => slot.id !== booking.slot.id).slice(0, 18).map(slot =>
+        <button type="button" key={slot.id} className="repeat-slot" disabled={busy}
+          onClick={() => void move(slot)}>
+          <span>{dayTime.format(new Date(slot.startsAt))}</span>
+          <small>{price(booking.price)}</small>
+        </button>)}</div>}
+  </div>;
+}
+
 function RepeatBooking({ booking, onDone, notify }: {
   booking: Booking; onDone: () => void; notify: (text: string) => void;
 }) {
@@ -3588,6 +3621,7 @@ function Orders({ me, notify, initialView }: {
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [repeating, setRepeating] = useState<string | null>(null);
+  const [rescheduling, setRescheduling] = useState<string | null>(null);
   const load = useCallback(() => {
     if (!me) { setItems([]); return; }
     void api<{ items: Booking[] }>('/api/v1/me/orders').then(data => setItems(data.items)).catch(() => setItems([]));
@@ -3637,6 +3671,10 @@ function Orders({ me, notify, initialView }: {
         <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
         <div className="order-actions">
           <ChatButton kind="booking" subjectId={item.id} me={me} notify={notify} />
+          {['requested', 'confirmed'].includes(item.status) && !item.cash.provider &&
+            <button type="button" className="ghost-mini" onClick={() => setRescheduling(rescheduling === item.id ? null : item.id)}>
+              <Icon name="calendar" size={13} />Перенести
+            </button>}
           {(item.status === 'requested' || (item.status === 'confirmed' && !item.cash.provider)) &&
             <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
           {item.status === 'completed' && <button type="button" className="ghost-mini"
@@ -3649,6 +3687,8 @@ function Orders({ me, notify, initialView }: {
           {item.review && <span className="review-state"><Icon name={item.review.status === 'published' ? 'check' : 'clock'} size={13} />
             {item.review.status === 'pending' ? 'На проверке' : item.review.status === 'hidden' ? 'Скрыт' : `Оценка ${item.review.rating}`}</span>}
         </div>
+        {rescheduling === item.id && <RescheduleBooking booking={item}
+          onDone={() => { setRescheduling(null); load(); }} notify={notify} />}
         {repeating === item.id && <RepeatBooking booking={item}
           onDone={() => { setRepeating(null); load(); }} notify={notify} />}
         {item.status === 'confirmed' && item.cash.provider && !item.cash.client &&
@@ -4572,6 +4612,7 @@ const noticeLabel: Record<string, string> = {
   delivery_cash_confirmed: 'Доставка оплачена',
   queue_ticket_new: 'Новый талон', queue_called: 'Вас вызвали', queue_status: 'Очередь обновлена',
   booking_waitlist_open: 'Окно освободилось', chat_message: 'Новое сообщение',
+  booking_rescheduled: 'Запись перенесена',
 };
 
 function Notifications() {

@@ -1063,7 +1063,7 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
       priority: number, tab: string, view: string | null = null) => {
       if (count) tasks.push({ id: `${role}-${kind}`, role, kind, title, subtitle, count, priority, action: { tab, view } });
     };
-    const bookings = getBookings().filter(item => item.clientUserId === me.user.id
+    const bookings = getBookings().filter(item => (item.clientUserId ?? 'u-000001') === me.user.id
       && (item.status === 'requested' || item.status === 'confirmed'));
     const cash = bookings.filter(item => item.status === 'confirmed' && item.cash?.provider && !item.cash?.client);
     add('client', 'cash', 'Подтвердить наличные', cash[0]?.place.name ?? 'Ждут подтверждения', cash.length, 4, 'orders', 'bookings');
@@ -1309,6 +1309,28 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     target.status = 'completed';
     saveBookings(items);
     awardDemoLoyalty(target.place.id, me.user.id, me.user.displayName, 'booking', target.id);
+    return target as T;
+  }
+
+  const rescheduleMatch = url.pathname.match(/^\/api\/v1\/bookings\/([^/]+)\/reschedule$/);
+  if (rescheduleMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getBookings();
+    const target = items.find(item => item.id === rescheduleMatch[1]);
+    if (!target) return fail('Запись не найдена', 'not_found');
+    const place = placeById(target.place.id);
+    const isClient = (target.clientUserId ?? 'u-000001') === me.user.id;
+    const isPartner = Boolean(place?.partnerId && me.partnerIds.includes(place.partnerId));
+    if (!isClient && !isPartner) return fail('Нет доступа к записи', 'forbidden');
+    if (target.status !== 'requested' && target.status !== 'confirmed') {
+      return fail('Запись уже в другом состоянии', 'invalid_transition');
+    }
+    if (target.cash?.provider) return fail('Исполнитель уже подтвердил получение наличных', 'cash_confirmed');
+    const slot = slotsFor(target.offer.id).find(item => item.id === String(body.slotId ?? ''));
+    if (!slot) return fail('Это время уже заняли', 'slot_taken');
+    target.slot = { id: slot.id, startsAt: slot.startsAt, endsAt: slot.endsAt };
+    saveBookings(items);
     return target as T;
   }
 

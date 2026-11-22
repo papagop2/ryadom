@@ -2287,6 +2287,90 @@ export function routes(app, { pool, demoLogin = false }) {
     });
   }
 
+  app.post('/api/v1/bookings/:id/reschedule', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['slotId'],
+      properties: { slotId: { type: 'string', format: 'uuid' } },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const bookingId = uuidParam(request);
+    const slotId = request.body.slotId;
+    if (!UUID_RE.test(slotId)) fail(404, 'slot_not_found', 'Окно недоступно');
+    try {
+      return await withTransaction(pool, async (client) => {
+        const { rows } = await client.query(
+          `${BOOKING_SELECT} where b.id = $1 for update of b`, [bookingId]);
+        const booking = rows[0];
+        if (!booking) fail(404, 'booking_not_found', 'Запись не найдена');
+        const partnerId = (await client.query(
+          `select p.partner_id from offers o join places p on p.id = o.place_id where o.id = $1`,
+          [booking.offer_id])).rows[0]?.partner_id;
+        const isClient = booking.client_user_id === auth.userId;
+        const owns = partnerIdsOf(auth).includes(partnerId);
+        if (!isClient && !owns && !isOperator(auth)) fail(403, 'forbidden', 'Нет доступа к записи');
+        if (!['requested', 'confirmed'].includes(booking.status)) {
+          fail(409, 'invalid_transition', 'Запись уже в другом состоянии');
+        }
+        if (booking.cash_confirmed_provider_at) {
+          fail(409, 'cash_confirmed', 'Исполнитель уже подтвердил получение наличных');
+        }
+        if (slotId === booking.slot_id) return bookingView(booking);
+        const target = await client.query(
+          `select s.id, s.starts_at, s.ends_at, o.id as offer_id, o.is_active, p.is_published
+           from availability_slots s
+           join offers o on o.id = s.offer_id
+           join places p on p.id = o.place_id
+           where s.id = $1`, [slotId]);
+        const next = target.rows[0];
+        if (!next || !next.is_active || !next.is_published) fail(404, 'slot_not_found', 'Окно недоступно');
+        if (next.offer_id !== booking.offer_id) fail(409, 'slot_other_service', 'Окно относится к другой услуге');
+        if (new Date(next.starts_at) <= new Date()) fail(409, 'slot_in_past', 'Это время уже прошло');
+        const busy = await client.query(
+          `select 1 from bookings where slot_id = $1 and id <> $2
+             and status in ('requested', 'confirmed') limit 1`, [slotId, bookingId]);
+        if (busy.rows[0]) fail(409, 'slot_taken', 'Это время уже заняли');
+
+        await client.query(
+          `update bookings set slot_id = $2, updated_at = now() where id = $1`, [bookingId, slotId]);
+        await client.query(
+          `insert into booking_events (booking_id, status, actor_user_id, note)
+           values ($1, $2, $3, $4)`,
+          [bookingId, booking.status, auth.userId, `rescheduled:${booking.slot_id}->${slotId}`]);
+
+        // Старое окно снова свободно — разбудим лист ожидания.
+        await notifyWaitlistForFreedSlot(client, booking);
+
+        const payload = {
+          bookingId,
+          place: booking.place_name,
+          startsAt: next.starts_at,
+          previousStartsAt: booking.starts_at,
+        };
+        if (isClient) {
+          const owners = await client.query(
+            `select user_id from memberships where role = 'partner' and partner_id = $1`, [partnerId]);
+          for (const owner of owners.rows) {
+            await client.query(
+              `insert into notifications (user_id, kind, payload) values ($1, 'booking_rescheduled', $2)`,
+              [owner.user_id, JSON.stringify(payload)]);
+          }
+        } else {
+          await client.query(
+            `insert into notifications (user_id, kind, payload) values ($1, 'booking_rescheduled', $2)`,
+            [booking.client_user_id, JSON.stringify(payload)]);
+        }
+        const view = await client.query(`${BOOKING_SELECT} where b.id = $1`, [bookingId]);
+        return bookingView(view.rows[0]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && error.constraint === 'bookings_active_slot_uq') {
+        fail(409, 'slot_taken', 'Это время уже заняли');
+      }
+      throw error;
+    }
+  });
+
   app.post('/api/v1/bookings/:id/cancel', async (request) =>
     transition(request, { from: ACTIVE, to: 'cancelled', requireManager: false }));
 

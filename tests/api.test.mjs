@@ -80,6 +80,15 @@ before(async () => {
     await migrate(migratorPool);
     // Тесты каталога и окон требуют демоданных; сид идемпотентен.
     await seed(pool);
+    // Повторный прогон не должен исчерпывать окна и очередь тестовыми заявками.
+    await pool.query(
+      `update bookings set status = 'expired', updated_at = now()
+       where status in ('requested', 'confirmed')
+         and client_user_id in (select id from users where display_name = 'Тест')`);
+    await pool.query(
+      `update trips set status = 'cancelled', updated_at = now()
+       where status in ('requested', 'assigned', 'arrived', 'in_progress')
+         and client_user_id in (select id from users where display_name = 'Тест')`);
     ready = true;
   } catch (error) {
     skipReason = `PostgreSQL недоступен: ${error.message}`;
@@ -642,6 +651,43 @@ async function makeDriver() {
   await pool.query("insert into driver_profiles (user_id, car_model, plate) values ($1, 'Test', 'T000TT') on conflict (user_id) do nothing", [user.userId]);
   return user;
 }
+
+test('перенос записи: только своё окно той же услуги, старое освобождается', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const slot = await freeSlot('Форма');
+  const client = await login();
+  const booking = await app.inject({ method: 'POST', url: '/api/v1/bookings',
+    headers: client.headers, payload: { slotId: slot.id } });
+  assert.equal(booking.statusCode, 201, booking.body);
+  const offerId = (await pool.query(
+    'select o.id from offers o join availability_slots s on s.offer_id=o.id where s.id=$1',
+    [slot.id])).rows[0].id;
+  const next = (await pool.query(
+    `select s.id from availability_slots s where s.offer_id=$1 and s.id<>$2 and s.starts_at>now()
+       and not exists (select 1 from bookings b where b.slot_id=s.id and b.status in ('requested','confirmed'))
+     order by s.starts_at limit 1`, [offerId, slot.id])).rows[0];
+  assert.ok(next, 'нужно второе свободное окно');
+
+  const outsider = await login();
+  const denied = await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/reschedule`,
+    headers: outsider.headers, payload: { slotId: next.id } });
+  assert.equal(denied.statusCode, 403, denied.body);
+
+  const moved = await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/reschedule`,
+    headers: client.headers, payload: { slotId: next.id } });
+  assert.equal(moved.statusCode, 200, moved.body);
+  assert.equal(moved.json().slot.id, next.id);
+  assert.equal(moved.json().status, 'requested');
+
+  const oldFree = await app.inject({ method: 'GET', url: `/api/v1/offers/${offerId}/slots?days=30` });
+  assert.ok(oldFree.json().slots.some(item => item.id === slot.id), 'старое окно должно освободиться');
+  assert.ok(!oldFree.json().slots.some(item => item.id === next.id), 'новое окно должно быть занято');
+
+  const again = await app.inject({ method: 'POST', url: `/api/v1/bookings/${booking.json().id}/reschedule`,
+    headers: client.headers, payload: { slotId: next.id } });
+  assert.equal(again.statusCode, 200, again.body);
+  assert.equal(again.json().slot.id, next.id);
+});
 
 test('такси: оценка, заказ, принятие водителем и завершение', async (t) => {
   if (!ready) return t.skip(skipReason);
