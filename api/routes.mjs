@@ -3168,7 +3168,7 @@ export function routes(app, { pool, demoLogin = false }) {
   app.get('/api/v1/driver/trips', async (request, reply) => {
     const auth = requireRole(request, 'driver', 'operator');
     const available = await pool.query(
-      `${TRIP_SELECT} where t.status = 'requested' order by t.created_at asc limit 50`);
+      `${TRIP_SELECT} where t.status = 'requested' order by t.created_at desc limit 50`);
     const mine = await pool.query(
       `${TRIP_SELECT} where t.driver_user_id = $1 and t.status in ('assigned', 'arrived', 'in_progress')
        order by t.created_at desc limit 50`, [auth.userId]);
