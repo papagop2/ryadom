@@ -43,6 +43,7 @@ const LABELS = {
   queue_ticket_new: ['Новый талон', 'Клиент встал в очередь'],
   queue_called: ['Вас вызвали', 'Подойдите к стойке'],
   queue_status: ['Очередь обновлена', 'Проверьте статус талона'],
+  chat_message: ['Новое сообщение', 'Вам написали по заказу'],
 };
 
 function textFor(kind, payload) {
@@ -50,6 +51,8 @@ function textFor(kind, payload) {
   let body = String(payload?.message || payload?.hint || fallback);
   if (kind === 'queue_called' || kind === 'queue_ticket_new') {
     body = `${payload?.place || 'Очередь'} · талон № ${payload?.number ?? '—'}`;
+  } else if (kind === 'chat_message') {
+    body = `${payload?.title || 'Заказ'} · ${payload?.body || fallback}`;
   } else if (kind === 'booking_reminder') {
     body = `${payload?.place || 'Запись'} · ${payload?.title || 'скоро начало'}`;
   } else if (kind === 'booking_confirmed' && payload?.place) {
@@ -63,6 +66,7 @@ function urlFor(kind) {
   if (kind.startsWith('shop_') || kind.startsWith('delivery_')) return './?tab=orders&view=shop';
   if (kind.startsWith('service_')) return './?tab=orders&view=requests';
   if (kind.startsWith('queue_')) return './?tab=orders&view=queue';
+  if (kind === 'chat_message') return './?tab=orders&view=chat';
   return './?tab=orders';
 }
 

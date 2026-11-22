@@ -434,6 +434,168 @@ async function notifyPartner(db, partnerId, kind, payload) {
   }
 }
 
+
+const CHAT_KINDS = ['booking', 'shop_order', 'trip', 'service_request'];
+
+async function chatSubject(db, kind, subjectId) {
+  if (kind === 'booking') {
+    const { rows } = await db.query(
+      `select b.id as subject_id, b.client_user_id, b.status, p.partner_id,
+              p.name as place_name, o.title as offer_title, s.starts_at,
+              u.display_name as client_name
+       from bookings b
+       join availability_slots s on s.id = b.slot_id
+       join offers o on o.id = s.offer_id
+       join places p on p.id = o.place_id
+       join users u on u.id = b.client_user_id
+       where b.id = $1`, [subjectId]);
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, title: `${row.place_name} · ${row.offer_title}`, subtitle: 'Запись', kind };
+  }
+  if (kind === 'shop_order') {
+    const { rows } = await db.query(
+      `select o.id as subject_id, o.client_user_id, o.status, p.partner_id,
+              p.name as place_name, o.total_cents, o.currency, o.pickup_code,
+              u.display_name as client_name
+       from shop_orders o
+       join places p on p.id = o.place_id
+       join users u on u.id = o.client_user_id
+       where o.id = $1`, [subjectId]);
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, title: row.place_name, subtitle: `Заказ · код ${row.pickup_code}`, kind };
+  }
+  if (kind === 'trip') {
+    const { rows } = await db.query(
+      `select t.id as subject_id, t.client_user_id, t.driver_user_id as provider_user_id,
+              t.status, t.from_label, t.to_label, u.display_name as client_name
+       from trips t join users u on u.id = t.client_user_id
+       where t.id = $1`, [subjectId]);
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, title: `${row.from_label} → ${row.to_label}`, subtitle: 'Поездка', kind };
+  }
+  if (kind === 'service_request') {
+    const { rows } = await db.query(
+      `select r.id as subject_id, r.client_user_id, r.status, r.partner_id,
+              r.title, r.address, u.display_name as client_name
+       from service_requests r join users u on u.id = r.client_user_id
+       where r.id = $1`, [subjectId]);
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, subtitle: row.address, kind };
+  }
+  return null;
+}
+
+const CHAT_THREAD_SELECT = `
+  select t.*, cu.display_name as client_name, pu.display_name as provider_name,
+         p.name as partner_name
+  from chat_threads t
+  join users cu on cu.id = t.client_user_id
+  left join users pu on pu.id = t.provider_user_id
+  left join partners p on p.id = t.partner_id`;
+
+const CHAT_MESSAGE_SELECT = `
+  select m.*, u.display_name as sender_name
+  from chat_messages m join users u on u.id = m.sender_user_id`;
+
+function chatMessageView(row, auth) {
+  return {
+    id: row.id,
+    body: row.status === 'hidden' ? 'Сообщение скрыто модератором' : row.body,
+    quickReply: row.quick_reply,
+    status: row.status,
+    createdAt: row.created_at,
+    mine: row.sender_user_id === auth.userId,
+    sender: { id: row.sender_user_id, name: row.sender_name },
+  };
+}
+
+function chatAccessRole(thread, auth) {
+  if (isOperator(auth)) return 'operator';
+  if (thread.client_user_id === auth.userId) return 'client';
+  if (thread.provider_user_id === auth.userId) return 'provider';
+  if (thread.partner_id && canManagePartner(auth, thread.partner_id)) return 'provider';
+  return null;
+}
+
+function chatThreadView(thread, subject, role, extras = {}) {
+  const providerName = thread.partner_name || thread.provider_name || 'Исполнитель';
+  return {
+    id: thread.id,
+    kind: thread.kind,
+    subjectId: thread.subject_id,
+    title: subject?.title || 'Переписка',
+    subtitle: subject?.subtitle || null,
+    status: thread.status,
+    role,
+    unread: extras.unread ?? 0,
+    lastMessageAt: thread.last_message_at,
+    lastMessage: extras.lastMessage ?? null,
+    client: { id: thread.client_user_id, name: thread.client_name },
+    provider: { id: thread.provider_user_id, name: providerName },
+    createdAt: thread.created_at,
+  };
+}
+
+async function loadChatThread(db, threadId) {
+  const { rows } = await db.query(`${CHAT_THREAD_SELECT} where t.id = $1`, [threadId]);
+  return rows[0] ?? null;
+}
+
+async function chatThreadDetail(db, thread, auth) {
+  const role = chatAccessRole(thread, auth);
+  if (!role) fail(403, 'forbidden', 'Нет доступа к переписке');
+  const subject = await chatSubject(db, thread.kind, thread.subject_id);
+  const last = await db.query(
+    `${CHAT_MESSAGE_SELECT} where m.thread_id = $1 and m.status = 'visible'
+     order by m.created_at desc limit 1`, [thread.id]);
+  const unread = await db.query(
+    `select count(*)::int as count from chat_messages m
+     left join chat_reads r on r.thread_id = m.thread_id and r.user_id = $2
+     where m.thread_id = $1 and m.sender_user_id <> $2 and m.status = 'visible'
+       and m.created_at > coalesce(r.last_read_at, 'epoch'::timestamptz)`, [thread.id, auth.userId]);
+  return chatThreadView(thread, subject, role, {
+    unread: unread.rows[0]?.count ?? 0,
+    lastMessage: last.rows[0] ? chatMessageView(last.rows[0], auth) : null,
+  });
+}
+
+async function notifyChatRecipients(db, thread, auth, subject, message) {
+  const payload = {
+    threadId: thread.id,
+    kind: thread.kind,
+    subjectId: thread.subject_id,
+    title: subject?.title || 'Сообщение',
+    body: message.body.slice(0, 160),
+    sender: auth.displayName || 'Собеседник',
+    messageId: message.id,
+  };
+  const clientId = thread.client_user_id;
+  if (clientId !== auth.userId) {
+    await db.query(
+      `insert into notifications (user_id, kind, payload) values ($1, 'chat_message', $2)`,
+      [clientId, JSON.stringify(payload)]);
+  }
+  if (thread.provider_user_id && thread.provider_user_id !== auth.userId) {
+    await db.query(
+      `insert into notifications (user_id, kind, payload) values ($1, 'chat_message', $2)`,
+      [thread.provider_user_id, JSON.stringify(payload)]);
+  }
+  if (thread.partner_id) {
+    const members = await db.query(
+      `select user_id from memberships
+       where partner_id = $1 and role = 'partner' and user_id <> $2`, [thread.partner_id, auth.userId]);
+    for (const member of members.rows) {
+      await db.query(
+        `insert into notifications (user_id, kind, payload) values ($1, 'chat_message', $2)`,
+        [member.user_id, JSON.stringify(payload)]);
+    }
+  }
+}
+
 function shopProductView(row) {
   return {
     id: row.id,
@@ -1494,6 +1656,431 @@ export function routes(app, { pool, demoLogin = false }) {
     return { cancelled: true, id: result.rows[0].id };
   });
 
+
+  // ---- чат по заказу ----
+  app.post('/api/v1/chat/threads/resolve', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['kind', 'subjectId'],
+      properties: {
+        kind: { type: 'string', enum: CHAT_KINDS },
+        subjectId: { type: 'string', format: 'uuid' },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const { kind, subjectId } = request.body;
+    const subject = await chatSubject(pool, kind, subjectId);
+    if (!subject) fail(404, 'chat_subject_not_found', 'Заказ не найден');
+    const partnerId = subject.partner_id ?? null;
+    const providerUserId = subject.provider_user_id ?? null;
+    if (kind === 'trip' && !providerUserId) {
+      fail(409, 'chat_unavailable', 'Чат появится после назначения водителя');
+    }
+    if (kind !== 'trip' && !partnerId) {
+      fail(409, 'chat_unavailable', 'Чат появится после подключения исполнителя');
+    }
+    const allowed = auth.userId === subject.client_user_id
+      || (providerUserId && auth.userId === providerUserId)
+      || (partnerId && canManagePartner(auth, partnerId))
+      || isOperator(auth);
+    if (!allowed) fail(403, 'forbidden', 'Нет доступа к этому заказу');
+
+    let existing = await pool.query(
+      `${CHAT_THREAD_SELECT} where t.kind = $1 and t.subject_id = $2`, [kind, subjectId]);
+    if (existing.rows[0]) {
+      const thread = existing.rows[0];
+      if (thread.provider_user_id !== providerUserId || thread.partner_id !== partnerId) {
+        await pool.query(
+          `update chat_threads set provider_user_id = $2, partner_id = $3, updated_at = now()
+           where id = $1`, [thread.id, providerUserId, partnerId]);
+      }
+      const fresh = await loadChatThread(pool, thread.id);
+      return { thread: await chatThreadDetail(pool, fresh, auth) };
+    }
+    const inserted = await pool.query(
+      `insert into chat_threads (kind, subject_id, client_user_id, partner_id, provider_user_id)
+       values ($1, $2, $3, $4, $5)
+       on conflict (kind, subject_id) do nothing returning id`,
+      [kind, subjectId, subject.client_user_id, partnerId, providerUserId]);
+    const id = inserted.rows[0]?.id
+      ?? (await pool.query('select id from chat_threads where kind = $1 and subject_id = $2',
+        [kind, subjectId])).rows[0]?.id;
+    if (!id) fail(409, 'chat_busy', 'Попробуйте ещё раз');
+    const fresh = await loadChatThread(pool, id);
+    return { thread: await chatThreadDetail(pool, fresh, auth) };
+  });
+
+  app.get('/api/v1/chat/threads', async (request, reply) => {
+    const auth = requireUser(request);
+    const partnerIds = partnerIdsOf(auth);
+    const { rows } = await pool.query(
+      `${CHAT_THREAD_SELECT}
+       where ${isOperator(auth) ? 'true' : `(t.client_user_id = $1 or t.provider_user_id = $1
+         or t.partner_id = any($2::uuid[]))`}
+       order by coalesce(t.last_message_at, t.created_at) desc limit 100`,
+      isOperator(auth) ? [] : [auth.userId, partnerIds]);
+    const ids = rows.map(row => row.id);
+    let lastByThread = new Map();
+    let unreadByThread = new Map();
+    if (ids.length) {
+      const last = await pool.query(
+        `select distinct on (m.thread_id) m.*, u.display_name as sender_name
+         from chat_messages m join users u on u.id = m.sender_user_id
+         where m.thread_id = any($1::uuid[]) and m.status = 'visible'
+         order by m.thread_id, m.created_at desc`, [ids]);
+      lastByThread = new Map(last.rows.map(row => [row.thread_id, row]));
+      const unread = await pool.query(
+        `select m.thread_id, count(*)::int as count
+         from chat_messages m
+         left join chat_reads r on r.thread_id = m.thread_id and r.user_id = $2
+         where m.thread_id = any($1::uuid[]) and m.sender_user_id <> $2 and m.status = 'visible'
+           and m.created_at > coalesce(r.last_read_at, 'epoch'::timestamptz)
+         group by m.thread_id`, [ids, auth.userId]);
+      unreadByThread = new Map(unread.rows.map(row => [row.thread_id, row.count]));
+    }
+    const items = await Promise.all(rows.map(async row => {
+      const subject = await chatSubject(pool, row.kind, row.subject_id);
+      const role = chatAccessRole(row, auth);
+      const last = lastByThread.get(row.id);
+      return chatThreadView(row, subject, role, {
+        unread: unreadByThread.get(row.id) ?? 0,
+        lastMessage: last ? chatMessageView(last, auth) : null,
+      });
+    }));
+    reply.header('Cache-Control', 'no-store');
+    return { items };
+  });
+
+  app.get('/api/v1/chat/threads/:id/messages', async (request, reply) => {
+    const auth = requireUser(request);
+    const thread = await loadChatThread(pool, uuidParam(request));
+    if (!thread) fail(404, 'thread_not_found', 'Переписка не найдена');
+    const role = chatAccessRole(thread, auth);
+    if (!role) fail(403, 'forbidden', 'Нет доступа к переписке');
+    const hidden = role === 'operator' ? '' : "and m.status = 'visible'";
+    const { rows } = await pool.query(
+      `${CHAT_MESSAGE_SELECT} where m.thread_id = $1 ${hidden}
+       order by m.created_at asc limit 200`, [thread.id]);
+    const subject = await chatSubject(pool, thread.kind, thread.subject_id);
+    const detail = await chatThreadDetail(pool, thread, auth);
+    reply.header('Cache-Control', 'no-store');
+    return { thread: detail, messages: rows.map(row => chatMessageView(row, auth)) };
+  });
+
+  app.post('/api/v1/chat/threads/:id/read', async (request) => {
+    const auth = requireUser(request);
+    const thread = await loadChatThread(pool, uuidParam(request));
+    if (!thread) fail(404, 'thread_not_found', 'Переписка не найдена');
+    if (!chatAccessRole(thread, auth)) fail(403, 'forbidden', 'Нет доступа к переписке');
+    await pool.query(
+      `insert into chat_reads (thread_id, user_id, last_read_at) values ($1, $2, now())
+       on conflict (thread_id, user_id) do update set last_read_at = now()`,
+      [thread.id, auth.userId]);
+    return { ok: true };
+  });
+
+  app.post('/api/v1/chat/threads/:id/messages', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['body'],
+      properties: {
+        body: { type: 'string', minLength: 1, maxLength: 1000 },
+        quickReply: { anyOf: [{ type: 'string', maxLength: 60 }, { type: 'null' }] },
+      },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const text = request.body.body.trim();
+    if (!text) fail(400, 'empty_message', 'Сообщение пустое');
+    return withTransaction(pool, async client => {
+      const thread = await loadChatThread(client, uuidParam(request));
+      if (!thread) fail(404, 'thread_not_found', 'Переписка не найдена');
+      if (!chatAccessRole(thread, auth)) fail(403, 'forbidden', 'Нет доступа к переписке');
+      if (thread.status !== 'open') fail(409, 'chat_closed', 'Переписка закрыта');
+      const subject = await chatSubject(client, thread.kind, thread.subject_id);
+      const created = await client.query(
+        `insert into chat_messages (thread_id, sender_user_id, body, quick_reply)
+         values ($1, $2, $3, $4)
+         returning id, thread_id, sender_user_id, body, quick_reply, status, created_at`,
+        [thread.id, auth.userId, text, request.body.quickReply ?? null]);
+      const row = { ...created.rows[0], sender_name: auth.displayName };
+      await client.query(
+        `update chat_threads set last_message_at = now(), updated_at = now() where id = $1`,
+        [thread.id]);
+      await client.query(
+        `insert into chat_reads (thread_id, user_id, last_read_at) values ($1, $2, now())
+         on conflict (thread_id, user_id) do update set last_read_at = now()`,
+        [thread.id, auth.userId]);
+      await notifyChatRecipients(client, thread, auth, subject, row);
+      return { message: chatMessageView(row, auth) };
+    });
+  });
+
+  app.post('/api/v1/chat/messages/:id/report', {
+    schema: { body: {
+      type: 'object', additionalProperties: false,
+      properties: { reason: { type: 'string', maxLength: 300 } },
+    } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const messageId = uuidParam(request);
+    const found = await pool.query(
+      `select m.id, m.thread_id, t.* from chat_messages m
+       join chat_threads t on t.id = m.thread_id where m.id = $1`, [messageId]);
+    if (!found.rows[0]) fail(404, 'message_not_found', 'Сообщение не найдено');
+    const thread = found.rows[0];
+    if (!chatAccessRole(thread, auth)) fail(403, 'forbidden', 'Нет доступа к сообщению');
+    await pool.query(
+      `insert into chat_reports (message_id, reporter_user_id, reason)
+       values ($1, $2, $3) on conflict (message_id, reporter_user_id) do nothing`,
+      [messageId, auth.userId, (request.body?.reason ?? '').trim()]);
+    return { reported: true };
+  });
+
+
+  app.get('/api/v1/today', async (request, reply) => {
+    const auth = requireUser(request);
+    const partnerIds = partnerIdsOf(auth);
+    const isPartner = partnerIds.length > 0;
+    const isOp = isOperator(auth);
+    const isDriver = auth.roles.some(role => role.role === 'driver');
+    const isCourier = auth.roles.some(role => role.role === 'courier');
+    const tasks = [];
+    const add = (role, kind, title, subtitle, count, priority, tab, view = null) => {
+      if (!count) return;
+      tasks.push({
+        id: `${role}-${kind}`, role, kind, title, subtitle, count,
+        priority: priority ?? 1, action: { tab, view },
+      });
+    };
+
+    const [bookings, shop, trips, services, queueTicket, waitlist, chatUnread] = await Promise.all([
+      pool.query(
+        `select b.status, b.cash_confirmed_provider_at, b.cash_confirmed_client_at,
+                p.name as place_name, s.starts_at
+         from bookings b join availability_slots s on s.id = b.slot_id
+         join offers o on o.id = s.offer_id join places p on p.id = o.place_id
+         where b.client_user_id = $1 and b.status in ('requested', 'confirmed')
+         order by s.starts_at asc limit 20`, [auth.userId]),
+      pool.query(
+        `select o.status, p.name as place_name
+         from shop_orders o join places p on p.id = o.place_id
+         where o.client_user_id = $1 and o.status in ('placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash')
+         order by o.created_at desc limit 20`, [auth.userId]),
+      pool.query(
+        `select t.status, t.from_label, t.to_label, t.cash_confirmed_client_at, t.cash_confirmed_driver_at
+         from trips t where t.client_user_id = $1
+           and t.status in ('requested', 'assigned', 'arrived', 'in_progress')
+         order by t.created_at desc limit 10`, [auth.userId]),
+      pool.query(
+        `select r.status, r.title
+         from service_requests r where r.client_user_id = $1
+           and r.status in ('open', 'assigned', 'in_progress', 'awaiting_cash')
+         order by r.created_at desc limit 10`, [auth.userId]),
+      pool.query(
+        `select t.id, t.number, t.status, p.name as place_name
+         from queue_tickets t join places p on p.id = t.place_id
+         where t.client_user_id = $1 and t.status in ('waiting', 'called', 'serving')
+         order by t.created_at desc limit 1`, [auth.userId]),
+      pool.query(
+        `select count(*)::int as count from waitlist_entries
+         where user_id = $1 and status = 'notified' and expires_at > now()`, [auth.userId]),
+      pool.query(
+        `select count(*)::int as count from chat_messages m
+         join chat_threads t on t.id = m.thread_id
+         left join chat_reads r on r.thread_id = t.id and r.user_id = $1
+         where (t.client_user_id = $1 or t.provider_user_id = $1 or t.partner_id = any($2::uuid[]))
+           and m.sender_user_id <> $1 and m.status = 'visible'
+           and m.created_at > coalesce(r.last_read_at, 'epoch'::timestamptz)`,
+        [auth.userId, partnerIds]),
+    ]);
+
+    const cashPending = bookings.rows.filter(row => row.status === 'confirmed'
+      && row.cash_confirmed_provider_at && !row.cash_confirmed_client_at);
+    add('client', 'cash', 'Подтвердить наличные',
+      cashPending[0] ? `${cashPending[0].place_name}: работа выполнена` : 'Ждут вашего подтверждения',
+      cashPending.length, 4, 'orders', 'bookings');
+    add('client', 'bookings', 'Активные записи',
+      bookings.rows[0] ? `${bookings.rows[0].place_name} · ${new Date(bookings.rows[0].starts_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '',
+      bookings.rows.length, 2, 'orders', 'bookings');
+    add('client', 'shop', 'Заказы и доставка',
+      shop.rows[0]?.place_name ?? 'Проверьте статусы',
+      shop.rows.length, 2, 'orders', 'shop');
+    add('client', 'trips', 'Поездки',
+      trips.rows[0] ? `${trips.rows[0].from_label} → ${trips.rows[0].to_label}` : 'Проверьте поездку',
+      trips.rows.length, 3, 'taxi');
+    add('client', 'service', 'Заявки мастеру',
+      services.rows[0]?.title ?? 'Проверьте предложения',
+      services.rows.length, 2, 'orders', 'requests');
+    add('client', 'queue', 'Живая очередь',
+      queueTicket.rows[0] ? `${queueTicket.rows[0].place_name} · № ${String(queueTicket.rows[0].number).padStart(2, '0')}` : '',
+      queueTicket.rows.length, 3, 'orders', 'queue');
+    add('client', 'waitlist', 'Окно освободилось', 'Можно записаться на услугу',
+      waitlist.rows[0]?.count ?? 0, 4, 'orders', 'bookings');
+    add('client', 'chat', 'Непрочитанные сообщения', 'Вам написали по заказу',
+      chatUnread.rows[0]?.count ?? 0, 4, 'orders', 'chat');
+
+    if (isPartner) {
+      const [pBookings, pShop, pQueue, pService] = await Promise.all([
+        pool.query(
+          `select b.status, b.cash_confirmed_provider_at, b.cash_confirmed_client_at,
+                  p.name as place_name, s.starts_at
+           from bookings b join availability_slots s on s.id = b.slot_id
+           join offers o on o.id = s.offer_id join places p on p.id = o.place_id
+           where p.partner_id = any($1::uuid[]) and b.status in ('requested', 'confirmed')
+           order by s.starts_at asc limit 20`, [partnerIds]),
+        pool.query(
+          `select o.status, p.name as place_name from shop_orders o join places p on p.id = o.place_id
+           where p.partner_id = any($1::uuid[])
+             and o.status in ('placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash')
+           order by o.created_at asc limit 20`, [partnerIds]),
+        pool.query(
+          `select t.status, p.name as place_name from queue_tickets t join places p on p.id = t.place_id
+           where p.partner_id = any($1::uuid[]) and t.status in ('waiting', 'called')
+           order by t.created_at asc limit 20`, [partnerIds]),
+        pool.query(
+          `select r.status, r.title from service_requests r
+           where r.partner_id = any($1::uuid[])
+             and r.status in ('open', 'assigned', 'in_progress', 'awaiting_cash')
+           order by r.created_at asc limit 20`, [partnerIds]),
+      ]);
+      const pCash = pBookings.rows.filter(row => row.status === 'confirmed'
+        && !row.cash_confirmed_provider_at);
+      add('partner', 'bookings', 'Записи клиентов',
+        pBookings.rows[0] ? `${pBookings.rows[0].place_name} · ${pBookings.rows.length} активных` : 'Нет активных записей',
+        pBookings.rows.length, 3, 'profile');
+      add('partner', 'cash', 'Отметить наличные',
+        pCash[0] ? `${pCash[0].place_name}: клиент ждёт закрытия` : 'Подтвердите получение',
+        pCash.length, 4, 'profile');
+      add('partner', 'queue', 'Очередь', pQueue.rows[0]?.place_name ?? 'Клиенты ждут',
+        pQueue.rows.length, 3, 'profile');
+      add('partner', 'shop', 'Заказы', pShop.rows[0]?.place_name ?? 'Новые заказы',
+        pShop.rows.length, 3, 'profile');
+      add('partner', 'service', 'Заявки на выезд', pService.rows[0]?.title ?? 'Открытые заявки',
+        pService.rows.length, 2, 'profile');
+      add('partner', 'chat', 'Сообщения клиентов', 'Непрочитанная переписка',
+        chatUnread.rows[0]?.count ?? 0, 4, 'orders', 'chat');
+    }
+
+    if (isOp) {
+      const [reviews, openService, activeTrips, pendingDelivery, reports] = await Promise.all([
+        pool.query(`select count(*)::int as count from reviews where status = 'pending'`),
+        pool.query(`select count(*)::int as count from service_requests where status = 'open'`),
+        pool.query(`select count(*)::int as count from trips where status in ('requested', 'assigned', 'arrived', 'in_progress')`),
+        pool.query(`select count(*)::int as count from delivery_jobs where status = 'pending'`),
+        pool.query(`select count(*)::int as count from chat_reports where status = 'open'`),
+      ]);
+      add('operator', 'reviews', 'Модерация отзывов', 'Проверьте новые отзывы',
+        reviews.rows[0]?.count ?? 0, 3, 'profile');
+      add('operator', 'service', 'Открытые заявки', 'Нужен мастер',
+        openService.rows[0]?.count ?? 0, 2, 'profile');
+      add('operator', 'trips', 'Поездки', 'Активные заказы такси',
+        activeTrips.rows[0]?.count ?? 0, 2, 'profile');
+      add('operator', 'delivery', 'Доставка', 'Ждут курьера',
+        pendingDelivery.rows[0]?.count ?? 0, 3, 'profile');
+      add('operator', 'chat-reports', 'Жалобы в чате', 'Проверьте сообщения',
+        reports.rows[0]?.count ?? 0, 3, 'profile');
+    }
+
+    if (isDriver) {
+      const { rows } = await pool.query(
+        `select status, cash_confirmed_driver_at from trips
+         where driver_user_id = $1 and status in ('assigned', 'arrived', 'in_progress')
+         order by created_at desc limit 10`, [auth.userId]);
+      add('driver', 'trips', 'Мои поездки', rows[0] ? tripStatusText(rows[0].status) : 'Нет активной поездки',
+        rows.length, 3, 'profile');
+      add('driver', 'chat', 'Сообщения клиента', 'Переписка по поездке',
+        chatUnread.rows[0]?.count ?? 0, 4, 'orders', 'chat');
+    }
+
+    if (isCourier) {
+      const [mine, available] = await Promise.all([
+        pool.query(`select count(*)::int as count from delivery_jobs where courier_user_id = $1 and status in ('assigned', 'picked_up')`, [auth.userId]),
+        pool.query(`select count(*)::int as count from delivery_jobs where status = 'pending'`),
+      ]);
+      add('courier', 'deliveries', 'Мои доставки', 'Активные задания',
+        mine.rows[0]?.count ?? 0, 3, 'profile');
+      add('courier', 'available', 'Свободные доставки', 'Можно взять в работу',
+        available.rows[0]?.count ?? 0, 2, 'profile');
+    }
+
+    tasks.sort((a, b) => b.priority - a.priority);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      generatedAt: new Date().toISOString(),
+      roles: auth.roles.map(role => role.role),
+      items: tasks,
+    };
+  });
+
+  function tripStatusText(status) {
+    return ({ requested: 'Ищем водителя', assigned: 'Водитель едет', arrived: 'Водитель на месте',
+      in_progress: 'В пути', completed: 'Завершена', cancelled: 'Отменена' })[status] ?? status;
+  }
+
+  app.get('/api/v1/operator/chat/reports', async (request, reply) => {
+    requireRole(request, 'operator');
+    const { rows } = await pool.query(
+      `select r.*, m.body, m.status as message_status, m.created_at as message_created_at,
+              u.display_name as sender_name, rep.display_name as reporter_name,
+              t.id as thread_id, t.kind, t.subject_id, t.client_user_id
+       from chat_reports r
+       join chat_messages m on m.id = r.message_id
+       join chat_threads t on t.id = m.thread_id
+       join users u on u.id = m.sender_user_id
+       join users rep on rep.id = r.reporter_user_id
+       where r.status = 'open'
+       order by r.created_at asc limit 100`);
+    reply.header('Cache-Control', 'no-store');
+    return { items: rows.map(row => ({
+      id: row.id,
+      reason: row.reason,
+      status: row.status,
+      createdAt: row.created_at,
+      reporter: { id: row.reporter_user_id, name: row.reporter_name },
+      thread: { id: row.thread_id, kind: row.kind, subjectId: row.subject_id },
+      message: {
+        id: row.message_id, body: row.body, status: row.message_status,
+        createdAt: row.message_created_at, sender: { id: row.sender_user_id, name: row.sender_name },
+      },
+    })) };
+  });
+
+  app.post('/api/v1/operator/chat/messages/:id/moderate', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['action'],
+      properties: {
+        action: { type: 'string', enum: ['hide', 'restore'] },
+        note: { type: 'string', maxLength: 300 },
+      },
+    } },
+  }, async (request) => {
+    requireRole(request, 'operator');
+    const auth = requireUser(request);
+    const messageId = uuidParam(request);
+    const message = await pool.query('select id, thread_id from chat_messages where id = $1', [messageId]);
+    if (!message.rows[0]) fail(404, 'message_not_found', 'Сообщение не найдено');
+    const action = request.body.action;
+    await withTransaction(pool, async client => {
+      if (action === 'hide') {
+        await client.query(
+          `update chat_messages set status = 'hidden', hidden_at = now(), hidden_by = $2,
+             moderation_note = $3 where id = $1`,
+          [messageId, auth.userId, (request.body.note ?? '').trim()]);
+      } else {
+        await client.query(
+          `update chat_messages set status = 'visible', hidden_at = null, hidden_by = null,
+             moderation_note = $2 where id = $1`,
+          [messageId, (request.body.note ?? '').trim()]);
+      }
+      if (action === 'hide') {
+        await client.query(
+          `update chat_reports set status = 'resolved', resolved_by = $2, resolved_at = now()
+           where message_id = $1 and status = 'open'`, [messageId, auth.userId]);
+      }
+    });
+    return { message: { id: messageId, status: action === 'hide' ? 'hidden' : 'visible' } };
+  });
+
   app.get('/api/v1/offers/:id/slots', {
     schema: { querystring: {
       type: 'object', additionalProperties: false,
@@ -1776,7 +2363,8 @@ export function routes(app, { pool, demoLogin = false }) {
       `${BOOKING_SELECT}
        where ($1::uuid[] is null or p.partner_id = any($1::uuid[]))
          and ($2::text is null or b.status::text = $2)
-       order by s.starts_at asc limit 200`,
+       order by case b.status when 'requested' then 0 when 'confirmed' then 1 else 2 end,
+                s.starts_at asc limit 200`,
       [isOperator(auth) ? null : partnerIds, typeof status === 'string' ? status : null]);
     reply.header('Cache-Control', 'no-store');
     return { items: rows.map(bookingView) };
@@ -3308,6 +3896,115 @@ export function routes(app, { pool, demoLogin = false }) {
       await notifyPartner(client, order.partner_id, 'shop_order_cancelled', { orderId });
       return loadShopOrder(client, orderId);
     });
+  });
+
+
+  app.get('/api/v1/partner/analytics', {
+    schema: { querystring: {
+      type: 'object', additionalProperties: false,
+      properties: { days: { type: 'integer', minimum: 7, maximum: 365 } },
+    } },
+  }, async (request, reply) => {
+    const auth = requireRole(request, 'partner');
+    const partnerIds = partnerIdsOf(auth);
+    if (!partnerIds.length) fail(403, 'forbidden', 'Нет кабинета партнёра');
+    const days = request.query.days ?? 30;
+    const interval = `($2::int || ' days')::interval`;
+    const base = `from bookings b
+      join availability_slots s on s.id = b.slot_id
+      join offers o on o.id = s.offer_id
+      join places p on p.id = o.place_id
+      join cities c on c.slug = p.city_slug
+      where p.partner_id = any($1::uuid[]) and b.created_at >= now() - ${interval}`;
+    const [totals, repeat, top, week, hours, queue] = await Promise.all([
+      pool.query(
+        `select count(*)::int as total,
+                count(*) filter (where b.status = 'completed')::int as completed,
+                count(*) filter (where b.status in ('cancelled', 'expired'))::int as cancelled,
+                count(*) filter (where b.status = 'expired')::int as expired,
+                count(distinct b.client_user_id)::int as clients,
+                coalesce(sum(b.price_cents) filter (where b.status = 'completed'), 0)::bigint as revenue
+         ${base}`, [partnerIds, days]),
+      pool.query(
+        `select count(*)::int as clients,
+                count(*) filter (where visits >= 2)::int as repeat
+         from (select b.client_user_id,
+                      count(*) filter (where b.status = 'completed') as visits
+               ${base} group by b.client_user_id) x`, [partnerIds, days]),
+      pool.query(
+        `select u.display_name as name, count(*)::int as visits, max(s.starts_at) as last_visit
+         from bookings b
+         join availability_slots s on s.id = b.slot_id
+         join offers o on o.id = s.offer_id
+         join places p on p.id = o.place_id
+         join users u on u.id = b.client_user_id
+         where p.partner_id = any($1::uuid[]) and b.created_at >= now() - ${interval}
+           and b.status = 'completed'
+         group by u.id, u.display_name order by visits desc, last_visit desc limit 5`, [partnerIds, days]),
+      pool.query(
+        `select extract(isodow from (s.starts_at at time zone c.timezone))::int as weekday,
+                count(*)::int as bookings,
+                count(*) filter (where b.status = 'completed')::int as completed
+         ${base} group by 1 order by 1`, [partnerIds, days]),
+      pool.query(
+        `select extract(hour from (s.starts_at at time zone c.timezone))::int as hour,
+                count(*)::int as bookings,
+                count(*) filter (where b.status = 'completed')::int as completed
+         ${base} group by 1 order by 1`, [partnerIds, days]),
+      pool.query(
+        `select count(*)::int as total,
+                count(*) filter (where t.status = 'no_show')::int as no_show
+         from queue_tickets t join places p on p.id = t.place_id
+         where p.partner_id = any($1::uuid[]) and t.created_at >= now() - ${interval}`,
+        [partnerIds, days]),
+    ]);
+    const total = totals.rows[0] ?? {};
+    const repeatRow = repeat.rows[0] ?? {};
+    const clients = Number(repeatRow.clients ?? 0);
+    const repeatClients = Number(repeatRow.repeat ?? 0);
+    const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    const byWeekday = weekDays.map((label, index) => {
+      const row = week.rows.find(item => Number(item.weekday) === index + 1);
+      return { weekday: index + 1, label, bookings: Number(row?.bookings ?? 0), completed: Number(row?.completed ?? 0) };
+    });
+    const byHour = Array.from({ length: 24 }, (_, hour) => {
+      const row = hours.rows.find(item => Number(item.hour) === hour);
+      return { hour, bookings: Number(row?.bookings ?? 0), completed: Number(row?.completed ?? 0) };
+    });
+    const bestHour = [...byHour].sort((a, b) => (b.completed - a.completed) || (b.bookings - a.bookings))[0];
+    const bestWeekday = [...byWeekday].sort((a, b) => (b.completed - a.completed) || (b.bookings - a.bookings))[0];
+    const completed = Number(total.completed ?? 0);
+    const revenue = Number(total.revenue ?? 0);
+    reply.header('Cache-Control', 'no-store');
+    return {
+      periodDays: days,
+      totals: {
+        bookings: Number(total.total ?? 0), completed,
+        cancelled: Number(total.cancelled ?? 0), expired: Number(total.expired ?? 0),
+        clients: Number(total.clients ?? 0),
+        revenue: money(revenue),
+        avgCheck: money(completed ? Math.round(revenue / completed) : 0),
+      },
+      repeat: {
+        clients, repeatClients,
+        rate: clients ? Math.round((repeatClients / clients) * 1000) / 10 : 0,
+      },
+      noShow: {
+        queueTotal: Number(queue.rows[0]?.total ?? 0),
+        queueNoShow: Number(queue.rows[0]?.no_show ?? 0),
+        expiredBookings: Number(total.expired ?? 0),
+      },
+      byWeekday,
+      byHour,
+      best: {
+        hour: bestHour?.completed || bestHour?.bookings ? bestHour.hour : null,
+        weekday: bestWeekday?.completed || bestWeekday?.bookings ? bestWeekday.weekday : null,
+        count: Math.max(bestHour?.completed ?? 0, bestHour?.bookings ?? 0),
+      },
+      topClients: top.rows.map(row => ({
+        name: row.name, visits: Number(row.visits), lastVisit: row.last_visit,
+      })),
+    };
   });
 
   app.get('/api/v1/partner/shop-orders', async (request, reply) => {

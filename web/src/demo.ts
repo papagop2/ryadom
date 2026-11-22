@@ -32,6 +32,10 @@ const LOYALTY_PROGRAMS_KEY = 'rjadom.demo.loyalty-programs';
 const LOYALTY_CARDS_KEY = 'rjadom.demo.loyalty-cards';
 const LOYALTY_EVENTS_KEY = 'rjadom.demo.loyalty-events';
 const WAITLIST_KEY = 'rjadom.demo.waitlist';
+const CHAT_THREADS_KEY = 'rjadom.demo.chat-threads';
+const CHAT_MESSAGES_KEY = 'rjadom.demo.chat-messages';
+const CHAT_READS_KEY = 'rjadom.demo.chat-reads';
+const CHAT_REPORTS_KEY = 'rjadom.demo.chat-reports';
 const DAY = 86400000;
 
 const demoPlaces: DemoPlace[] = [
@@ -181,6 +185,20 @@ type DemoWaitlist = {
   createdAt: string; notifiedAt: string | null;
 };
 
+type DemoChatThread = {
+  id: string; kind: 'booking' | 'shop_order' | 'trip' | 'service_request'; subjectId: string;
+  clientId: string; partnerId: string | null; providerId: string | null;
+  status: 'open' | 'closed'; createdAt: string; lastMessageAt: string | null;
+};
+type DemoChatMessage = {
+  id: string; threadId: string; userId: string; senderName: string; body: string;
+  quickReply: string | null; status: 'visible' | 'hidden'; createdAt: string;
+};
+type DemoChatReport = {
+  id: string; messageId: string; reporterId: string; reason: string;
+  status: 'open' | 'resolved'; createdAt: string;
+};
+
 const read = <T,>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key);
@@ -243,6 +261,92 @@ function waitlistView(entry: DemoWaitlist) {
       id: place.id, name: place.name, address: place.address, district: place.district,
       image: place.image ?? null,
     },
+  };
+}
+
+const getChatThreads = (): DemoChatThread[] => read<DemoChatThread[]>(CHAT_THREADS_KEY, []);
+const saveChatThreads = (items: DemoChatThread[]) => write(CHAT_THREADS_KEY, items);
+const getChatMessages = (): DemoChatMessage[] => read<DemoChatMessage[]>(CHAT_MESSAGES_KEY, []);
+const saveChatMessages = (items: DemoChatMessage[]) => write(CHAT_MESSAGES_KEY, items);
+const getChatReads = (): { threadId: string; userId: string; lastReadAt: string }[] => read(CHAT_READS_KEY, []);
+const saveChatReads = (items: { threadId: string; userId: string; lastReadAt: string }[]) => write(CHAT_READS_KEY, items);
+const getChatReports = (): DemoChatReport[] => read<DemoChatReport[]>(CHAT_REPORTS_KEY, []);
+const saveChatReports = (items: DemoChatReport[]) => write(CHAT_REPORTS_KEY, items);
+
+function demoChatSubject(kind: DemoChatThread['kind'], subjectId: string) {
+  if (kind === 'booking') {
+    const booking = getBookings().find(item => item.id === subjectId);
+    if (!booking) return null;
+    const place = placeById(booking.place.id);
+    return {
+      clientId: booking.clientUserId ?? 'u-000001', partnerId: place?.partnerId ?? null, providerId: null,
+      title: `${booking.place.name} · ${booking.offer.title}`, subtitle: 'Запись',
+    };
+  }
+  if (kind === 'shop_order') {
+    const order = getShopOrders().find(item => item.id === subjectId);
+    if (!order) return null;
+    const place = placeById(order.place.id);
+    return {
+      clientId: order.client.id, partnerId: place?.partnerId ?? null, providerId: null,
+      title: order.place.name, subtitle: `Заказ · код ${order.pickupCode}`,
+    };
+  }
+  if (kind === 'trip') {
+    const trip = getTrips().find(item => item.id === subjectId);
+    if (!trip) return null;
+    return {
+      clientId: trip.client.id, partnerId: null, providerId: trip.driver?.id ?? null,
+      title: `${trip.from.label} → ${trip.to.label}`, subtitle: 'Поездка',
+    };
+  }
+  const request = getServices().find(item => item.id === subjectId);
+  if (!request) return null;
+  return {
+    clientId: request.client.id, partnerId: request.partner?.id ?? null, providerId: null,
+    title: request.title, subtitle: request.address,
+  };
+}
+
+function demoChatAccess(thread: DemoChatThread, me: DemoMe) {
+  if (me.user.id === thread.clientId) return 'client';
+  if (thread.providerId === me.user.id) return 'provider';
+  if (thread.partnerId && me.partnerIds.includes(thread.partnerId)) return 'provider';
+  if (me.roles.some(role => role.role === 'operator')) return 'operator';
+  return null;
+}
+
+function demoChatThreadView(thread: DemoChatThread, me: DemoMe) {
+  const subject = demoChatSubject(thread.kind, thread.subjectId);
+  const role = demoChatAccess(thread, me);
+  if (!subject || !role) return null;
+  const last = getChatMessages().filter(item => item.threadId === thread.id
+    && item.status === 'visible').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const read = getChatReads().find(item => item.threadId === thread.id && item.userId === me.user.id);
+  const since = read?.lastReadAt ?? '';
+  const unread = getChatMessages().filter(item => item.threadId === thread.id
+    && item.status === 'visible' && item.userId !== me.user.id && item.createdAt > since).length;
+  return {
+    id: thread.id, kind: thread.kind, subjectId: thread.subjectId,
+    title: subject.title, subtitle: subject.subtitle, status: thread.status, role, unread,
+    lastMessageAt: thread.lastMessageAt,
+    lastMessage: last ? {
+      id: last.id, body: last.body, quickReply: last.quickReply, status: last.status,
+      createdAt: last.createdAt, mine: last.userId === me.user.id,
+      sender: { id: last.userId, name: last.senderName },
+    } : null,
+    client: { id: subject.clientId, name: thread.clientId === me.user.id ? me.user.displayName : 'Клиент' },
+    provider: { id: subject.providerId ?? subject.partnerId, name: subject.partnerId ? demoNames[subject.partnerId] ?? 'Исполнитель' : 'Водитель' },
+    createdAt: thread.createdAt,
+  };
+}
+
+function demoChatMessageView(message: DemoChatMessage, me: DemoMe) {
+  return {
+    id: message.id, body: message.status === 'hidden' ? 'Сообщение скрыто модератором' : message.body,
+    quickReply: message.quickReply, status: message.status, createdAt: message.createdAt,
+    mine: message.userId === me.user.id,
+    sender: { id: message.userId, name: message.senderName },
   };
 }
 
@@ -946,6 +1050,218 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     target.status = 'cancelled';
     saveWaitlist(entries);
     return { cancelled: true, id: target.id } as T;
+  }
+
+  if (url.pathname === '/api/v1/today') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const tasks: {
+      id: string; role: string; kind: string; title: string; subtitle: string;
+      count: number; priority: number; action: { tab: string; view: string | null };
+    }[] = [];
+    const add = (role: string, kind: string, title: string, subtitle: string, count: number,
+      priority: number, tab: string, view: string | null = null) => {
+      if (count) tasks.push({ id: `${role}-${kind}`, role, kind, title, subtitle, count, priority, action: { tab, view } });
+    };
+    const bookings = getBookings().filter(item => item.clientUserId === me.user.id
+      && (item.status === 'requested' || item.status === 'confirmed'));
+    const cash = bookings.filter(item => item.status === 'confirmed' && item.cash?.provider && !item.cash?.client);
+    add('client', 'cash', 'Подтвердить наличные', cash[0]?.place.name ?? 'Ждут подтверждения', cash.length, 4, 'orders', 'bookings');
+    add('client', 'bookings', 'Активные записи', bookings[0]?.place.name ?? '', bookings.length, 2, 'orders', 'bookings');
+    const shop = getShopOrders().filter(item => item.client.id === me.user.id
+      && ['placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash'].includes(item.status));
+    add('client', 'shop', 'Заказы и доставка', shop[0]?.place.name ?? '', shop.length, 2, 'orders', 'shop');
+    const trips = getTrips().filter(item => item.client.id === me.user.id
+      && TRIP_ACTIVE.includes(item.status));
+    add('client', 'trips', 'Поездки', trips[0] ? `${trips[0].from.label} → ${trips[0].to.label}` : '', trips.length, 3, 'taxi');
+    const services = getServices().filter(item => item.client.id === me.user.id
+      && SERVICE_ACTIVE.includes(item.status));
+    add('client', 'service', 'Заявки мастеру', services[0]?.title ?? '', services.length, 2, 'orders', 'requests');
+    const tickets = getQueueTickets().filter(item => item.clientUserId === me.user.id
+      && ['waiting', 'called', 'serving'].includes(item.status));
+    add('client', 'queue', 'Живая очередь', tickets[0] ? `${tickets[0].placeId} · № ${String(tickets[0].number).padStart(2, '0')}` : '',
+      tickets.length, 3, 'orders', 'queue');
+    const notified = getWaitlist().filter(item => item.userId === me.user.id && item.status === 'notified');
+    add('client', 'waitlist', 'Окно освободилось', 'Можно записаться на услугу', notified.length, 4, 'orders', 'bookings');
+    const unread = getChatThreads().filter(thread => demoChatAccess(thread, me))
+      .reduce((sum, thread) => sum + (demoChatThreadView(thread, me)?.unread ?? 0), 0);
+    add('client', 'chat', 'Непрочитанные сообщения', 'Вам написали по заказу', unread, 4, 'orders', 'chat');
+
+    if (me.partnerIds.length) {
+      const pBookings = getBookings().filter(item => {
+        const place = placeById(item.place.id);
+        return place?.partnerId && me.partnerIds.includes(place.partnerId)
+          && (item.status === 'requested' || item.status === 'confirmed');
+      });
+      const pCash = pBookings.filter(item => item.status === 'confirmed' && !item.cash?.provider);
+      add('partner', 'bookings', 'Записи клиентов', pBookings[0]?.place.name ?? '', pBookings.length, 3, 'profile');
+      add('partner', 'cash', 'Отметить наличные', pCash[0]?.place.name ?? '', pCash.length, 4, 'profile');
+      const pShop = getShopOrders().filter(item => {
+        const place = placeById(item.place.id);
+        return place?.partnerId && me.partnerIds.includes(place.partnerId)
+          && ['placed', 'confirmed', 'ready', 'out_for_delivery', 'awaiting_cash'].includes(item.status);
+      });
+      add('partner', 'shop', 'Заказы', pShop[0]?.place.name ?? '', pShop.length, 3, 'profile');
+      const pService = getServices().filter(item => item.partner && me.partnerIds.includes(item.partner.id)
+        && SERVICE_ACTIVE.includes(item.status));
+      add('partner', 'service', 'Заявки на выезд', pService[0]?.title ?? '', pService.length, 2, 'profile');
+      add('partner', 'chat', 'Сообщения клиентов', 'Непрочитанная переписка', unread, 4, 'orders', 'chat');
+    }
+    if (me.roles.some(role => role.role === 'operator')) {
+      add('operator', 'reviews', 'Модерация отзывов', 'Проверьте новые отзывы',
+        read<DemoReview[]>(PLACE_REVIEWS_KEY, []).filter(item => item.status === 'pending').length, 3, 'profile');
+      add('operator', 'service', 'Открытые заявки', 'Нужен мастер',
+        getServices().filter(item => item.status === 'open').length, 2, 'profile');
+      add('operator', 'chat-reports', 'Жалобы в чате', 'Проверьте сообщения',
+        getChatReports().filter(item => item.status === 'open').length, 3, 'profile');
+    }
+    tasks.sort((a, b) => b.priority - a.priority);
+    return { generatedAt: new Date().toISOString(), roles: me.roles.map(role => role.role), items: tasks } as T;
+  }
+
+  if (url.pathname === '/api/v1/chat/threads/resolve' && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const kind = String(body.kind ?? '') as DemoChatThread['kind'];
+    const subjectId = String(body.subjectId ?? '');
+    const subject = demoChatSubject(kind, subjectId);
+    if (!subject) return fail('Заказ не найден', 'chat_subject_not_found');
+    if (kind === 'trip' && !subject.providerId) return fail('Чат появится после назначения водителя', 'chat_unavailable');
+    if (kind !== 'trip' && !subject.partnerId) return fail('Чат появится после подключения исполнителя', 'chat_unavailable');
+    const canOpen = me.user.id === subject.clientId
+      || (subject.providerId !== null && me.user.id === subject.providerId)
+      || (subject.partnerId !== null && me.partnerIds.includes(subject.partnerId))
+      || me.roles.some(role => role.role === 'operator');
+    if (!canOpen) return fail('Нет доступа к этому заказу', 'forbidden');
+    const threads = getChatThreads();
+    let thread = threads.find(item => item.kind === kind && item.subjectId === subjectId);
+    if (!thread) {
+      thread = {
+        id: `ct-${kind}-${subjectId}`, kind, subjectId,
+        clientId: subject.clientId, partnerId: subject.partnerId, providerId: subject.providerId,
+        status: 'open', createdAt: new Date().toISOString(), lastMessageAt: null,
+      };
+      threads.unshift(thread);
+      saveChatThreads(threads);
+    } else if (thread.partnerId !== subject.partnerId || thread.providerId !== subject.providerId) {
+      thread.partnerId = subject.partnerId;
+      thread.providerId = subject.providerId;
+      saveChatThreads(threads);
+    }
+    return { thread: demoChatThreadView(thread, me) } as T;
+  }
+
+  if (url.pathname === '/api/v1/chat/threads') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const items = getChatThreads().filter(thread => demoChatAccess(thread, me))
+      .sort((a, b) => (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
+      .map(thread => demoChatThreadView(thread, me))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    return { items } as T;
+  }
+
+  const chatMessagesMatch = url.pathname.match(/^\/api\/v1\/chat\/threads\/([^/]+)\/messages$/);
+  if (chatMessagesMatch) {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const thread = getChatThreads().find(item => item.id === chatMessagesMatch[1]);
+    if (!thread || !demoChatAccess(thread, me)) return fail('Нет доступа к переписке', 'forbidden');
+    if (method === 'POST') {
+      const text = String(body.body ?? '').trim();
+      if (!text) return fail('Сообщение пустое', 'empty_message');
+      const message: DemoChatMessage = {
+        id: `cm-${Date.now()}`, threadId: thread.id, userId: me.user.id, senderName: me.user.displayName,
+        body: text.slice(0, 1000), quickReply: body.quickReply ? String(body.quickReply).slice(0, 60) : null,
+        status: 'visible', createdAt: new Date().toISOString(),
+      };
+      saveChatMessages([...getChatMessages(), message]);
+      const threads = getChatThreads();
+      const target = threads.find(item => item.id === thread.id);
+      if (target) target.lastMessageAt = message.createdAt;
+      saveChatThreads(threads);
+      const reads = getChatReads();
+      const mineRead = reads.find(item => item.threadId === thread.id && item.userId === me.user.id);
+      if (mineRead) mineRead.lastReadAt = message.createdAt;
+      else reads.push({ threadId: thread.id, userId: me.user.id, lastReadAt: message.createdAt });
+      saveChatReads(reads);
+      return { message: demoChatMessageView(message, me) } as T;
+    }
+    const items = getChatMessages().filter(item => item.threadId === thread.id
+      && (item.status === 'visible' || me.roles.some(role => role.role === 'operator')))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(item => demoChatMessageView(item, me));
+    return { thread: demoChatThreadView(thread, me), messages: items } as T;
+  }
+
+  const chatReadMatch = url.pathname.match(/^\/api\/v1\/chat\/threads\/([^/]+)\/read$/);
+  if (chatReadMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const thread = getChatThreads().find(item => item.id === chatReadMatch[1]);
+    if (!thread || !demoChatAccess(thread, me)) return fail('Нет доступа к переписке', 'forbidden');
+    const reads = getChatReads();
+    const mineRead = reads.find(item => item.threadId === thread.id && item.userId === me.user.id);
+    if (mineRead) mineRead.lastReadAt = new Date().toISOString();
+    else reads.push({ threadId: thread.id, userId: me.user.id, lastReadAt: new Date().toISOString() });
+    saveChatReads(reads);
+    return { ok: true } as T;
+  }
+
+  const chatReportMatch = url.pathname.match(/^\/api\/v1\/chat\/messages\/([^/]+)\/report$/);
+  if (chatReportMatch && method === 'POST') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    const message = getChatMessages().find(item => item.id === chatReportMatch[1]);
+    const thread = message ? getChatThreads().find(item => item.id === message.threadId) : null;
+    if (!message || !thread || !demoChatAccess(thread, me)) return fail('Сообщение не найдено', 'not_found');
+    const reports = getChatReports();
+    if (!reports.some(item => item.messageId === message.id && item.reporterId === me.user.id)) {
+      reports.push({
+        id: `cr-${Date.now()}`, messageId: message.id, reporterId: me.user.id,
+        reason: String(body.reason ?? '').slice(0, 300), status: 'open', createdAt: new Date().toISOString(),
+      });
+      saveChatReports(reports);
+    }
+    return { reported: true } as T;
+  }
+
+  if (url.pathname === '/api/v1/operator/chat/reports') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const items = getChatReports().filter(item => item.status === 'open').map(report => {
+      const message = getChatMessages().find(item => item.id === report.messageId);
+      const thread = message ? getChatThreads().find(item => item.id === message.threadId) : null;
+      return {
+        id: report.id, reason: report.reason, status: report.status, createdAt: report.createdAt,
+        reporter: { id: report.reporterId, name: '' },
+        thread: thread ? { id: thread.id, kind: thread.kind, subjectId: thread.subjectId } : null,
+        message: message ? {
+          id: message.id, body: message.body, status: message.status, createdAt: message.createdAt,
+          sender: { id: message.userId, name: message.senderName },
+        } : null,
+      };
+    });
+    return { items } as T;
+  }
+
+  const chatModerateMatch = url.pathname.match(/^\/api\/v1\/operator\/chat\/messages\/([^/]+)\/moderate$/);
+  if (chatModerateMatch && method === 'POST') {
+    const me = getMe();
+    if (!me?.roles.some(role => role.role === 'operator')) return fail('Недостаточно прав', 'forbidden');
+    const messages = getChatMessages();
+    const target = messages.find(item => item.id === chatModerateMatch[1]);
+    if (!target) return fail('Сообщение не найдено', 'not_found');
+    target.status = body.action === 'hide' ? 'hidden' : 'visible';
+    saveChatMessages(messages);
+    if (target.status === 'hidden') {
+      const reports = getChatReports();
+      for (const report of reports) {
+        if (report.messageId === target.id) report.status = 'resolved';
+      }
+      saveChatReports(reports);
+    }
+    return { message: { id: target.id, status: target.status } } as T;
   }
 
   if (url.pathname === '/api/v1/bookings' && method === 'POST') {
@@ -1655,6 +1971,68 @@ export async function demoRequest<T>(path: string, init: { method?: string; body
     saveProducts(products);
     saveShopOrders(orders);
     return orderView(order) as T;
+  }
+
+  if (url.pathname === '/api/v1/partner/analytics') {
+    const me = getMe();
+    if (!me) return fail('Требуется вход', 'unauthorized');
+    if (!me.partnerIds.length) return fail('Нет кабинета партнёра', 'forbidden');
+    const days = Math.min(365, Math.max(7, Number(url.searchParams.get('days')) || 30));
+    const since = Date.now() - days * DAY;
+    const mine = getBookings().filter(item => {
+      const place = placeById(item.place.id);
+      return place?.partnerId && me.partnerIds.includes(place.partnerId)
+        && new Date(item.createdAt).getTime() >= since;
+    });
+    const completed = mine.filter(item => item.status === 'completed');
+    const clients = new Map<string, { name: string; visits: number; last: string }>();
+    for (const item of completed) {
+      const id = item.clientUserId ?? 'u-000001';
+      const current = clients.get(id) ?? { name: me.user.displayName, visits: 0, last: item.slot.startsAt };
+      current.visits += 1;
+      if (item.slot.startsAt > current.last) current.last = item.slot.startsAt;
+      clients.set(id, current);
+    }
+    const week = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((label, index) => ({
+      weekday: index + 1, label, bookings: 0, completed: 0,
+    }));
+    const hour = Array.from({ length: 24 }, (_, value) => ({ hour: value, bookings: 0, completed: 0 }));
+    for (const item of mine) {
+      const date = new Date(item.slot.startsAt);
+      const day = week[(date.getDay() + 6) % 7];
+      day.bookings += 1;
+      if (item.status === 'completed') day.completed += 1;
+      const slot = hour[date.getHours()];
+      slot.bookings += 1;
+      if (item.status === 'completed') slot.completed += 1;
+    }
+    const bestHour = [...hour].sort((a, b) => b.bookings - a.bookings)[0];
+    const bestDay = [...week].sort((a, b) => b.bookings - a.bookings)[0];
+    const revenue = completed.reduce((sum, item) => sum + item.price.cents, 0);
+    const queue = getQueueTickets().filter(ticket => {
+      const place = placeById(ticket.placeId);
+      return place?.partnerId && me.partnerIds.includes(place.partnerId) && new Date(ticket.createdAt).getTime() >= since;
+    });
+    const repeatClients = [...clients.values()].filter(item => item.visits >= 2).length;
+    return {
+      periodDays: days,
+      totals: {
+        bookings: mine.length, completed: completed.length,
+        cancelled: mine.filter(item => item.status === 'cancelled').length,
+        expired: mine.filter(item => item.status === 'expired').length,
+        clients: clients.size, revenue: money(revenue),
+        avgCheck: money(completed.length ? Math.round(revenue / completed.length) : 0),
+      },
+      repeat: { clients: clients.size, repeatClients, rate: clients.size ? Math.round(repeatClients / clients.size * 1000) / 10 : 0 },
+      noShow: { queueTotal: queue.length, queueNoShow: queue.filter(item => item.status === 'no_show').length,
+        expiredBookings: mine.filter(item => item.status === 'expired').length },
+      byWeekday: week,
+      byHour: hour,
+      best: { hour: bestHour.bookings ? bestHour.hour : null, weekday: bestDay.bookings ? bestDay.weekday : null,
+        count: Math.max(bestHour.bookings, bestDay.bookings) },
+      topClients: [...clients.values()].sort((a, b) => b.visits - a.visits).slice(0, 5)
+        .map(item => ({ name: item.name, visits: item.visits, lastVisit: item.last })),
+    } as T;
   }
 
   if (url.pathname === '/api/v1/partner/shop-orders') {

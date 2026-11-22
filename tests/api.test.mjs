@@ -409,6 +409,126 @@ test('лист ожидания: освободившееся окно увед�
     [[waiter.userId, wrongDateWaiter.userId]]);
 });
 
+test('чат по заказу: доступ, сообщения, прочтение, жалоба и модерация', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+  const outsider = await login();
+  const slot = await freeSlot('Форма');
+  assert.ok(slot, 'нужно свободное окно Формы');
+  const created = await app.inject({ method: 'POST', url: '/api/v1/bookings',
+    headers: client.headers, payload: { slotId: slot.id } });
+  assert.equal(created.statusCode, 201, created.body);
+  const bookingId = created.json().id;
+
+  const resolved = await app.inject({ method: 'POST', url: '/api/v1/chat/threads/resolve',
+    headers: client.headers, payload: { kind: 'booking', subjectId: bookingId } });
+  assert.equal(resolved.statusCode, 200, resolved.body);
+  const threadId = resolved.json().thread.id;
+  assert.equal(resolved.json().thread.kind, 'booking');
+  assert.equal(resolved.json().thread.role, 'client');
+
+  const partnerResolved = await app.inject({ method: 'POST', url: '/api/v1/chat/threads/resolve',
+    headers: partner.headers, payload: { kind: 'booking', subjectId: bookingId } });
+  assert.equal(partnerResolved.statusCode, 200, partnerResolved.body);
+  assert.equal(partnerResolved.json().thread.id, threadId);
+  assert.equal(partnerResolved.json().thread.role, 'provider');
+
+  const denied = await app.inject({ method: 'POST', url: '/api/v1/chat/threads/resolve',
+    headers: outsider.headers, payload: { kind: 'booking', subjectId: bookingId } });
+  assert.equal(denied.statusCode, 403, denied.body);
+
+  const sent = await app.inject({ method: 'POST', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: client.headers, payload: { body: 'Здравствуйте, буду вовремя' } });
+  assert.equal(sent.statusCode, 200, sent.body);
+  assert.equal(sent.json().message.mine, true);
+  const messageId = sent.json().message.id;
+
+  const inbox = await app.inject({ method: 'GET', url: '/api/v1/chat/threads', headers: partner.headers });
+  assert.equal(inbox.statusCode, 200, inbox.body);
+  const inboxThread = inbox.json().items.find(item => item.id === threadId);
+  assert.ok(inboxThread, 'переписка должна быть в списке исполнителя');
+  assert.equal(inboxThread.unread, 1);
+
+  const partnerMessages = await app.inject({ method: 'GET', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: partner.headers });
+  assert.equal(partnerMessages.statusCode, 200, partnerMessages.body);
+  assert.equal(partnerMessages.json().messages.length, 1);
+  assert.equal(partnerMessages.json().messages[0].body, 'Здравствуйте, буду вовремя');
+
+  const read = await app.inject({ method: 'POST', url: `/api/v1/chat/threads/${threadId}/read`,
+    headers: partner.headers });
+  assert.equal(read.statusCode, 200, read.body);
+  const afterRead = await app.inject({ method: 'GET', url: '/api/v1/chat/threads', headers: partner.headers });
+  assert.equal(afterRead.json().items.find(item => item.id === threadId).unread, 0);
+
+  const reply = await app.inject({ method: 'POST', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: partner.headers, payload: { body: 'Хорошо, ждём', quickReply: 'Ждём вас' } });
+  assert.equal(reply.statusCode, 200, reply.body);
+  const clientMessages = await app.inject({ method: 'GET', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: client.headers });
+  assert.equal(clientMessages.json().messages.length, 2);
+  assert.equal(clientMessages.json().messages[1].quickReply, 'Ждём вас');
+
+  const report = await app.inject({ method: 'POST', url: `/api/v1/chat/messages/${messageId}/report`,
+    headers: partner.headers, payload: { reason: 'Проверка жалобы' } });
+  assert.equal(report.statusCode, 200, report.body);
+
+  const operator = await login();
+  await addOperatorRole(operator.userId);
+  const reports = await app.inject({ method: 'GET', url: '/api/v1/operator/chat/reports', headers: operator.headers });
+  assert.equal(reports.statusCode, 200, reports.body);
+  assert.ok(reports.json().items.some(item => item.message.id === messageId));
+
+  const hidden = await app.inject({ method: 'POST', url: `/api/v1/operator/chat/messages/${messageId}/moderate`,
+    headers: operator.headers, payload: { action: 'hide', note: 'Тестовая модерация' } });
+  assert.equal(hidden.statusCode, 200, hidden.body);
+  const visibleForClient = await app.inject({ method: 'GET', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: client.headers });
+  assert.equal(visibleForClient.json().messages.some(item => item.id === messageId), false);
+
+  const restored = await app.inject({ method: 'POST', url: `/api/v1/operator/chat/messages/${messageId}/moderate`,
+    headers: operator.headers, payload: { action: 'restore' } });
+  assert.equal(restored.statusCode, 200, restored.body);
+  const visibleAgain = await app.inject({ method: 'GET', url: `/api/v1/chat/threads/${threadId}/messages`,
+    headers: client.headers });
+  assert.equal(visibleAgain.json().messages.some(item => item.id === messageId), true);
+});
+
+test('«Сегодня» и партнёрская аналитика собирают задачи и метрики', async (t) => {
+  if (!ready) return t.skip(skipReason);
+  const client = await login();
+  const slot = await freeSlot('Форма');
+  assert.ok(slot, 'нужно свободное окно Формы');
+  const booking = await app.inject({ method: 'POST', url: '/api/v1/bookings',
+    headers: client.headers, payload: { slotId: slot.id } });
+  assert.equal(booking.statusCode, 201, booking.body);
+  const partner = await login();
+  await addPartnerRole(partner.userId, 'Студия «Форма»');
+
+  const today = await app.inject({ method: 'GET', url: '/api/v1/today', headers: client.headers });
+  assert.equal(today.statusCode, 200, today.body);
+  assert.ok(today.json().items.some(item => item.role === 'client' && item.kind === 'bookings'));
+  const partnerToday = await app.inject({ method: 'GET', url: '/api/v1/today', headers: partner.headers });
+  assert.equal(partnerToday.statusCode, 200, partnerToday.body);
+  assert.ok(partnerToday.json().items.some(item => item.role === 'partner' && item.kind === 'bookings'));
+
+  await completeBooking('Форма');
+  const analytics = await app.inject({ method: 'GET', url: '/api/v1/partner/analytics?days=30',
+    headers: partner.headers });
+  assert.equal(analytics.statusCode, 200, analytics.body);
+  assert.ok(analytics.json().totals.completed >= 1);
+  assert.equal(analytics.json().byWeekday.length, 7);
+  assert.equal(analytics.json().byHour.length, 24);
+  assert.ok(analytics.json().repeat.clients >= 1);
+  assert.ok(Array.isArray(analytics.json().topClients));
+  assert.equal(analytics.json().totals.revenue.cents >= 0, true);
+
+  const denied = await app.inject({ method: 'GET', url: '/api/v1/partner/analytics', headers: client.headers });
+  assert.equal(denied.statusCode, 403, denied.body);
+});
+
 async function addOperatorRole(userId) {
   await pool.query(`insert into memberships (user_id, role) values ($1, 'operator')
     on conflict (user_id, role) do nothing`, [userId]);

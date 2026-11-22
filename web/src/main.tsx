@@ -74,6 +74,41 @@ type WaitlistEntry = {
   offer: { id: string; title: string; durationMin: number; price: Money };
   place: { id: string; name: string; address: string; district: string; image: string | null };
 };
+
+type ChatKind = 'booking' | 'shop_order' | 'trip' | 'service_request';
+type ChatMessage = {
+  id: string; body: string; quickReply: string | null; status: 'visible' | 'hidden';
+  createdAt: string; mine: boolean; sender: { id: string; name: string };
+};
+type ChatThread = {
+  id: string; kind: ChatKind; subjectId: string; title: string; subtitle: string | null;
+  status: 'open' | 'closed'; role: 'client' | 'provider' | 'operator'; unread: number;
+  lastMessageAt: string | null; lastMessage: ChatMessage | null;
+  client: { id: string; name: string }; provider: { id: string | null; name: string };
+  createdAt: string;
+};
+type ChatReport = {
+  id: string; reason: string; status: string; createdAt: string;
+  reporter: { id: string; name: string };
+  thread: { id: string; kind: ChatKind; subjectId: string } | null;
+  message: { id: string; body: string; status: string; createdAt: string; sender: { id: string; name: string } } | null;
+};
+
+type TodayTask = {
+  id: string; role: string; kind: string; title: string; subtitle: string;
+  count: number; priority: number; action: { tab: Tab; view: 'bookings' | 'requests' | 'shop' | 'queue' | 'chat' | null };
+};
+
+type PartnerAnalyticsData = {
+  periodDays: number;
+  totals: { bookings: number; completed: number; cancelled: number; expired: number; clients: number; revenue: Money; avgCheck: Money };
+  repeat: { clients: number; repeatClients: number; rate: number };
+  noShow: { queueTotal: number; queueNoShow: number; expiredBookings: number };
+  byWeekday: { weekday: number; label: string; bookings: number; completed: number }[];
+  byHour: { hour: number; bookings: number; completed: number }[];
+  best: { hour: number | null; weekday: number | null; count: number };
+  topClients: { name: string; visits: number; lastVisit: string | null }[];
+};
 type QueueTicket = {
   id: string; number: number; status: 'waiting' | 'called' | 'serving' | 'done' | 'cancelled' | 'no_show';
   note: string; day: string; createdAt: string; calledAt: string | null; closedAt: string | null;
@@ -441,6 +476,51 @@ function tabFromLaunch(): Tab {
   return tabs.some(item => item.key === value) ? value as Tab : 'home';
 }
 
+function TodayScreen({ me, onClose, onGo, notify }: {
+  me: Me | null; onClose: () => void; onGo: (tab: Tab, view?: TodayTask['action']['view']) => void;
+  notify: (text: string) => void;
+}) {
+  const [items, setItems] = useState<TodayTask[] | null>(null);
+  useModalHistory(true, onClose);
+  useEffect(() => {
+    if (!me) { setItems([]); return; }
+    void api<{ items: TodayTask[] }>('/api/v1/today').then(data => setItems(data.items)).catch(() => setItems([]));
+  }, [me]);
+  const groups = items ? [...new Set(items.map(item => item.role))] : [];
+  const roleName: Record<string, string> = { client: 'Клиент', partner: 'Партнёр', operator: 'Оператор', driver: 'Водитель', courier: 'Курьер' };
+  const kindIcon: Record<string, IconName> = {
+    cash: 'receipt', bookings: 'calendar', shop: 'bag', trips: 'car', service: 'wrench',
+    queue: 'clock', waitlist: 'bell', chat: 'send', reviews: 'star', delivery: 'car',
+    deliveries: 'car', available: 'bag', 'chat-reports': 'shield',
+  };
+
+  return <section className="today-screen">
+    <div className="today-head">
+      <button type="button" className="round-btn" onClick={onClose} aria-label="Назад"><Icon name="arrowLeft" size={18} /></button>
+      <div><h1>Сегодня</h1><span className="meta">{new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
+      <span className="today-count">{items?.reduce((sum, item) => sum + item.count, 0) ?? '…'}</span>
+    </div>
+    {!me && <div className="empty-state"><Icon name="user" size={30} /><p>Войдите, чтобы увидеть задачи</p></div>}
+    {me && !items && <div className="skeleton-card tall" />}
+    {me && items && !items.length && <div className="empty-state"><Icon name="check" size={32} /><p>На сегодня всё спокойно</p><span className="meta">Новые задачи появятся здесь</span></div>}
+    {groups.map(role => <div className="today-group" key={role}>
+      <div className="panel-title"><h2>{roleName[role] ?? role}</h2><span className="count-chip">{items!.filter(item => item.role === role).length}</span></div>
+      <div className="today-list">{items!.filter(item => item.role === role).map(item => <button type="button" key={item.id}
+        className={`today-task priority-${item.priority}`} onClick={() => { haptic(); onGo(item.action.tab, item.action.view); }}>
+        <span className="today-icon"><Icon name={kindIcon[item.kind] ?? 'bell'} size={18} /></span>
+        <span className="today-copy"><strong>{item.title}</strong><span className="meta">{item.subtitle}</span></span>
+        <span className="today-badge">{item.count}</span>
+        <Icon name="chevron" size={15} />
+      </button>)}</div>
+    </div>)}
+    {me && <button type="button" className="ghost-mini wide today-refresh" onClick={() => {
+      setItems(null);
+      void api<{ items: TodayTask[] }>('/api/v1/today').then(data => setItems(data.items))
+        .catch(() => { setItems([]); notify('Не удалось обновить'); });
+    }}><Icon name="refresh" size={13} />Обновить</button>}
+  </section>;
+}
+
 function App() {
   const [tab, setTab] = useState<Tab>(tabFromLaunch);
   const [me, setMe] = useState<Me | null>(null);
@@ -450,6 +530,9 @@ function App() {
   const [cities, setCities] = useState<City[]>([]);
   const [citySlug, setCitySlug] = useState(() => localStorage.getItem(DEMO ? 'rjadom.demo.city.v2' : 'rjadom.city') || '');
   const [cityOpen, setCityOpen] = useState(false);
+  const [todayOpen, setTodayOpen] = useState(false);
+  const [todayCount, setTodayCount] = useState(0);
+  const [ordersView, setOrdersView] = useState<'bookings' | 'requests' | 'shop' | 'queue' | 'chat'>('bookings');
   const [installed, setInstalled] = useState(() =>
     window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
   const city = cities.find(item => item.slug === citySlug) ?? null;
@@ -504,8 +587,9 @@ function App() {
   }
 
   function goTab(next: Tab) {
-    if (next === tab) return;
+    if (next === tab) { setTodayOpen(false); return; }
     haptic();
+    setTodayOpen(false);
     setTab(next);
   }
 
@@ -513,6 +597,17 @@ function App() {
     void api<Me>('/api/v1/me').then(setMe).catch(() => setMe(null));
   }, []);
   useEffect(refreshMe, [refreshMe]);
+  useEffect(() => {
+    if (!me) { setTodayCount(0); return; }
+    const load = () => {
+      void api<{ items: { count: number }[] }>('/api/v1/today')
+        .then(data => setTodayCount(data.items.reduce((sum, item) => sum + item.count, 0)))
+        .catch(() => setTodayCount(0));
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, [me]);
   useEffect(() => {
     const badge = navigator as Navigator & {
       setAppBadge?: (count?: number) => Promise<void>;
@@ -546,6 +641,10 @@ function App() {
         <span className="brand-name">рядом<i>.</i></span>
       </a>
       <div className="appbar-right">
+        {me && <button type="button" className="icon-btn today-button" onClick={() => { haptic(); setTodayOpen(true); }} aria-label="Задачи на сегодня">
+          <Icon name="calendar" size={17} />
+          {todayCount > 0 && <span className="today-badge">{todayCount > 9 ? '9+' : todayCount}</span>}
+        </button>}
         <button type="button" className="status-pill city-pill" title="Выбрать город" onClick={() => { haptic(); setCityOpen(true); }}>
           <span className="pulse" aria-hidden="true" />{city?.name ?? 'Город'}<Icon name="chevronDown" size={11} />
         </button>
@@ -561,13 +660,15 @@ function App() {
     {toast && <p className="toast" role="status">{toast}</p>}
     <PwaUpdate />
 
-    <div className="screen" key={tab}>
-      {tab === 'home' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} onPick={() => goTab('map')} notify={setToast} />}
-      {tab === 'map' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} withMap notify={setToast} />}
-      {tab === 'taxi' && <TaxiScreen me={me} city={city} notify={setToast} onLogin={() => goTab('profile')} />}
-      {tab === 'orders' && <Orders me={me} notify={setToast} />}
-      {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
-    </div>
+    {todayOpen ? <TodayScreen me={me} onClose={() => setTodayOpen(false)} notify={setToast}
+      onGo={(next, view) => { setTodayOpen(false); if (view) setOrdersView(view); goTab(next); }} />
+      : <div className="screen" key={tab}>
+        {tab === 'home' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} onPick={() => goTab('map')} notify={setToast} />}
+        {tab === 'map' && <Catalogue key={city?.slug ?? 'empty'} city={city} me={me} withMap notify={setToast} />}
+        {tab === 'taxi' && <TaxiScreen me={me} city={city} notify={setToast} onLogin={() => goTab('profile')} />}
+        {tab === 'orders' && <Orders me={me} notify={setToast} initialView={ordersView} />}
+        {tab === 'profile' && <Profile me={me} refreshMe={refreshMe} notify={setToast} />}
+      </div>}
 
     <nav className="dock" aria-label="Разделы">
       {tabs.map(item => <button key={item.key} type="button" className={tab === item.key ? 'active' : ''}
@@ -1113,8 +1214,8 @@ function formatRideTime(value: string) {
   }).format(date);
 }
 
-function TripSummary({ trip, children, showClient = false, onRepeat, onCash, cashLabel = 'Наличные переданы' }: {
-  trip: Trip; children?: ReactNode; showClient?: boolean;
+function TripSummary({ trip, children, chat, showClient = false, onRepeat, onCash, cashLabel = 'Наличные переданы' }: {
+  trip: Trip; children?: ReactNode; chat?: ReactNode; showClient?: boolean;
   onRepeat?: () => void; onCash?: () => void; cashLabel?: string;
 }) {
   const requirements = trip.requirements;
@@ -1154,8 +1255,9 @@ function TripSummary({ trip, children, showClient = false, onRepeat, onCash, cas
       <Icon name="receipt" size={12} />
       {trip.cash?.client ? 'клиент передал' : 'клиент не подтвердил'} · {trip.cash?.driver ? 'водитель получил' : 'водитель не подтвердил'}
     </p>}
-    {(children || onRepeat || onCash) && <div className="trip-actions">
+    {(children || chat || onRepeat || onCash) && <div className="trip-actions">
       {children}
+      {chat}
       {onRepeat && <button type="button" className="ghost-mini" onClick={onRepeat}>Повторить</button>}
       {onCash && <button type="button" className="ghost-mini accent" onClick={onCash}>{cashLabel}</button>}
     </div>}
@@ -1486,7 +1588,8 @@ function TaxiScreen({ me, city, notify, onLogin }: {
           onPick={() => {}} readOnly />
         <div className="taxi-map-badge"><span><Icon name="car" size={13} />{tripStatusLabel[activeTrip.status]}</span><span>наличными</span></div>
       </div>
-      <TripSummary trip={activeTrip}>
+      <TripSummary trip={activeTrip}
+        chat={activeTrip.driver ? <ChatButton kind="trip" subjectId={activeTrip.id} me={me} notify={notify} /> : undefined}>
         {(activeTrip.status === 'requested' || activeTrip.status === 'assigned' || activeTrip.status === 'arrived') &&
           <button type="button" className="ghost-mini" onClick={() => void cancel(activeTrip.id)}>Отменить поездку</button>}
         {activeTrip.status === 'arrived' && activeTrip.arrivedAt && <WaitingTimer since={activeTrip.arrivedAt} />}
@@ -1621,6 +1724,7 @@ function TaxiScreen({ me, city, notify, onLogin }: {
     {history.length > 0 && <>
       <div className="section-title"><h2>История</h2><span className="count-chip">{history.length}</span></div>
       <div className="trip-history">{history.map(trip => <TripSummary key={trip.id} trip={trip}
+        chat={trip.driver ? <ChatButton kind="trip" subjectId={trip.id} me={me} notify={notify} /> : undefined}
         onRepeat={() => repeatTrip(trip)}
         onCash={trip.status === 'completed' && !trip.cash?.client ? () => void confirmCash(trip) : undefined} />)}</div>
     </>}
@@ -2932,6 +3036,10 @@ function ServiceRequestCard({ item, me, notify, onChanged }: {
       <div><strong>{item.partner.name}</strong><span className="meta">мастер назначен · {price(item.price)}</span></div>
     </div>}
 
+    {item.partner && item.status !== 'open' && <div className="service-actions">
+      <ChatButton kind="service_request" subjectId={item.id} me={me} notify={notify} />
+    </div>}
+
     {(item.status === 'open' || item.status === 'assigned') && (me?.user.id === item.client.id) &&
       <div className="service-actions">
         <button type="button" className="ghost-mini" disabled={busy === 'cancel'} onClick={() => void cancel()}>Отменить заявку</button>
@@ -3114,6 +3222,7 @@ function ShopOrdersPanel({ me, notify }: { me: Me | null; notify: (text: string)
         <span>{price(item.deliveryFee)} · {item.delivery.etaMin} мин</span>
       </p>}
       <div className="trip-actions">
+        <ChatButton kind="shop_order" subjectId={item.id} me={me} notify={notify} />
         {item.fulfillment === 'pickup'
           ? <span className="pickup-code"><Icon name="receipt" size={12} />Код {item.pickupCode}</span>
           : <span className="meta">{item.delivery?.courier ? `Курьер ${item.delivery.courier.name}` : 'Курьер ещё не назначен'}</span>}
@@ -3218,11 +3327,264 @@ function QueuePanel({ me, notify }: { me: Me | null; notify: (text: string) => v
   </li>)}</ul>;
 }
 
-function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
-  const [view, setView] = useState<'bookings' | 'requests' | 'shop' | 'queue'>(() => {
+function PartnerAnalytics({ notify }: { notify: (text: string) => void }) {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<PartnerAnalyticsData | null>(null);
+  const load = useCallback(() => {
+    setData(null);
+    void api<PartnerAnalyticsData>(`/api/v1/partner/analytics?days=${days}`)
+      .then(setData).catch(() => setData(null));
+  }, [days]);
+  useEffect(load, [load]);
+  const maxWeek = Math.max(1, ...(data?.byWeekday.map(item => item.bookings) ?? [1]));
+  const maxHour = Math.max(1, ...(data?.byHour.map(item => item.bookings) ?? [1]));
+  const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const bestText = data?.best.hour === null ? 'Пока нет данных'
+    : `${weekdays[(data?.best.weekday ?? 1) - 1]}, ${String(data?.best.hour).padStart(2, '0')}:00`;
+
+  return <div className="analytics">
+    <div className="panel-title"><h2>Аналитика</h2></div>
+    <div className="analytics-period">
+      {[30, 90].map(value => <button key={value} type="button" className={days === value ? 'active' : ''}
+        onClick={() => setDays(value)}>{value} дней</button>)}
+    </div>
+    {!data ? <div className="skeleton-card tall" /> : <>
+      <div className="analytics-kpis">
+        <div><strong>{data.totals.completed}</strong><span>визитов</span></div>
+        <div><strong>{data.totals.clients}</strong><span>клиентов</span></div>
+        <div><strong>{data.repeat.rate}%</strong><span>повторных</span></div>
+        <div><strong>{price(data.totals.avgCheck)}</strong><span>средний чек</span></div>
+        <div><strong>{data.noShow.queueNoShow}</strong><span>неявок</span></div>
+        <div><strong>{data.totals.cancelled}</strong><span>отмен</span></div>
+      </div>
+      <div className="analytics-block">
+        <div className="analytics-block-head"><strong>Загрузка по дням</strong><span className="meta">{data.totals.bookings} записей</span></div>
+        <div className="analytics-week">{data.byWeekday.map(item => <div key={item.weekday} className="analytics-day">
+          <span className="analytics-bar"><i style={{ height: `${Math.max(4, item.bookings / maxWeek * 100)}%` }} /></span>
+          <span>{item.label}</span>
+          <b>{item.bookings || ''}</b>
+        </div>)}</div>
+      </div>
+      <div className="analytics-block">
+        <div className="analytics-block-head"><strong>По часам</strong><span className="meta">пик: {bestText}</span></div>
+        <div className="analytics-hours">{data.byHour.map(item => <span key={item.hour} title={`${item.hour}:00 · ${item.bookings}`}>
+          <i style={{ height: `${Math.max(3, item.bookings / maxHour * 100)}%` }} />
+        </span>)}</div>
+        <div className="analytics-hour-labels"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+      </div>
+      <div className="analytics-best"><Icon name="bolt" size={15} /><span><strong>Лучшее время</strong>{bestText}</span></div>
+      {data.topClients.length > 0 && <div className="analytics-block">
+        <div className="analytics-block-head"><strong>Постоянные клиенты</strong><span className="meta">топ {data.topClients.length}</span></div>
+        <div className="analytics-clients">{data.topClients.map(client => <div key={client.name}>
+          <span className="mini-avatar">{client.name.slice(0, 1)}</span>
+          <strong>{client.name}</strong>
+          <span className="meta">{client.visits} {visitsLabel(client.visits)}</span>
+          {client.lastVisit && <span className="meta">{new Date(client.lastVisit).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>}
+        </div>)}</div>
+      </div>}
+      <p className="hint">{data.totals.revenue.cents > 0 ? `Оборот по завершённым визитам: ${price(data.totals.revenue)}` : 'Данные появятся после первых завершённых визитов'}</p>
+    </>}
+  </div>;
+}
+
+function ChatSheet({ kind, subjectId, me, notify, onClose }: {
+  kind: ChatKind; subjectId: string; me: Me | null; notify: (text: string) => void; onClose: () => void;
+}) {
+  const [thread, setThread] = useState<ChatThread | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bottom = useRef<HTMLDivElement | null>(null);
+  const quick = ['Здравствуйте!', 'Подтверждаю', 'Буду через 10 минут', 'Спасибо!'];
+
+  const read = useCallback(async (threadId: string) => {
+    await api(`/api/v1/chat/threads/${threadId}/read`, { method: 'POST' }).catch(() => undefined);
+  }, []);
+
+  const loadMessages = useCallback(async (threadId: string) => {
+    const data = await api<{ thread: ChatThread; messages: ChatMessage[] }>(`/api/v1/chat/threads/${threadId}/messages`);
+    setThread(data.thread);
+    setMessages(data.messages);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    setError(null);
+    void api<{ thread: ChatThread }>('/api/v1/chat/threads/resolve', { method: 'POST', body: { kind, subjectId } })
+      .then(data => {
+        if (!alive) return;
+        setThread(data.thread);
+        return loadMessages(data.thread.id).then(() => read(data.thread.id));
+      })
+      .catch(reason => { if (alive) setError((reason as Error).message || 'Чат недоступен'); });
+    return () => { alive = false; };
+  }, [kind, subjectId, loadMessages, read]);
+
+  useEffect(() => {
+    if (!thread) return;
+    const timer = setInterval(() => {
+      void loadMessages(thread.id).then(() => read(thread.id)).catch(() => undefined);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [thread?.id, loadMessages, read]);
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [messages?.length]);
+
+  async function send(value = text) {
+    const body = value.trim();
+    if (!body || !thread || busy) return;
+    setBusy(true);
+    try {
+      const data = await api<{ message: ChatMessage }>(`/api/v1/chat/threads/${thread.id}/messages`, {
+        method: 'POST', body: { body, quickReply: value === text ? undefined : value },
+      });
+      setMessages(current => [...(current ?? []), data.message]);
+      setText('');
+      haptic(5);
+    } catch (reason) { notify((reason as Error).message || 'Сообщение не отправлено'); }
+    finally { setBusy(false); }
+  }
+
+  async function report(message: ChatMessage) {
+    try {
+      await api(`/api/v1/chat/messages/${message.id}/report`, {
+        method: 'POST', body: { reason: 'Жалоба из чата' },
+      });
+      notify('Жалоба отправлена оператору');
+    } catch (reason) { notify((reason as Error).message || 'Не удалось пожаловаться'); }
+  }
+
+  return <Sheet open onClose={onClose} title={thread?.title ?? 'Чат по заказу'}>
+    <div className="chat-sheet">
+      {thread && <p className="chat-subtitle"><span className={`status ${thread.status === 'open' ? 'confirmed' : 'cancelled'}`}><span className="dot" />{thread.status === 'open' ? 'Открыт' : 'Закрыт'}</span>{thread.subtitle}</p>}
+      {error && <div className="empty-state small"><Icon name="shield" size={24} /><p>{error}</p></div>}
+      {!error && !messages && <div className="chat-skeleton">{Array.from({ length: 4 }).map((_, index) => <span key={index} />)}</div>}
+      {!error && messages && !messages.length && <div className="chat-empty"><Icon name="send" size={24} /><p>Напишите первым — исполнитель увидит сообщение</p></div>}
+      {!error && <div className="chat-messages">
+        {messages?.map(message => <div key={message.id} className={`chat-message${message.mine ? ' mine' : ''}`}>
+          <div className="chat-bubble">
+            <span className="chat-sender">{message.mine ? 'Вы' : message.sender.name}</span>
+            <p>{message.body}</p>
+            <span className="chat-time">{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          {!message.mine && message.status === 'visible' && <button type="button" className="chat-report" title="Пожаловаться" onClick={() => void report(message)}>!</button>}
+        </div>)}
+        <div ref={bottom} />
+      </div>}
+      {!error && <div className="chat-quick">{quick.map(item => <button key={item} type="button" disabled={busy}
+        onClick={() => void send(item)}>{item}</button>)}</div>}
+      {!error && <div className="chat-compose">
+        <input value={text} maxLength={1000} onChange={event => setText(event.target.value)}
+          placeholder="Сообщение…" onKeyDown={event => { if (event.key === 'Enter') void send(); }} />
+        <button type="button" className="primary" disabled={busy || !text.trim()} onClick={() => void send()}>
+          <Icon name="send" size={17} />
+        </button>
+      </div>}
+    </div>
+  </Sheet>;
+}
+
+function ChatButton({ kind, subjectId, me, notify, label = 'Чат' }: {
+  kind: ChatKind; subjectId: string; me: Me | null; notify: (text: string) => void; label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <button type="button" className="ghost-mini chat-button" onClick={() => {
+      if (!me) { notify('Войдите, чтобы написать исполнителю'); return; }
+      setOpen(true);
+    }}><Icon name="send" size={13} />{label}</button>
+    {open && <ChatSheet kind={kind} subjectId={subjectId} me={me} notify={notify} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+function ChatInbox({ me, notify }: { me: Me | null; notify: (text: string) => void }) {
+  const [threads, setThreads] = useState<ChatThread[] | null>(null);
+  const [selected, setSelected] = useState<ChatThread | null>(null);
+  const load = useCallback(() => {
+    if (!me) { setThreads([]); return; }
+    void api<{ items: ChatThread[] }>('/api/v1/chat/threads')
+      .then(data => setThreads(data.items)).catch(() => setThreads([]));
+  }, [me]);
+  useEffect(load, [load]);
+  useEffect(() => {
+    const timer = setInterval(load, 7000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  if (!me) return <div className="empty-state"><Icon name="user" size={30} /><p>Войдите, чтобы видеть переписку</p></div>;
+  return <div className="chat-inbox">
+    <div className="panel-title"><h2>Переписка</h2><span className="count-chip">{threads ? threads.length : '—'}</span></div>
+    {!threads && <div className="skeleton-card tall" />}
+    {threads && !threads.length && <div className="empty-state small">
+      <Icon name="send" size={28} /><p>Пока нет переписки</p>
+      <span className="meta">Откройте запись, заказ или поездку и нажмите «Чат»</span>
+    </div>}
+    <ul className="chat-thread-list">{threads?.map(thread => <li key={thread.id}>
+      <button type="button" className={thread.unread ? 'unread' : ''} onClick={() => setSelected(thread)}>
+        <span className="chat-avatar"><Icon name={thread.kind === 'trip' ? 'car' : thread.kind === 'shop_order' ? 'bag' : thread.kind === 'service_request' ? 'wrench' : 'calendar'} size={18} /></span>
+        <span className="chat-thread-copy">
+          <strong>{thread.title}</strong>
+          <span className="meta">{thread.lastMessage?.body || thread.subtitle || 'Нет сообщений'}</span>
+        </span>
+        <span className="chat-thread-meta">
+          {thread.lastMessage && <span>{new Date(thread.lastMessage.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>}
+          {thread.unread > 0 && <b>{thread.unread}</b>}
+        </span>
+      </button>
+    </li>)}</ul>
+    {selected && <ChatSheet kind={selected.kind} subjectId={selected.subjectId} me={me} notify={notify}
+      onClose={() => { setSelected(null); load(); }} />}
+  </div>;
+}
+
+function ChatModeration({ notify }: { notify: (text: string) => void }) {
+  const [items, setItems] = useState<ChatReport[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(() => {
+    void api<{ items: ChatReport[] }>('/api/v1/operator/chat/reports')
+      .then(data => setItems(data.items)).catch(() => setItems([]));
+  }, []);
+  useEffect(load, [load]);
+
+  async function hide(id: string) {
+    setBusy(id);
+    try {
+      await api(`/api/v1/operator/chat/messages/${id}/moderate`, { method: 'POST', body: { action: 'hide' } });
+      notify('Сообщение скрыто');
+      load();
+    } catch (error) { notify((error as Error).message || 'Не удалось скрыть'); }
+    finally { setBusy(null); }
+  }
+
+  if (!items?.length) return null;
+  return <div className="moderation">
+    <div className="section-title"><h2>Жалобы в чате</h2><span>{items.length}</span></div>
+    <ul className="orders">{items.map(item => <li key={item.id}>
+      <div className="order-head"><strong>{item.message?.sender.name ?? 'Сообщение'}</strong>
+        <span className="status requested">Жалоба</span></div>
+      <p>{item.message?.body || 'Сообщение удалено'}</p>
+      <p className="meta">{item.reason || 'Без комментария'} · {new Date(item.createdAt).toLocaleDateString('ru-RU')}</p>
+      {item.message && <div className="row"><button type="button" className="primary" disabled={busy === item.id}
+        onClick={() => void hide(item.message!.id)}>Скрыть сообщение</button></div>}
+    </li>)}</ul>
+  </div>;
+}
+
+function Orders({ me, notify, initialView }: {
+  me: Me | null; notify: (text: string) => void;
+  initialView?: 'bookings' | 'requests' | 'shop' | 'queue' | 'chat';
+}) {
+  const [view, setView] = useState<'bookings' | 'requests' | 'shop' | 'queue' | 'chat'>(() => {
+    if (initialView) return initialView;
     const value = new URLSearchParams(location.search).get('view');
-    return value === 'queue' || value === 'shop' || value === 'requests' ? value : 'bookings';
+    return value === 'queue' || value === 'shop' || value === 'requests' || value === 'chat' ? value : 'bookings';
   });
+  useEffect(() => {
+    if (initialView) setView(initialView);
+  }, [initialView]);
   const [items, setItems] = useState<Booking[] | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [repeating, setRepeating] = useState<string | null>(null);
@@ -3258,8 +3620,9 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
       <button type="button" className={view === 'requests' ? 'active' : ''} onClick={() => setView('requests')}>Выезд</button>
       <button type="button" className={view === 'shop' ? 'active' : ''} onClick={() => setView('shop')}>Товары</button>
       <button type="button" className={view === 'queue' ? 'active' : ''} onClick={() => setView('queue')}>Очередь</button>
+      <button type="button" className={view === 'chat' ? 'active' : ''} onClick={() => setView('chat')}>Чат</button>
     </div>
-    {view === 'queue' ? <QueuePanel me={me} notify={notify} /> : view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : view === 'shop' ? <ShopOrdersPanel me={me} notify={notify} /> : <>
+    {view === 'queue' ? <QueuePanel me={me} notify={notify} /> : view === 'requests' ? <ServiceRequestsPanel me={me} notify={notify} /> : view === 'shop' ? <ShopOrdersPanel me={me} notify={notify} /> : view === 'chat' ? <ChatInbox me={me} notify={notify} /> : <>
       {!items && <div className="skeleton-card tall" />}
       {items && !items.length && <div className="empty-state">
         <Icon name="receipt" size={30} /><p>Пока пусто</p>
@@ -3273,6 +3636,7 @@ function Orders({ me, notify }: { me: Me | null; notify: (text: string) => void 
         <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))}</p>
         <p className="order-offer">{item.offer.title} <span>{price(item.price)}</span></p>
         <div className="order-actions">
+          <ChatButton kind="booking" subjectId={item.id} me={me} notify={notify} />
           {(item.status === 'requested' || (item.status === 'confirmed' && !item.cash.provider)) &&
             <button type="button" className="ghost-mini" onClick={() => void cancel(item.id)}>Отменить</button>}
           {item.status === 'completed' && <button type="button" className="ghost-mini"
@@ -3539,6 +3903,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
             <p className="meta"><Icon name="clock" size={13} />{dayTime.format(new Date(item.slot.startsAt))} · {item.offer.title}</p>
             {item.note && <p className="order-offer">{item.note}</p>}
             <div className="order-actions">
+              <ChatButton kind="booking" subjectId={item.id} me={me} notify={notify} />
               {item.status === 'requested' && <button type="button" className="primary mini" onClick={() => void api(`/api/v1/bookings/${item.id}/confirm`, { method: 'POST' }).then(() => { notify('Подтверждено'); loadPartner(); })}>Подтвердить</button>}
               {item.status === 'confirmed' && !item.cash.provider && <button type="button" className="ghost-mini" onClick={() => void api(`/api/v1/bookings/${item.id}/complete`, { method: 'POST' }).then(() => { notify('Отмечено: наличные получены'); loadPartner(); })}>Завершить · наличные</button>}
               {item.status === 'confirmed' && item.cash.provider && <span className="cash-wait"><Icon name="clock" size={13} />Ждём подтверждения клиента</span>}
@@ -3546,6 +3911,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
           </li>)}</ul>}
     </div>}
 
+    {Boolean(me.partnerIds.length) && <PartnerAnalytics notify={notify} />}
     {Boolean(me.partnerIds.length) && <PartnerServiceRequests notify={notify} />}
     {Boolean(me.partnerIds.length) && <PartnerShopOrders notify={notify} />}
     {isPartner && <PartnerPlaces notify={notify} />}
@@ -3553,6 +3919,7 @@ function Profile({ me, refreshMe, notify }: { me: Me | null; refreshMe: () => vo
     {isCourier && <CourierPanel notify={notify} />}
     {isOperator && <OperatorDeliveries notify={notify} />}
     {isOperator && <Moderation notify={notify} />}
+    {isOperator && <ChatModeration notify={notify} />}
     <PushToggle notify={notify} />
     <Notifications />
   </section>;
@@ -4204,7 +4571,7 @@ const noticeLabel: Record<string, string> = {
   service_awaiting_cash: 'Заявка ждёт оплаты', service_cash_confirmed: 'Оплата подтверждена',
   delivery_cash_confirmed: 'Доставка оплачена',
   queue_ticket_new: 'Новый талон', queue_called: 'Вас вызвали', queue_status: 'Очередь обновлена',
-  booking_waitlist_open: 'Окно освободилось',
+  booking_waitlist_open: 'Окно освободилось', chat_message: 'Новое сообщение',
 };
 
 function Notifications() {
